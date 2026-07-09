@@ -1,0 +1,2 @@
+-- V-HUB Supabase schema
+-- Populated by the supabase-architect subagent in Phase 0.
