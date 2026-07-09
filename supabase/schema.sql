@@ -285,23 +285,35 @@ create policy "applications_insert_own"
   to authenticated
   with check (volunteer_id = auth.uid());
 
--- Volunteers may only update their own row to cancel it; orgs may update status
--- (accept/reject/waitlist) on applications to their own outreaches.
+-- Volunteers may only update their own row, and only to cancel it (status ->
+-- 'cancelled'); they may never set status to accepted/rejected/waitlisted
+-- themselves. Orgs may manage full status transitions on applications to
+-- their own outreaches (pending/accepted/rejected/waitlisted).
 drop policy if exists "applications_update_own_or_org" on applications;
-create policy "applications_update_own_or_org"
+
+drop policy if exists "applications_update_own_cancel" on applications;
+create policy "applications_update_own_cancel"
+  on applications for update
+  to authenticated
+  using (volunteer_id = auth.uid())
+  with check (
+    volunteer_id = auth.uid()
+    and status = 'cancelled'
+  );
+
+drop policy if exists "applications_update_org_status" on applications;
+create policy "applications_update_org_status"
   on applications for update
   to authenticated
   using (
-    volunteer_id = auth.uid()
-    or exists (
+    exists (
       select 1 from outreaches o
       where o.id = applications.outreach_id
         and o.organisation_id = auth.uid()
     )
   )
   with check (
-    volunteer_id = auth.uid()
-    or exists (
+    exists (
       select 1 from outreaches o
       where o.id = applications.outreach_id
         and o.organisation_id = auth.uid()
@@ -407,3 +419,14 @@ alter table skill_match_cache enable row level security;
 -- ============================================================
 revoke update (v_score) on volunteer_profiles from authenticated;
 revoke update (match_score) on applications from authenticated;
+
+-- late_cancellation directly drives the V-Score penalty (-8 late vs -2
+-- on-time cancellation per CLAUDE.md); cancelled_at is the timestamp used to
+-- derive it. A volunteer must not be able to set late_cancellation=false to
+-- dodge the bigger penalty, so both columns are service-role write-only.
+revoke update (late_cancellation, cancelled_at) on applications from authenticated;
+
+-- license_verified and events_attended must only be set by an
+-- organisation/admin verification flow or the serverless /api/vscore
+-- pipeline — never directly by the volunteer who owns the row.
+revoke update (license_verified, events_attended) on volunteer_profiles from authenticated;
