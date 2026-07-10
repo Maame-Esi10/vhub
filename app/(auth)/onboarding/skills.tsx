@@ -54,7 +54,10 @@ export default function OnboardingSkills() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <OnboardingStepHeader title="ONBOARDING" onBack={() => router.back()} />
+        <OnboardingStepHeader
+          title="ONBOARDING"
+          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/welcome'))}
+        />
 
         <Text style={styles.heading}>My Expertise</Text>
         <Text style={styles.subtext}>

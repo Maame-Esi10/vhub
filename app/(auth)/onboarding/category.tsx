@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -71,8 +71,11 @@ export default function OnboardingCategory() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <OnboardingStepHeader title="ONBOARDING" onBack={() => router.back()} />
+      <ScrollView contentContainerStyle={styles.content}>
+        <OnboardingStepHeader
+          title="ONBOARDING"
+          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/skills'))}
+        />
 
         <Text style={styles.caption}>PROFESSIONAL BACKGROUND</Text>
         <Text style={styles.heading}>Tell us your background</Text>
@@ -116,7 +119,7 @@ export default function OnboardingCategory() {
           style={styles.continueButton}
         />
         <OnboardingStepFooter step={2} total={5} section="Professional Background" />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -127,8 +130,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    flex: 1,
     paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
   caption: {
     fontFamily: fontFamily.semiBold,

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -71,7 +72,7 @@ export default function Login() {
         >
           <View style={styles.brandBlock}>
             <View style={styles.badge}>
-              <MaterialCommunityIcons name="medical-bag" size={30} color={colors.primary} />
+              <Image source={require('../../assets/logo.png')} style={styles.badgeLogo} resizeMode="contain" />
             </View>
             <Text style={styles.wordmark}>V-HUB</Text>
             <Text style={styles.tagline}>Virtual Health Unified Bridge</Text>
@@ -198,6 +199,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.base,
+  },
+  badgeLogo: {
+    width: 36,
+    height: 36,
   },
   wordmark: {
     fontFamily: fontFamily.bold,

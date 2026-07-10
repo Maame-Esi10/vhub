@@ -43,7 +43,7 @@ export default function OnboardingSpecialties() {
       <View style={styles.content}>
         <OnboardingStepHeader
           title="EXPERT ONBOARDING"
-          onBack={() => router.back()}
+          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/category'))}
           trailing={
             <Pressable onPress={() => proceed([])} accessibilityRole="button" accessibilityLabel="Skip this step">
               <Text style={styles.skip}>SKIP</Text>

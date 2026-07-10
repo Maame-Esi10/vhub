@@ -78,7 +78,7 @@ export default function VerifyIdentity() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <OnboardingStepHeader
           title="IDENTITY ASSURANCE"
-          onBack={() => router.back()}
+          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/availability'))}
           trailing={<MaterialCommunityIcons name="shield-check-outline" size={20} color={colors.success} />}
         />
 

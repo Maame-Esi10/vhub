@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
+  Image,
+  ImageSourcePropType,
   ListRenderItemInfo,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -14,7 +16,6 @@ import {
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
@@ -27,12 +28,6 @@ interface Slide {
 // Slide order below matches the active-dot position seen in the Figma
 // exports (design-refs/Onboarding-2.png -> Onboarding-1.png -> Onboarding.png),
 // which is the definitive sequence signal (filename suffixes are not in order).
-//
-// TODO: replace the flat dark placeholder background per slide with real
-// full-bleed photography (assets/images/onboarding-1.jpg, -2.jpg, -3.jpg)
-// under the same dark overlay once licensed assets are available.
-// expo-linear-gradient is not yet a project dependency, so the gradient
-// overlay is approximated with a single translucent scrim view for now.
 const SLIDES: Slide[] = [
   {
     key: 'onboarding-1',
@@ -50,6 +45,15 @@ const SLIDES: Slide[] = [
     subtext: 'Join others in spreading kindness and making a real difference in people’s lives',
   },
 ];
+
+// Each key must have a matching file at assets/images/onboarding-{1,2,3}.png
+// (see docs/REPORT_NOTES.md / project owner instructions) — require() paths
+// are static, so the app will fail to bundle until all three exist.
+const SLIDE_IMAGES: Record<string, ImageSourcePropType> = {
+  'onboarding-1': require('../../assets/images/onboarding-1.png'),
+  'onboarding-2': require('../../assets/images/onboarding-2.png'),
+  'onboarding-3': require('../../assets/images/onboarding-3.png'),
+};
 
 type RegisterRole = 'volunteer' | 'organisation';
 
@@ -95,16 +99,13 @@ export default function Welcome() {
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Slide>) => (
       <View style={[styles.slide, { width }]}>
-        {/* Placeholder full-bleed dark background standing in for hero photography */}
-        <View style={[StyleSheet.absoluteFill, styles.slideBackground]} />
+        <Image source={SLIDE_IMAGES[item.key]} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <View style={[StyleSheet.absoluteFill, styles.slideOverlay]} />
 
         <View style={[styles.content, { paddingTop: insets.top + spacing.base }]}>
           <View style={styles.topBar}>
             <View style={styles.brand}>
-              <View style={styles.logoMark}>
-                <MaterialCommunityIcons name="heart-pulse" size={16} color={colors.white} />
-              </View>
+              <Image source={require('../../assets/logo.png')} style={styles.logoMark} resizeMode="contain" />
               <Text style={styles.wordmark}>V-HUB</Text>
             </View>
             <Pressable
@@ -196,9 +197,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.heroBackground,
   },
-  slideBackground: {
-    backgroundColor: colors.heroBackground,
-  },
   slideOverlay: {
     backgroundColor: colors.overlay,
   },
@@ -218,13 +216,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   logoMark: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 28,
+    height: 28,
   },
   wordmark: {
     fontFamily: fontFamily.semiBold,

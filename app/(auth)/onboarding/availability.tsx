@@ -69,7 +69,10 @@ export default function OnboardingAvailability() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <OnboardingStepHeader title="ONBOARDING" onBack={() => router.back()} />
+        <OnboardingStepHeader
+          title="ONBOARDING"
+          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/specialties'))}
+        />
 
         <Text style={styles.heading}>Precision Preferences</Text>
         <Text style={styles.subtext}>
