@@ -10,7 +10,6 @@ interface CompleteOnboardingParams {
   skillTags: string[];
   specialties: string[];
   availabilitySlots: string[];
-  licenseNumber: string | null;
   declarationSigned: boolean;
 }
 
@@ -38,6 +37,12 @@ export function useCompleteOnboarding() {
         throw profileError ?? new Error('Could not save your profile. Please try again.');
       }
 
+      // verification_status is intentionally not set here: it stays at its
+      // DB default ('unverified') regardless of which button the volunteer
+      // pressed. There's no evidence (document upload) yet to justify
+      // 'documents_pending' — that transition happens once Cloudinary
+      // upload is wired in a later phase. declaration_signed is the only
+      // real signal Phase 1 has.
       const { data: updatedVolunteerProfile, error: volunteerError } = await supabase
         .from('volunteer_profiles')
         .update({
@@ -45,7 +50,6 @@ export function useCompleteOnboarding() {
           skill_tags: params.skillTags,
           specialties: params.specialties,
           availability_slots: params.availabilitySlots,
-          license_number: params.licenseNumber,
           declaration_signed: params.declarationSigned,
         })
         .eq('id', params.userId)

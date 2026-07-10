@@ -4,6 +4,23 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
 
 - Cleanup: delete `design-refs/` once all UI is complete.
 
+## Design decisions
+
+- **Verification gates CLINICAL roles only (implement in Phase 2):**
+  volunteers with `verification_status != 'verified'` can browse all
+  outreaches and Quick Join support roles, but cannot submit a Full
+  Application to a clinical role — they're prompted to complete
+  verification first. Support roles never require verification. This is
+  the enforcement point for the project's "check clinical credentials
+  before event day" goal.
+
+- **License numbers were removed from the design:** no public Ghana
+  licensing API exists, so self-entered numbers provide no assurance.
+  Verification is document-based with human org-admin review, reinforced
+  over time by V-Score reputation. TODO before final: research whether any
+  of the three Ghana councils offer any verification channel; design the
+  org-admin document review UI (Phase 2/3).
+
 ## Before final submission / demo
 
 - **Verify the Supabase email confirmation setting.** As of 2026-07-10 the
@@ -28,17 +45,17 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
     out by `useAuthGuard` rather than landing in a broken tab group — worth
     a manual check via the Supabase dashboard if time allows.
 
-- **Define real per-category license-number formats.** Phase 1 onboarding's
-  identity-verification step (`ID Verification.png`) accepts any reasonably
-  formatted alphanumeric string for `license_number`, regardless of
-  `category`, since no format spec existed at build time. Before
-  submission, get the real formats from the relevant Ghanaian councils and
-  tighten validation in the onboarding declaration step:
-  - Nursing & Midwifery Council (nurse, midwife)
-  - Medical & Dental Council (doctor)
-  - Pharmacy Council (pharmacy_student)
-  - first_aider / other may not have a formal council format — decide
-    whether license_number is optional for these categories.
+- **The Supabase client isn't typed with the `Database` generic.**
+  `lib/supabase.ts` calls `createClient(supabaseUrl, supabasePublishableKey, {...})`
+  without a `Database` type parameter, so `.from(table).insert(...)`/`.update(...)`
+  calls aren't checked against `types/database.ts` at all — a stale or
+  misspelled column name currently passes `tsc --noEmit` silently (this is
+  exactly how a leftover `license_number` write survived a schema change
+  undetected during this session's design review). Wire `createClient<Database>`
+  through once `types/database.ts` is restructured into the nested
+  `Database['public']['Tables'][...]` shape the Supabase JS client expects
+  (or generate it via `supabase gen types typescript`) — worth doing before
+  Phase 2 adds many more `.from(...)` call sites.
 
 - **Orphaned-account sign-out has no user-facing message.** `hooks/useAuthGuard.ts`'s
   `loadProfileForUser` silently calls `supabase.auth.signOut()` if an

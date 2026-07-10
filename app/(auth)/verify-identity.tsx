@@ -3,25 +3,25 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Input, OnboardingStepFooter, OnboardingStepHeader } from '@/components/ui';
+import { Button, OnboardingStepFooter, OnboardingStepHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { useCompleteOnboarding } from '@/hooks';
-
-// Lenient placeholder validation only — real per-council formats (Nursing &
-// Midwifery Council, Medical & Dental Council, Pharmacy Council) still need
-// to be defined. See docs/REPORT_NOTES.md.
-function isLicenseFormatValid(value: string): boolean {
-  const trimmed = value.trim();
-  return trimmed.length >= 4 && trimmed.length <= 20 && /^[A-Za-z0-9-]+$/.test(trimmed);
-}
 
 /**
  * Step 5/5 of volunteer onboarding (design-refs/ID Verification.png). Kept
  * as its own top-level (auth) route, not nested under onboarding/, since
  * it's also the natural re-entry point for a volunteer who chose "Complete
  * Later" and comes back to verify afterward.
+ *
+ * No license number field: Ghana has no public licensing-registry API
+ * (Nursing & Midwifery Council, Medical & Dental Council, Pharmacy
+ * Council), so a self-entered number would prove nothing. Verification is
+ * document-based with human org-admin review instead
+ * (volunteer_profiles.verification_status) — the document upload itself is
+ * a placeholder here until Cloudinary is wired in a later phase. See
+ * docs/REPORT_NOTES.md.
  */
 export default function VerifyIdentity() {
   const router = useRouter();
@@ -29,22 +29,14 @@ export default function VerifyIdentity() {
   const onboarding = useOnboardingStore();
   const completeOnboarding = useCompleteOnboarding();
 
-  const [licenseNumber, setLicenseNumber] = useState(onboarding.licenseNumber);
   const [confirmed, setConfirmed] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const licenseValid = isLicenseFormatValid(licenseNumber);
-  const canVerifyNow = licenseValid && confirmed;
   const submitting = completeOnboarding.isPending;
   const errorMessage = validationError ?? completeOnboarding.error?.message ?? null;
+  const progress = useMemo(() => (confirmed ? 1 : 0.3), [confirmed]);
 
-  const progress = useMemo(() => {
-    if (licenseValid && confirmed) return 1;
-    if (licenseValid || confirmed) return 0.6;
-    return 0.3;
-  }, [licenseValid, confirmed]);
-
-  async function persistAndFinish(options: { declarationSigned: boolean; licenseNumber: string | null }) {
+  async function persistAndFinish(options: { declarationSigned: boolean }) {
     if (!user) {
       setValidationError('Your session expired. Please log in again.');
       return;
@@ -61,7 +53,6 @@ export default function VerifyIdentity() {
         skillTags: onboarding.skillTags,
         specialties: onboarding.specialties,
         availabilitySlots: onboarding.availabilitySlots,
-        licenseNumber: options.licenseNumber,
         declarationSigned: options.declarationSigned,
       });
     } catch {
@@ -74,12 +65,12 @@ export default function VerifyIdentity() {
   }
 
   function handleSecureVerification() {
-    if (!canVerifyNow) return;
-    persistAndFinish({ declarationSigned: true, licenseNumber: licenseNumber.trim() });
+    if (!confirmed) return;
+    persistAndFinish({ declarationSigned: true });
   }
 
   function handleCompleteLater() {
-    persistAndFinish({ declarationSigned: false, licenseNumber: null });
+    persistAndFinish({ declarationSigned: false });
   }
 
   return (
@@ -106,42 +97,32 @@ export default function VerifyIdentity() {
           <View style={styles.hubText}>
             <Text style={styles.hubTitle}>Security Hub</Text>
             <Text style={styles.hubBody}>
-              We verify all credentials against{' '}
-              <Text style={styles.hubHighlight}>Official Council Databases</Text> to ensure the
-              integrity of the clinical network.
+              Credentials are verified by{' '}
+              <Text style={styles.hubHighlight}>document review from our team</Text> to ensure
+              the integrity of the clinical network.
             </Text>
           </View>
         </View>
 
-        <Text style={styles.heading}>Verify Professional ID</Text>
+        <Text style={styles.heading}>Verify Your Credentials</Text>
         <Text style={styles.subtext}>
-          Please enter your credentials below. This is a one-time verification process required
-          for clinical access.
+          Upload a credential document and sign the declaration below. This is a one-time
+          verification process required for clinical access.
         </Text>
 
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardLabel}>License / Student ID</Text>
-            <View style={styles.requiredBadge}>
-              <Text style={styles.requiredBadgeText}>REQUIRED</Text>
+            <Text style={styles.cardLabel}>Credential Document</Text>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonBadgeText}>COMING SOON</Text>
             </View>
           </View>
-          <Input
-            placeholder="e.g., NMC-1234567"
-            value={licenseNumber}
-            onChangeText={setLicenseNumber}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            leadingIcon={<MaterialCommunityIcons name="briefcase-outline" size={20} color={colors.textSecondary} />}
-            trailingElement={
-              licenseValid ? (
-                <MaterialCommunityIcons name="check-circle" size={18} color={colors.success} />
-              ) : null
-            }
-          />
-          <View style={styles.encryptedRow}>
-            <MaterialCommunityIcons name="lock-outline" size={12} color={colors.textSecondary} />
-            <Text style={styles.encryptedText}>Information is encrypted and securely transmitted.</Text>
+
+          <View style={styles.uploadPlaceholder}>
+            <MaterialCommunityIcons name="tray-arrow-up" size={22} color={colors.textSecondary} />
+            <Text style={styles.uploadPlaceholderText}>
+              Document upload will be available once credential storage is wired up
+            </Text>
           </View>
 
           <Pressable
@@ -170,7 +151,7 @@ export default function VerifyIdentity() {
         <Button
           title="Secure Verification"
           variant="solid"
-          disabled={!canVerifyNow || submitting}
+          disabled={!confirmed || submitting}
           onPress={handleSecureVerification}
           style={styles.verifyButton}
         />
@@ -286,28 +267,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textPrimary,
   },
-  requiredBadge: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+  comingSoonBadge: {
+    backgroundColor: colors.border,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  requiredBadgeText: {
+  comingSoonBadgeText: {
     fontFamily: fontFamily.semiBold,
     fontSize: 10,
     letterSpacing: 0.5,
-    color: colors.success,
-  },
-  encryptedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-  },
-  encryptedText: {
-    fontFamily: fontFamily.regular,
-    fontSize: 11,
     color: colors.textSecondary,
+  },
+  uploadPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.base,
+  },
+  uploadPlaceholderText: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   confirmRow: {
     flexDirection: 'row',

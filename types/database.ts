@@ -13,6 +13,16 @@ export type VolunteerCategory =
 
 export type ExperienceLevel = "beginner" | "intermediate" | "experienced";
 
+/**
+ * Tiered credential verification. Ghana has no public licensing-registry API
+ * (Nursing & Midwifery Council, Medical & Dental Council, Pharmacy Council),
+ * so verification is a human/document process, not a boolean.
+ * unverified = declaration signed only; documents_pending = credential
+ * document uploaded (Cloudinary, later phase), awaiting review; verified = a
+ * human org-admin approved the document.
+ */
+export type VerificationStatus = "unverified" | "documents_pending" | "verified";
+
 export type OutreachRoleType = "clinical" | "support";
 
 export type OutreachStatus = "draft" | "open" | "closed" | "completed";
@@ -48,8 +58,6 @@ export interface Profile {
 export interface VolunteerProfile {
   id: string;
   category: VolunteerCategory | null;
-  license_number: string | null;
-  license_verified: boolean;
   skill_tags: string[] | null;
   specialties: string[] | null;
   experience_level: ExperienceLevel | null;
@@ -58,6 +66,7 @@ export interface VolunteerProfile {
   v_score: number;
   events_attended: number;
   declaration_signed: boolean;
+  verification_status: VerificationStatus;
   created_at: string;
   updated_at: string;
 }

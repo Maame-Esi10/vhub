@@ -8,7 +8,6 @@ interface OnboardingState {
   region: string | null;
   district: string | null;
   availabilitySlots: string[];
-  licenseNumber: string;
   declarationSigned: boolean;
   setSkillTags: (skillTags: string[]) => void;
   setCategory: (category: VolunteerCategory | null) => void;
@@ -16,7 +15,6 @@ interface OnboardingState {
   setRegion: (region: string | null) => void;
   setDistrict: (district: string | null) => void;
   setAvailabilitySlots: (availabilitySlots: string[]) => void;
-  setLicenseNumber: (licenseNumber: string) => void;
   setDeclarationSigned: (declarationSigned: boolean) => void;
   reset: () => void;
 }
@@ -24,6 +22,12 @@ interface OnboardingState {
 // experience_level has no onboarding step in the current 5-step flow (no
 // spec or Figma screen covers it) — it stays null until a future
 // profile-edit screen sets it. See docs/REPORT_NOTES.md.
+//
+// No license_number field: Ghana has no public licensing-registry API, so a
+// self-entered license number provides no assurance. Credential
+// verification is document-based (Cloudinary upload, later phase) with
+// human org-admin review — tracked by volunteer_profiles.verification_status,
+// not collected here. See docs/REPORT_NOTES.md.
 const initialState = {
   skillTags: [],
   category: null,
@@ -31,7 +35,6 @@ const initialState = {
   region: null,
   district: null,
   availabilitySlots: [],
-  licenseNumber: '',
   declarationSigned: false,
 };
 
@@ -49,7 +52,6 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setRegion: (region) => set({ region, district: null }),
   setDistrict: (district) => set({ district }),
   setAvailabilitySlots: (availabilitySlots) => set({ availabilitySlots }),
-  setLicenseNumber: (licenseNumber) => set({ licenseNumber }),
   setDeclarationSigned: (declarationSigned) => set({ declarationSigned }),
   reset: () => set(initialState),
 }));

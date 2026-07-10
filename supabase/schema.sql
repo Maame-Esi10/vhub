@@ -39,6 +39,17 @@ do $$ begin
   create type application_status as enum ('pending', 'accepted', 'rejected', 'waitlisted', 'cancelled');
 exception when duplicate_object then null; end $$;
 
+-- Ghana has no public licensing-registry API (Nursing & Midwifery Council,
+-- Medical & Dental Council, Pharmacy Council) to verify a self-entered
+-- license number against, so verification is a tiered human/document
+-- process instead of a boolean. unverified = declaration signed only;
+-- documents_pending = credential document uploaded (Cloudinary, later
+-- phase), awaiting review; verified = a human org-admin approved the
+-- document.
+do $$ begin
+  create type verification_status as enum ('unverified', 'documents_pending', 'verified');
+exception when duplicate_object then null; end $$;
+
 -- ============================================================
 -- Shared trigger function: maintains updated_at on every table
 -- ============================================================
@@ -83,8 +94,8 @@ alter table profiles enable row level security;
 -- "Organization Public Profile" screens will need broader read access for
 -- pre-application browsing/discovery. When those screens are built, add a
 -- `public` flag column or a dedicated view exposing only non-sensitive
--- columns (name, avatar, bio, skills, v_score) -- never phone/email/
--- license_number -- rather than loosening this policy back to using (true).
+-- columns (name, avatar, bio, skills, v_score) -- never phone/email --
+-- rather than loosening this policy back to using (true).
 drop policy if exists "profiles_select_authenticated" on profiles;
 create policy "profiles_select_authenticated"
   on profiles for select
@@ -125,8 +136,6 @@ create policy "profiles_update_own"
 create table if not exists volunteer_profiles (
   id uuid primary key references profiles(id) on delete cascade,
   category volunteer_category,
-  license_number text,
-  license_verified boolean not null default false,
   skill_tags text[],
   specialties text[],
   experience_level experience_level,
@@ -135,6 +144,7 @@ create table if not exists volunteer_profiles (
   v_score numeric not null default 70 check (v_score >= 0 and v_score <= 100),
   events_attended int not null default 0,
   declaration_signed boolean not null default false,
+  verification_status verification_status not null default 'unverified',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -153,6 +163,14 @@ alter table volunteer_profiles add column if not exists availability_slots text[
 -- availability_days (day-only granularity) is superseded by
 -- availability_slots and dropped entirely, not kept alongside it.
 alter table volunteer_profiles drop column if exists availability_days;
+-- license_number/license_verified are dropped entirely: Ghana has no public
+-- licensing-registry API (Nursing & Midwifery Council, Medical & Dental
+-- Council, Pharmacy Council), so a self-entered license number proves
+-- nothing. Replaced by the tiered verification_status enum below, driven by
+-- an org-admin document review flow (later phase) instead of a boolean.
+alter table volunteer_profiles drop column if exists license_number;
+alter table volunteer_profiles drop column if exists license_verified;
+alter table volunteer_profiles add column if not exists verification_status verification_status not null default 'unverified';
 
 drop trigger if exists trg_volunteer_profiles_updated_at on volunteer_profiles;
 create trigger trg_volunteer_profiles_updated_at
@@ -161,10 +179,11 @@ create trigger trg_volunteer_profiles_updated_at
 
 alter table volunteer_profiles enable row level security;
 
--- Row-scoped, mirrors profiles_select_authenticated above (license_number is
--- PII and must not be readable by unrelated authenticated users). See the
--- FOLLOW-UP note on profiles_select_authenticated for the future public
--- discovery view this will need once the public profile screens are built.
+-- Row-scoped, mirrors profiles_select_authenticated above (this row can
+-- carry sensitive volunteer PII and must not be readable by unrelated
+-- authenticated users). See the FOLLOW-UP note on profiles_select_authenticated
+-- for the future public discovery view this will need once the public
+-- profile screens are built.
 drop policy if exists "volunteer_profiles_select_authenticated" on volunteer_profiles;
 create policy "volunteer_profiles_select_authenticated"
   on volunteer_profiles for select
@@ -486,7 +505,7 @@ revoke update (match_score) on applications from authenticated;
 -- dodge the bigger penalty, so both columns are service-role write-only.
 revoke update (late_cancellation, cancelled_at) on applications from authenticated;
 
--- license_verified and events_attended must only be set by an
+-- verification_status and events_attended must only be set by an
 -- organisation/admin verification flow or the serverless /api/vscore
 -- pipeline — never directly by the volunteer who owns the row.
-revoke update (license_verified, events_attended) on volunteer_profiles from authenticated;
+revoke update (verification_status, events_attended) on volunteer_profiles from authenticated;
