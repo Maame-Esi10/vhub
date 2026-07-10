@@ -1,9 +1,5 @@
-import { Text, View } from 'react-native';
+import { Redirect } from 'expo-router';
 
-export default function OnboardingStart() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Onboarding</Text>
-    </View>
-  );
+export default function OnboardingEntry() {
+  return <Redirect href="/(auth)/onboarding/skills" />;
 }

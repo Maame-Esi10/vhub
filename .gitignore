@@ -43,3 +43,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Figma design reference exports (temporary build reference; originals live in Figma)
+design-refs/

@@ -51,8 +51,9 @@ export interface VolunteerProfile {
   license_number: string | null;
   license_verified: boolean;
   skill_tags: string[] | null;
+  specialties: string[] | null;
   experience_level: ExperienceLevel | null;
-  availability_days: string[] | null;
+  availability_slots: string[] | null;
   bio: string | null;
   v_score: number;
   events_attended: number;

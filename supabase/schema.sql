@@ -73,11 +73,37 @@ create trigger trg_profiles_updated_at
 
 alter table profiles enable row level security;
 
+-- Row-scoped: a user may read their own profile row, plus the profile row
+-- of the other party in any application relationship (org <-> volunteer who
+-- applied to one of that org's outreaches). This intentionally does NOT
+-- allow a volunteer to browse an org's profile before applying, or an org to
+-- browse volunteers who haven't applied -- phone/email are PII and must not
+-- be readable by unrelated authenticated users.
+-- FOLLOW-UP (not built yet): Figma's "Volunteer Public Profile" and
+-- "Organization Public Profile" screens will need broader read access for
+-- pre-application browsing/discovery. When those screens are built, add a
+-- `public` flag column or a dedicated view exposing only non-sensitive
+-- columns (name, avatar, bio, skills, v_score) -- never phone/email/
+-- license_number -- rather than loosening this policy back to using (true).
 drop policy if exists "profiles_select_authenticated" on profiles;
 create policy "profiles_select_authenticated"
   on profiles for select
   to authenticated
-  using (true);
+  using (
+    auth.uid() = id
+    or exists (
+      select 1 from applications a
+      join outreaches o on o.id = a.outreach_id
+      where a.volunteer_id = profiles.id
+        and o.organisation_id = auth.uid()
+    )
+    or exists (
+      select 1 from applications a
+      join outreaches o on o.id = a.outreach_id
+      where o.organisation_id = profiles.id
+        and a.volunteer_id = auth.uid()
+    )
+  );
 
 drop policy if exists "profiles_insert_own" on profiles;
 create policy "profiles_insert_own"
@@ -102,8 +128,9 @@ create table if not exists volunteer_profiles (
   license_number text,
   license_verified boolean not null default false,
   skill_tags text[],
+  specialties text[],
   experience_level experience_level,
-  availability_days text[],
+  availability_slots text[],
   bio text,
   v_score numeric not null default 70 check (v_score >= 0 and v_score <= 100),
   events_attended int not null default 0,
@@ -112,6 +139,21 @@ create table if not exists volunteer_profiles (
   updated_at timestamptz not null default now()
 );
 
+-- Migration for installs where volunteer_profiles already existed (Phase 0
+-- ran once against the live project): add the new columns and drop the
+-- superseded day-only availability column idempotently. Safe to re-run.
+-- specialties: medical specialty tags (e.g. "Cardiology"), distinct from
+-- skill_tags (granular clinical skills, e.g. "Venipuncture"). App-validated
+-- against a constants list, same plain-array style as skill_tags.
+alter table volunteer_profiles add column if not exists specialties text[];
+-- availability_slots: composite "{day}_{slot}" tokens, e.g. "sat_afternoon",
+-- day in mon|tue|wed|thu|fri|sat|sun, slot in morning|afternoon|evening.
+-- App-validated, same plain-array style as skill_tags / required_skills.
+alter table volunteer_profiles add column if not exists availability_slots text[];
+-- availability_days (day-only granularity) is superseded by
+-- availability_slots and dropped entirely, not kept alongside it.
+alter table volunteer_profiles drop column if exists availability_days;
+
 drop trigger if exists trg_volunteer_profiles_updated_at on volunteer_profiles;
 create trigger trg_volunteer_profiles_updated_at
   before update on volunteer_profiles
@@ -119,11 +161,29 @@ create trigger trg_volunteer_profiles_updated_at
 
 alter table volunteer_profiles enable row level security;
 
+-- Row-scoped, mirrors profiles_select_authenticated above (license_number is
+-- PII and must not be readable by unrelated authenticated users). See the
+-- FOLLOW-UP note on profiles_select_authenticated for the future public
+-- discovery view this will need once the public profile screens are built.
 drop policy if exists "volunteer_profiles_select_authenticated" on volunteer_profiles;
 create policy "volunteer_profiles_select_authenticated"
   on volunteer_profiles for select
   to authenticated
-  using (true);
+  using (
+    auth.uid() = id
+    or exists (
+      select 1 from applications a
+      join outreaches o on o.id = a.outreach_id
+      where a.volunteer_id = volunteer_profiles.id
+        and o.organisation_id = auth.uid()
+    )
+    or exists (
+      select 1 from applications a
+      join outreaches o on o.id = a.outreach_id
+      where o.organisation_id = volunteer_profiles.id
+        and a.volunteer_id = auth.uid()
+    )
+  );
 
 drop policy if exists "volunteer_profiles_insert_own" on volunteer_profiles;
 create policy "volunteer_profiles_insert_own"
