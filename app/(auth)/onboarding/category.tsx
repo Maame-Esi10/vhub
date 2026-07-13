@@ -53,7 +53,7 @@ const CATEGORY_CARDS: CategoryCard[] = [
     value: 'other',
     label: 'Other',
     description: 'Other healthcare-adjacent skills or general support.',
-    icon: 'account-heart-outline',
+    icon: 'account-outline',
   },
 ];
 

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -18,6 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { getLogoSize } from '@/constants/logoSizes';
 
 interface Slide {
   key: string;
@@ -57,26 +58,64 @@ const SLIDE_IMAGES: Record<string, ImageSourcePropType> = {
 
 type RegisterRole = 'volunteer' | 'organisation';
 
+/** Auto-advance interval for the intro carousel; manual swipes reset this timer. */
+const AUTOPLAY_INTERVAL_MS = 4000;
+
 export default function Welcome() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const logoSize = getLogoSize('medium', width);
   const flatListRef = useRef<FlatList<Slide>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  // Read inside the interval callback instead of `activeIndex` so the
+  // effect below doesn't need to re-run (and reset the timer) every time
+  // the slide changes.
+  const activeIndexRef = useRef(0);
+  const autoplayTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const pauseAutoplay = useCallback(() => {
+    if (autoplayTimer.current) {
+      clearInterval(autoplayTimer.current);
+      autoplayTimer.current = null;
+    }
+  }, []);
+
+  const startAutoplay = useCallback(() => {
+    pauseAutoplay();
+    autoplayTimer.current = setInterval(() => {
+      const nextIndex = (activeIndexRef.current + 1) % SLIDES.length;
+      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+      activeIndexRef.current = nextIndex;
+      setActiveIndex(nextIndex);
+    }, AUTOPLAY_INTERVAL_MS);
+  }, [pauseAutoplay]);
+
+  useEffect(() => {
+    startAutoplay();
+    return pauseAutoplay;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleMomentumScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+      activeIndexRef.current = nextIndex;
       setActiveIndex(nextIndex);
+      // A manual swipe just landed — restart the countdown so autoplay
+      // doesn't fire again a moment later.
+      startAutoplay();
     },
-    [width]
+    [width, startAutoplay]
   );
 
   const handleSkip = useCallback(() => {
     const lastIndex = SLIDES.length - 1;
     flatListRef.current?.scrollToIndex({ index: lastIndex, animated: true });
+    activeIndexRef.current = lastIndex;
     setActiveIndex(lastIndex);
-  }, []);
+    startAutoplay();
+  }, [startAutoplay]);
 
   const goToRegister = useCallback(
     (role: RegisterRole) => {
@@ -105,7 +144,11 @@ export default function Welcome() {
         <View style={[styles.content, { paddingTop: insets.top + spacing.base }]}>
           <View style={styles.topBar}>
             <View style={styles.brand}>
-              <Image source={require('../../assets/logo.png')} style={styles.logoMark} resizeMode="contain" />
+              <Image
+                source={require('../../assets/logo.png')}
+                style={{ width: logoSize, height: logoSize }}
+                resizeMode="contain"
+              />
               <Text style={styles.wordmark}>V-HUB</Text>
             </View>
             <Pressable
@@ -123,9 +166,9 @@ export default function Welcome() {
             <Text style={styles.subtext}>{item.subtext}</Text>
           </View>
 
-          <PagerDots count={SLIDES.length} activeIndex={activeIndex} />
+          <View style={styles.ctaBlock}>
+            <PagerDots count={SLIDES.length} activeIndex={activeIndex} />
 
-          <View style={[styles.ctaBlock, { paddingBottom: insets.bottom + spacing.lg }]}>
             <Button
               title="BECOME A VOLUNTEER"
               variant="outline"
@@ -142,17 +185,17 @@ export default function Welcome() {
               accessibilityLabel="Post an outreach"
               textStyle={styles.postOutreachLabel}
             />
+          </View>
 
-            <View style={styles.footer}>
-              <View style={styles.footerRule} />
-              <Text style={styles.footerText}>SCROLL TO EXPLORE</Text>
-              <View style={styles.footerRule} />
-            </View>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={styles.footerRule} />
+            <Text style={styles.footerText}>SCROLL TO EXPLORE</Text>
+            <View style={styles.footerRule} />
           </View>
         </View>
       </View>
     ),
-    [activeIndex, handleSkip, goToRegister, insets.top, insets.bottom, width]
+    [activeIndex, handleSkip, goToRegister, insets.top, insets.bottom, width, logoSize]
   );
 
   return (
@@ -166,8 +209,10 @@ export default function Welcome() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        onScrollBeginDrag={pauseAutoplay}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         getItemLayout={getItemLayout}
+        style={styles.list}
       />
     </View>
   );
@@ -193,6 +238,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.heroBackground,
   },
+  list: {
+    flex: 1,
+  },
   slide: {
     flex: 1,
     backgroundColor: colors.heroBackground,
@@ -215,10 +263,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  logoMark: {
-    width: 28,
-    height: 28,
-  },
   wordmark: {
     fontFamily: fontFamily.semiBold,
     fontSize: 15,
@@ -236,7 +280,7 @@ const styles = StyleSheet.create({
   },
   headline: {
     fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    fontStyle: 'italic',
+    fontWeight: 'bold',
     fontSize: 32,
     lineHeight: 38,
     color: colors.white,
@@ -254,7 +298,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    marginVertical: spacing.xl,
+    marginBottom: spacing.md,
   },
   dot: {
     width: 6,
@@ -281,7 +325,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.md,
-    marginTop: spacing.xl,
   },
   footerRule: {
     width: 32,

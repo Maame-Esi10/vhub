@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -9,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -16,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { getLogoSize } from '@/constants/logoSizes';
 import { ORG_TYPES, OrgType } from '@/constants/org-types';
 import { useSignUp } from '@/hooks';
 
@@ -28,6 +31,8 @@ function resolveRole(param: string | undefined): RegisterRole {
 export default function Register() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const logoSize = getLogoSize('medium', width);
   const { role: roleParam } = useLocalSearchParams<{ role?: string }>();
   const role = useMemo(() => resolveRole(roleParam), [roleParam]);
   const signUp = useSignUp();
@@ -140,7 +145,14 @@ export default function Register() {
     return (
       <View style={styles.container}>
         <StatusBar style="dark" />
-        <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+        <View style={[styles.brandStrip, { paddingTop: insets.top + spacing.sm }]}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={{ width: logoSize, height: logoSize }}
+            resizeMode="contain"
+          />
+        </View>
+        <View style={[styles.header, { paddingTop: spacing.sm }]}>
           <Pressable
             onPress={goBack}
             hitSlop={8}
@@ -185,7 +197,14 @@ export default function Register() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+          <View style={[styles.brandStrip, { paddingTop: insets.top + spacing.sm }]}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={{ width: logoSize, height: logoSize }}
+            resizeMode="contain"
+          />
+        </View>
+        <View style={[styles.header, { paddingTop: spacing.sm }]}>
             <Pressable
               onPress={goBack}
               hitSlop={8}
@@ -553,6 +572,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingBottom: spacing.xl,
+  },
+  brandStrip: {
+    alignItems: 'center',
+    paddingBottom: spacing.sm,
   },
   header: {
     flexDirection: 'row',

@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -16,11 +17,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { getLogoSize } from '@/constants/logoSizes';
 import { useSignIn } from '@/hooks';
+
+// The circular badge backdrop is sized relative to the logo so their ratio
+// (badge slightly larger, framing the mark) stays consistent as the logo
+// itself scales with screen width.
+const BADGE_TO_LOGO_RATIO = 64 / 36;
 
 export default function Login() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const logoSize = getLogoSize('medium', width);
+  const badgeSize = logoSize * BADGE_TO_LOGO_RATIO;
   const signIn = useSignIn();
 
   const [email, setEmail] = useState('');
@@ -71,8 +81,12 @@ export default function Login() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.brandBlock}>
-            <View style={styles.badge}>
-              <Image source={require('../../assets/logo.png')} style={styles.badgeLogo} resizeMode="contain" />
+            <View style={[styles.badge, { width: badgeSize, height: badgeSize, borderRadius: badgeSize / 2 }]}>
+              <Image
+                source={require('../../assets/logo.png')}
+                style={{ width: logoSize, height: logoSize }}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.wordmark}>V-HUB</Text>
             <Text style={styles.tagline}>Virtual Health Unified Bridge</Text>
@@ -192,17 +206,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badge: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.pill,
     backgroundColor: 'rgba(255, 107, 107, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.base,
-  },
-  badgeLogo: {
-    width: 36,
-    height: 36,
   },
   wordmark: {
     fontFamily: fontFamily.bold,
