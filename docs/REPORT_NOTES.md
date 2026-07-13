@@ -23,6 +23,18 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
 
 ## Before final submission / demo
 
+- **Delete all test accounts and test data from Supabase.** Every account
+  created while dogfooding auth/onboarding/matching during development is
+  still in the project: Authentication → Users (delete each test user —
+  this cascades to their `profiles`/`volunteer_profiles`/
+  `organisation_profiles` rows via the FK), plus any leftover rows in
+  `outreaches`, `applications`, and `event_reviews` created against those
+  accounts. Check the table editor for each of the 6 tables, not just Auth
+  → Users, since outreach/application rows can outlive the account that
+  created them if deletion order was inconsistent. Do this last, right
+  before the demo/submission build, so it isn't accidentally repopulated by
+  further testing.
+
 - **Verify the Supabase email confirmation setting.** As of 2026-07-10 the
   `vhub` project's "Confirm email" (Authentication → Providers → Email) is
   left ON. `app/(auth)/register.tsx` (via `hooks/useSignUp.ts`) handles both
