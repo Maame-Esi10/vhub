@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -14,7 +14,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { useAuthGuard } from '@/hooks';
 import { colors, fontFamily, spacing } from '@/constants/theme';
-import { getLogoSize } from '@/constants/logoSizes';
+import { getSplashWordmarkFontSize } from '@/constants/logoSizes';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // no-op: splash screen may already be hidden (e.g. web)
@@ -32,22 +32,24 @@ const MIN_SPLASH_DISPLAY_MS = 1500;
  * "Loading your mission..." row). So the native splash is hidden as soon as
  * the JS bundle mounts (see the mount-only effect below, not gated on
  * `ready`), and this component takes over for the remainder of font/session
- * loading. Every element here except the logo mark is coded UI (no flat
- * background image), so it stays crisp at any device resolution.
+ * loading. Every element here is coded UI (no flat background image, no
+ * logo mark), so it stays crisp at any device resolution.
  */
 function SplashScreenView() {
   const { width } = useWindowDimensions();
-  const logoSize = getLogoSize('hero', width);
+  const wordmarkFontSize = getSplashWordmarkFontSize(width);
 
   return (
     <View style={styles.splash}>
       <View style={styles.splashContent}>
-        <Image
-          source={require('../assets/logo.png')}
-          style={[styles.splashLogo, { width: logoSize, height: logoSize }]}
-          resizeMode="contain"
-        />
-        <Text style={styles.splashWordmark}>V-HUB</Text>
+        <Text
+          style={[styles.splashWordmark, { fontSize: wordmarkFontSize }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+        >
+          V-HUB
+        </Text>
         <Text style={styles.splashTitle}>Volunteer Medical Outreach</Text>
         <Text style={styles.splashSubtext}>
           Connecting compassionate volunteers with communities in need of medical care
@@ -118,14 +120,11 @@ const styles = StyleSheet.create({
   splashContent: {
     alignItems: 'center',
   },
-  splashLogo: {
-    marginBottom: spacing.base,
-  },
   splashWordmark: {
     fontFamily: fontFamily.bold,
-    fontSize: 32,
     color: colors.primary,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.base,
+    flexShrink: 1,
   },
   splashTitle: {
     fontFamily: fontFamily.semiBold,

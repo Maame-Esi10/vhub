@@ -166,7 +166,7 @@ export default function Welcome() {
             <Text style={styles.subtext}>{item.subtext}</Text>
           </View>
 
-          <View style={styles.ctaBlock}>
+          <View style={[styles.ctaBlock, { paddingBottom: insets.bottom + spacing.lg }]}>
             <PagerDots count={SLIDES.length} activeIndex={activeIndex} />
 
             <Button
@@ -185,12 +185,6 @@ export default function Welcome() {
               accessibilityLabel="Post an outreach"
               textStyle={styles.postOutreachLabel}
             />
-          </View>
-
-          <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
-            <View style={styles.footerRule} />
-            <Text style={styles.footerText}>SCROLL TO EXPLORE</Text>
-            <View style={styles.footerRule} />
           </View>
         </View>
       </View>
@@ -319,24 +313,5 @@ const styles = StyleSheet.create({
   },
   postOutreachLabel: {
     letterSpacing: 1,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-  },
-  footerRule: {
-    width: 32,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.white,
-    opacity: 0.5,
-  },
-  footerText: {
-    fontFamily: fontFamily.medium,
-    fontSize: 10,
-    letterSpacing: 2,
-    color: colors.white,
-    opacity: 0.7,
   },
 });
