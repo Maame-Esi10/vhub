@@ -238,6 +238,12 @@ create trigger trg_organisation_profiles_updated_at
 
 alter table organisation_profiles enable row level security;
 
+-- Deliberately broad (using (true)), unlike profiles_select_authenticated
+-- above: organisation_profiles holds no PII (org_name, org_type,
+-- description, website, verified -- phone/email live on profiles, which IS
+-- locked down). Volunteers need to browse organisation info before applying
+-- to their outreaches (Figma "Organization Public Profile" flow), so do not
+-- tighten this to a row-scoped policy.
 drop policy if exists "organisation_profiles_select_authenticated" on organisation_profiles;
 create policy "organisation_profiles_select_authenticated"
   on organisation_profiles for select

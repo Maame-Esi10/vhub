@@ -86,6 +86,40 @@ async function bootstrapProfileFromMetadata(
   };
 }
 
+/**
+ * Repairs a volunteer whose `profiles` row exists but whose
+ * `volunteer_profiles` row does not — the state left behind when the second
+ * of signup's/bootstrapProfileFromMetadata's two sequential, non-
+ * transactional inserts is dropped (e.g. a lost connection on a flaky
+ * mobile network). Upserts a stub row keyed on `id` so the gap is closed
+ * instead of being rediscovered on every profile load; `category` stays
+ * null so the existing onboarding-incomplete check below still routes the
+ * volunteer into the wizard, whose final step (useCompleteOnboarding) now
+ * upserts the real data over this stub.
+ */
+async function repairMissingVolunteerProfile(userId: string): Promise<VolunteerProfile | null> {
+  const { data, error } = await supabase
+    .from('volunteer_profiles')
+    .upsert({ id: userId }, { onConflict: 'id' })
+    .select()
+    .maybeSingle();
+
+  return error ? null : (data as VolunteerProfile | null);
+}
+
+/**
+ * Same repair for organisations: a `profiles` row with role='organisation'
+ * but no `organisation_profiles` row. org_name is NOT NULL with no DB
+ * default, so the stub borrows profiles.full_name — useSignUp and
+ * bootstrapProfileFromMetadata both set that to the org name at signup.
+ * Best-effort: routing doesn't depend on organisation_profiles today, so a
+ * failure here just leaves the gap for the next profile load to retry
+ * rather than blocking navigation.
+ */
+async function repairMissingOrganisationProfile(userId: string, orgName: string): Promise<void> {
+  await supabase.from('organisation_profiles').upsert({ id: userId, org_name: orgName }, { onConflict: 'id' });
+}
+
 async function resolveProfile(user: User): Promise<ProfileFetchOutcome> {
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
@@ -108,6 +142,22 @@ async function resolveProfile(user: User): Promise<ProfileFetchOutcome> {
   const typedProfile = profile as Profile;
 
   if (typedProfile.role !== 'volunteer') {
+    const { data: organisationProfile, error: organisationError } = await supabase
+      .from('organisation_profiles')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (organisationError) {
+      return { status: 'error' };
+    }
+
+    if (!organisationProfile) {
+      // profiles row exists, organisation_profiles doesn't — repair rather
+      // than leaving the org permanently short a child row.
+      await repairMissingOrganisationProfile(user.id, typedProfile.full_name);
+    }
+
     return { status: 'found', profile: typedProfile, volunteerProfile: null };
   }
 
@@ -121,10 +171,22 @@ async function resolveProfile(user: User): Promise<ProfileFetchOutcome> {
     return { status: 'error' };
   }
 
+  if (!volunteerProfile) {
+    // profiles row exists, volunteer_profiles doesn't — repair instead of
+    // returning null forever (which would otherwise bounce this volunteer
+    // into the onboarding wizard on every load, and the wizard's old
+    // .update()-only save used to fail outright against a nonexistent row).
+    return {
+      status: 'found',
+      profile: typedProfile,
+      volunteerProfile: await repairMissingVolunteerProfile(user.id),
+    };
+  }
+
   return {
     status: 'found',
     profile: typedProfile,
-    volunteerProfile: (volunteerProfile as VolunteerProfile) ?? null,
+    volunteerProfile: volunteerProfile as VolunteerProfile,
   };
 }
 
