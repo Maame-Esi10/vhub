@@ -32,3 +32,149 @@ export function getVScoreBand(score: number): VScoreBand {
   if (score >= 40) return 'Developing';
   return 'At Risk';
 }
+
+// ---------------------------------------------------------------------------
+// V-Score recompute math (CLAUDE.md -> V-Score, spec final where stated).
+// Pure functions only. This is deliberately the ONLY place this math is
+// defined; the serverless /api/vscore endpoint imports it rather than
+// re-deriving it. Never called from the client for a real write — the
+// `volunteer_profiles.v_score` column is service-role write-only (see
+// supabase/schema.sql) — these functions just compute what that endpoint
+// would write, in a pure/testable form.
+// ---------------------------------------------------------------------------
+
+/** Starting V-Score for every new volunteer (CLAUDE.md, spec final). */
+export const NEW_VOLUNTEER_V_SCORE = 70;
+
+/** Weight given to the existing score in the post-event blend. */
+const OLD_SCORE_WEIGHT = 0.7;
+/** Weight given to the freshly-computed event outcome in the blend. */
+const EVENT_OUTCOME_WEIGHT = 0.3;
+
+/**
+ * Scales a 1–5 review sub-score onto a 0–100 range (CLAUDE.md: "reliability
+ * and clinical average scaled x20"). 1 -> 20, 5 -> 100.
+ */
+const REVIEW_SCORE_SCALE = 20;
+
+/**
+ * Outcome assigned when `attended === false` (see `computeEventOutcome`
+ * case 1 below). Kept as a named constant, not a magic number, since it is
+ * one of the assumptions flagged for owner sign-off.
+ */
+const NO_SHOW_EVENT_OUTCOME = 0;
+
+/**
+ * Neutral 1–5 fallback used only when `attended === true` (or unknown) but a
+ * sub-score the blend needs is itself missing — a data-integrity gap the
+ * review UI shouldn't normally allow. 3 is the midpoint of the 1–5 scale
+ * (-> 60/100 once scaled), chosen so a data gap neither rewards nor punishes
+ * the volunteer. See `computeEventOutcome` cases 4–5 below.
+ */
+const DEFAULT_MISSING_SUBSCORE = 3;
+
+function clampScore(score: number): number {
+  return Math.min(100, Math.max(0, score));
+}
+
+/** Minimal shape of an `event_reviews` row this math needs. */
+export interface EventOutcomeInput {
+  attended: boolean | null;
+  reliability_score: number | null;
+  clinical_score: number | null;
+}
+
+/**
+ * Derives a 0–100 "event outcome" from a single post-event review — the
+ * input to the 0.7×old + 0.3×outcome blend in `recomputeVScoreAfterReview`.
+ *
+ * CLAUDE.md specifies the blend weights and says the outcome "maps
+ * attendance + reliability_score + clinical_score onto 0–100 (attended is a
+ * precondition; reliability and clinical average scaled x20)" but does not
+ * give the exact no-show / missing-data handling. The following derivation
+ * is a DELIBERATE ASSUMPTION flagged for the project owner's sign-off (see
+ * docs/REPORT_NOTES.md "Design decisions" for the recorded rationale):
+ *
+ *   1. `attended === false` -> outcome = 0 (floor). Attendance is a stated
+ *      precondition: reliability/clinical scores are meaningless (and, per
+ *      the DB shape, normally simply absent) for someone who never showed
+ *      up, so we floor the outcome rather than reading whatever partial
+ *      scores happen to be present. This is DELIBERATELY separate from the
+ *      flat -15 no-show penalty in `applyVScorePenalty` below — that penalty
+ *      targets the application/cancellation flow (a volunteer who is known
+ *      to have bailed before the event), while this floor targets the
+ *      review-driven blend (an org filed a review and marked them absent).
+ *   2. `attended === true` (or null — see case 5) and `clinical_score` is
+ *      present -> outcome = ((reliability_score + clinical_score) / 2) x 20:
+ *      the average of the two 1–5 scores, scaled onto 0–100. A perfect 5/5
+ *      review -> 100; a bottom-of-scale 1/1 review (but still attended) ->
+ *      20, never 0 — showing up and being reviewed, even poorly, is not
+ *      treated as equivalent to a no-show.
+ *   3. `clinical_score` is null (support-role / non-clinical volunteers are
+ *      never clinically scored) -> outcome = reliability_score x 20. We fall
+ *      back to reliability alone rather than penalising a volunteer for a
+ *      dimension that structurally doesn't apply to their role.
+ *   4. `reliability_score` itself is missing while attended is true (a data
+ *      gap the review form shouldn't normally allow) -> substitute the
+ *      neutral `DEFAULT_MISSING_SUBSCORE` (3/5 -> 60/100) so a data-entry gap
+ *      neither rewards nor punishes the volunteer, instead of producing NaN
+ *      or an arbitrary 0.
+ *   5. `attended === null` (never reviewed / unknown) -> treated the same as
+ *      case 4, since there is no attendance signal either way.
+ *
+ * Result is always clamped to [0, 100].
+ */
+export function computeEventOutcome(review: EventOutcomeInput): number {
+  if (review.attended === false) return clampScore(NO_SHOW_EVENT_OUTCOME);
+
+  const reliability = review.reliability_score ?? DEFAULT_MISSING_SUBSCORE;
+  const clinical = review.clinical_score;
+
+  const outcome =
+    clinical == null
+      ? reliability * REVIEW_SCORE_SCALE
+      : ((reliability + clinical) / 2) * REVIEW_SCORE_SCALE;
+
+  return clampScore(outcome);
+}
+
+/**
+ * Applies the CLAUDE.md-specified post-event blend:
+ * new = 0.7×old + 0.3×eventOutcome, clamped to [0, 100].
+ */
+export function recomputeVScoreAfterReview(oldScore: number, review: EventOutcomeInput): number {
+  const outcome = computeEventOutcome(review);
+  return clampScore(OLD_SCORE_WEIGHT * oldScore + EVENT_OUTCOME_WEIGHT * outcome);
+}
+
+/**
+ * Flat penalties applied directly to the score (CLAUDE.md, spec final) —
+ * separate from the review blend above. These target the
+ * application/cancellation lifecycle (a volunteer who cancelled or never
+ * showed up for an event they were accepted into), not a filed event_review.
+ */
+export type VScorePenaltyType = 'no_show' | 'late_cancellation' | 'on_time_cancellation';
+
+export const V_SCORE_PENALTIES: Record<VScorePenaltyType, number> = {
+  no_show: -15,
+  late_cancellation: -8,
+  on_time_cancellation: -2,
+};
+
+/** Applies a single named penalty to a score, clamped to [0, 100]. */
+export function applyVScorePenalty(score: number, penalty: VScorePenaltyType): number {
+  return clampScore(score + V_SCORE_PENALTIES[penalty]);
+}
+
+/**
+ * Applies multiple penalties in sequence (e.g. a volunteer who racked up more
+ * than one no-show before their score was ever recomputed), clamping after
+ * each step so intermediate values never go negative before the next penalty
+ * is applied.
+ */
+export function applyVScorePenalties(
+  score: number,
+  penalties: readonly VScorePenaltyType[]
+): number {
+  return penalties.reduce((acc, penalty) => applyVScorePenalty(acc, penalty), score);
+}

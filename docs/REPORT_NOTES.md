@@ -67,6 +67,25 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   of the three Ghana councils offer any verification channel; design the
   org-admin document review UI (Phase 2/3).
 
+- **Support-role outreaches auto-satisfy the category component (2026-07-28, owner-approved).**
+  In the Layer 1 scorer, an outreach with `role_type = 'support'` scores the
+  Category×20 component at 1.0 for every volunteer, regardless of their category
+  or any `required_category`. Rationale: support roles need no specific health
+  profession, so category fit shouldn't gate or rank them. Clinical outreaches
+  still score category strictly via `categoryMatchScore`. Implemented in
+  `computeLayer1MatchScore` (not inside `categoryScore`, which stays a pure
+  category-vs-category comparison). CLAUDE.md's Matching Engine section is silent
+  on this; it's a deliberate owner decision, covered by unit tests + a golden case.
+
+- **`event_outcome` derivation for V-Score (2026-07-28, owner-approved).**
+  CLAUDE.md gives `new_score = 0.7×old + 0.3×event_outcome` but not how
+  `event_outcome` (0–100) is derived. Defined in `lib/vscore.ts`
+  `computeEventOutcome`: no-show (`attended=false`) → 0; attended with both
+  scores → `((reliability_score + clinical_score) / 2) × 20`; attended with no
+  clinical score (support volunteers aren't clinically rated) → `reliability_score × 20`;
+  attended but reliability missing (data gap) → neutral 60. Separate from the flat
+  cancellation/no-show penalties (−15 / −8 / −2), which are a distinct mechanism.
+
 ## Before final submission / demo
 
 - **Delete all test accounts and test data from Supabase.** Every account
@@ -124,6 +143,31 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   explanation. Low priority since it's an edge case, but worth a toast/alert
   ("Your account needs attention — please sign up again") once the app has
   a toast system, rather than looking like a random logout.
+
+- **Layer 1 scorer and V-Score recompute math implemented (2026-07-28),
+  `lib/matching/layer1.ts` and `lib/vscore.ts`, both flagged for owner
+  sign-off since CLAUDE.md leaves several edge cases undefined:**
+  (1) Skills — an empty `required_skills` OR empty `skill_tags` list scores 0,
+  not a "nothing required = free pass" 1.0, since Skills is the largest
+  weight (35/100); matching is case/whitespace-insensitive with duplicate
+  tag variants deduplicated before dividing. (2) Availability with no
+  outreach `start_time`/`end_time` (or an unparseable/nonsensical time range)
+  is treated as "all day", so any slot on the matching weekday counts; a
+  missing/invalid outreach `date` instead fails CLOSED (availability = 0),
+  since there's no weekday to check against at all. (3) V-Score
+  `event_outcome` (the 0.7×old + 0.3×outcome blend): `attended === false` ->
+  outcome floors at 0 (separate from, and stackable with, the flat -15
+  no-show penalty which targets the application/cancellation flow, not the
+  review flow); `attended === true` averages `reliability_score` and
+  `clinical_score` (both 1-5) then scales ×20 (1/1 -> 20, 5/5 -> 100, never
+  0 for someone who actually showed up); a null `clinical_score` (support-role
+  / non-clinical volunteers are never clinically scored) falls back to
+  reliability alone; a missing `reliability_score` despite `attended = true`
+  (a data-entry gap the review UI shouldn't normally allow) substitutes a
+  neutral default of 3/5 (-> 60/100) rather than crashing or silently
+  producing 0. See the doc comments on `computeEventOutcome` in
+  `lib/vscore.ts` and `skillsScore`/`availabilityScore` in
+  `lib/matching/layer1.ts` for the full rationale.
 
 - **`experience_level` has no onboarding UI.** CLAUDE.md's onboarding step
   list (skills, category, specialties, region+district+availability,
