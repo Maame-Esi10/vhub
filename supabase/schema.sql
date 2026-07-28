@@ -15,8 +15,17 @@ do $$ begin
   create type profile_role as enum ('volunteer', 'organisation');
 exception when duplicate_object then null; end $$;
 
+-- Order: qualified professionals, then students, then support roles.
+-- 'student' covers all health/medical disciplines (medicine, nursing,
+-- pharmacy, allied health); 'pharmacist' is the qualified pharmacy role.
+-- NOTE: this create-type only runs on a FRESH install (the duplicate_object
+-- guard skips it on existing databases). An already-provisioned project is
+-- migrated by the separate ALTER TYPE script (rename pharmacy_student→student,
+-- add pharmacist) — the enum's physical value order there will differ, which
+-- is cosmetic only: display order comes from VOLUNTEER_CATEGORIES in TS, never
+-- from the enum. See docs/REPORT_NOTES.md.
 do $$ begin
-  create type volunteer_category as enum ('nurse', 'pharmacy_student', 'first_aider', 'doctor', 'midwife', 'other');
+  create type volunteer_category as enum ('doctor', 'nurse', 'midwife', 'pharmacist', 'student', 'first_aider', 'other');
 exception when duplicate_object then null; end $$;
 
 do $$ begin

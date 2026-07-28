@@ -18,25 +18,9 @@ interface CategoryCard {
   icon: IconName;
 }
 
+// Order: qualified professionals, then students, then support roles
+// (mirrors VOLUNTEER_CATEGORIES in constants/categories.ts).
 const CATEGORY_CARDS: CategoryCard[] = [
-  {
-    value: 'nurse',
-    label: 'Nurse',
-    description: 'Registered or practicing nurse providing clinical care.',
-    icon: 'hospital-box-outline',
-  },
-  {
-    value: 'pharmacy_student',
-    label: 'Pharmacy Student',
-    description: 'Currently studying pharmacy or pharmaceutical sciences.',
-    icon: 'pill',
-  },
-  {
-    value: 'first_aider',
-    label: 'First Aider',
-    description: 'Trained in first aid and emergency response support.',
-    icon: 'medical-bag',
-  },
   {
     value: 'doctor',
     label: 'Doctor',
@@ -44,10 +28,34 @@ const CATEGORY_CARDS: CategoryCard[] = [
     icon: 'stethoscope',
   },
   {
+    value: 'nurse',
+    label: 'Nurse',
+    description: 'Registered or practicing nurse providing clinical care.',
+    icon: 'hospital-box-outline',
+  },
+  {
     value: 'midwife',
     label: 'Midwife',
     description: 'Licensed midwife providing maternal and newborn care.',
     icon: 'baby-face-outline',
+  },
+  {
+    value: 'pharmacist',
+    label: 'Pharmacist',
+    description: 'Qualified pharmacist dispensing and advising on medicines.',
+    icon: 'pill',
+  },
+  {
+    value: 'student',
+    label: 'Health or Medical Student',
+    description: 'Studying medicine, nursing, pharmacy, or an allied health field.',
+    icon: 'school-outline',
+  },
+  {
+    value: 'first_aider',
+    label: 'First Aider',
+    description: 'Trained in first aid and emergency response support.',
+    icon: 'medical-bag',
   },
   {
     value: 'other',

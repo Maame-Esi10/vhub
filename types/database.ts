@@ -3,12 +3,18 @@
 
 export type ProfileRole = "volunteer" | "organisation";
 
+// Qualified professionals first, then students, then support roles — the same
+// order VOLUNTEER_CATEGORIES renders in (constants/categories.ts).
+// 'student' deliberately covers ALL health/medical disciplines (medicine,
+// nursing, pharmacy, allied health), not pharmacy alone; 'pharmacist' is the
+// qualified pharmacy role. See docs/REPORT_NOTES.md.
 export type VolunteerCategory =
-  | "nurse"
-  | "pharmacy_student"
-  | "first_aider"
   | "doctor"
+  | "nurse"
   | "midwife"
+  | "pharmacist"
+  | "student"
+  | "first_aider"
   | "other";
 
 export type ExperienceLevel = "beginner" | "intermediate" | "experienced";

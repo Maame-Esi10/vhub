@@ -6,6 +6,52 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
 
 ## Design decisions
 
+- **Reasoning-over-documents is now a standing rule (2026-07-28).** CLAUDE.md,
+  the rebuild guide, and the Figma PNGs are treated as evidence, not scripture —
+  discrepancies between them are judged on merit (does it serve a real Ghana
+  health-volunteer/org need?) rather than blindly followed or silently dropped.
+  Clearly-good low-risk items are kept/built and noted; clear leftovers are
+  removed with a reason; anything needing a schema/field/dependency/matching
+  change is escalated to the user first. Every judgment call is logged here.
+  The rule is baked into the `ui-builder` subagent's instructions too.
+
+- **Professional categories broadened and reordered (2026-07-28).** Old set
+  (`nurse, pharmacy_student, first_aider, doctor, midwife, other`) →
+  new set `doctor, nurse, midwife, pharmacist, student, first_aider, other`.
+  Rationale: `pharmacy_student` was too narrow — renamed to `student` to cover
+  ALL health/medical disciplines (medicine, nursing, pharmacy, allied health),
+  since many Ghanaian outreach volunteers are students across these fields, not
+  pharmacy alone. Added `pharmacist` so qualified pharmacists aren't forced into
+  a student label. Reordered qualified professionals → students → support roles
+  so the onboarding picker leads with the strongest credentials. Labels: Doctor,
+  Nurse, Midwife, Pharmacist, "Health or Medical Student", First Aider, Other.
+
+- **Single related-category map as the scorer's source of truth (2026-07-28).**
+  Defined `RELATED_CATEGORIES` + `categoryMatchScore()` in
+  `constants/categories.ts` (exact = 1.0, related = 0.5, none = 0) so the Phase 3
+  Layer 1 scorer (`lib/matching/layer1.ts`, still a stub) reads one map instead
+  of scattering pairings across conditionals. Relations (symmetric):
+  doctor/nurse/midwife are mutually related; pharmacist↔student; student is also
+  related to nurse/doctor/midwife (a student partially fits any clinical role);
+  first_aider and other relate to nothing.
+
+- **`VolunteerCategory` type de-duplicated (2026-07-28).** The type was defined
+  twice (`types/database.ts` and `constants/categories.ts`); the constants file
+  now imports and re-exports it from `types/database.ts` so the two can't drift
+  during category changes like this one. Same cleanup applied to the ad-hoc
+  category-label map in `app/(volunteer)/profile.tsx`, which now reads
+  `VOLUNTEER_CATEGORIES` like the other screens (ApplicantCard,
+  OutreachPreviewCard, profile/volunteer/[id].tsx) instead of a third private copy.
+
+- **`schema.sql` enum edited despite "don't touch the DB" (2026-07-28).** The
+  live database is migrated by a separate ALTER TYPE script (run by the user),
+  but the `create type volunteer_category` line in `supabase/schema.sql` was
+  updated to the new value set so a FRESH install and `types/database.ts` (which
+  claims to mirror the schema exactly) stay consistent — this edits the source
+  file, not the running database. The enum's physical value order will differ
+  between a migrated project and a fresh one; that's cosmetic only, since display
+  order comes from `VOLUNTEER_CATEGORIES` in TS, never the enum.
+
 - **Verification gates CLINICAL roles only (implement in Phase 2):**
   volunteers with `verification_status != 'verified'` can browse all
   outreaches and Quick Join support roles, but cannot submit a Full

@@ -1,23 +1,17 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SignOutButton } from '@/components/ui';
+import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  nurse: 'Nurse',
-  pharmacy_student: 'Pharmacy Student',
-  first_aider: 'First Aider',
-  doctor: 'Doctor',
-  midwife: 'Midwife',
-  other: 'Other',
-};
 
 export default function VolunteerProfile() {
   const profile = useAuthStore((state) => state.profile);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
 
-  const categoryLabel = volunteerProfile?.category ? CATEGORY_LABELS[volunteerProfile.category] : null;
+  const categoryLabel = volunteerProfile?.category
+    ? (VOLUNTEER_CATEGORIES.find((c) => c.value === volunteerProfile.category)?.label ?? null)
+    : null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
