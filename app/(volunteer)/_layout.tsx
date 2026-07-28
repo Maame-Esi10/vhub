@@ -27,6 +27,18 @@ export default function VolunteerTabsLayout() {
       <Tabs.Screen name="applications" options={{ title: 'Applications' }} />
       <Tabs.Screen name="schedule" options={{ title: 'Schedule' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+
+      {/*
+        Every route file in this group becomes a tab unless it opts out, so
+        these need href: null — they are pushed from within the four real
+        tabs, not selected from the bar. outreach/[id] in particular would
+        otherwise show up as a tab with no id to render.
+      */}
+      <Tabs.Screen name="outreach/[id]" options={{ href: null }} />
+      <Tabs.Screen name="info-hub" options={{ href: null }} />
+      <Tabs.Screen name="map" options={{ href: null }} />
+      <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="search" options={{ href: null }} />
     </Tabs>
   );
 }

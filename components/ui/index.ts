@@ -5,3 +5,44 @@ export type { InputProps } from './Input';
 export { OnboardingStepHeader, OnboardingStepFooter } from './OnboardingStepHeader';
 export type { OnboardingStepHeaderProps, OnboardingStepFooterProps } from './OnboardingStepHeader';
 export { SignOutButton } from './SignOutButton';
+
+export { Badge } from './Badge';
+export type { BadgeProps, BadgeTone } from './Badge';
+export { Avatar } from './Avatar';
+export type { AvatarProps } from './Avatar';
+export { EmptyState } from './EmptyState';
+export type { EmptyStateProps } from './EmptyState';
+export { ErrorState } from './ErrorState';
+export type { ErrorStateProps } from './ErrorState';
+export { ListSkeleton } from './ListSkeleton';
+export type { ListSkeletonProps } from './ListSkeleton';
+export { FilterChips } from './FilterChips';
+export type { FilterChipOption, FilterChipsProps } from './FilterChips';
+export { StepProgressBar } from './StepProgressBar';
+export type { StepProgressBarProps } from './StepProgressBar';
+export { MetricCard } from './MetricCard';
+export type { MetricCardProps } from './MetricCard';
+export { NumberStepper } from './NumberStepper';
+export type { NumberStepperProps } from './NumberStepper';
+export { SelectField } from './SelectField';
+export type { SelectFieldProps, SelectOption } from './SelectField';
+export { MultiSelectField } from './MultiSelectField';
+export type { MultiSelectFieldProps, MultiSelectSection } from './MultiSelectField';
+export { VScoreBadge } from './VScoreBadge';
+export type { VScoreBadgeProps } from './VScoreBadge';
+// getVScoreBand / VScoreBand live in lib/vscore.ts (the band + score-math home
+// per CLAUDE.md) — import them from '@/lib/vscore', not from here.
+export {
+  formatEventDate,
+  formatEventTime,
+  formatEventTimeRange,
+  maskDateInput,
+  maskTimeInput,
+  parseCalendarDate,
+  isTodayOrFutureDate,
+  parseClockTime,
+  isTimeAfter,
+  msUntilEvent,
+  isLateCancellationWindow,
+  isUpcomingEvent,
+} from './dateUtils';

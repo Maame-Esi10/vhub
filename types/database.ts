@@ -117,7 +117,11 @@ export interface Application {
   type: ApplicationType;
   status: ApplicationStatus;
   match_score: number | null;
+  /** Volunteer's statement of intent — only collected on `full` applications. */
+  motivation: string | null;
   cancelled_at: string | null;
+  /** Volunteer's stated withdrawal reason. Not V-Score input. */
+  cancellation_reason: string | null;
   late_cancellation: boolean;
   created_at: string;
   updated_at: string;
@@ -138,6 +142,44 @@ export interface EventReview {
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Row of the `public_volunteer_profiles` view — the non-sensitive slice of
+ * profiles + volunteer_profiles that any signed-in user may read for
+ * pre-application browsing. Deliberately has no phone/email: those stay
+ * behind the row-scoped policies on the underlying tables.
+ */
+export interface PublicVolunteerProfile {
+  id: string;
+  full_name: string;
+  avatar_url: string | null;
+  region: string | null;
+  district: string | null;
+  created_at: string;
+  category: VolunteerCategory | null;
+  skill_tags: string[] | null;
+  specialties: string[] | null;
+  experience_level: ExperienceLevel | null;
+  availability_slots: string[] | null;
+  bio: string | null;
+  v_score: number;
+  events_attended: number;
+  verification_status: VerificationStatus;
+}
+
+/** Row of the `public_organisation_profiles` view. Also carries no phone/email. */
+export interface PublicOrganisationProfile {
+  id: string;
+  avatar_url: string | null;
+  region: string | null;
+  district: string | null;
+  created_at: string;
+  org_name: string;
+  org_type: string | null;
+  description: string | null;
+  website: string | null;
+  verified: boolean;
 }
 
 /**

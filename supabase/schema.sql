@@ -341,6 +341,20 @@ create table if not exists applications (
   unique (outreach_id, volunteer_id)
 );
 
+-- Two free-text fields the Figma flows collect and the original 6-table
+-- field list did not account for. Both are nullable and additive, so no
+-- existing behaviour changes; migration-safe for installs already carrying
+-- application rows.
+--   motivation: the "short motivation" a volunteer writes on the Full
+--     Application form for a clinical outreach. Without a column it would be
+--     typed and discarded, and the reviewing org would never see the one
+--     thing that distinguishes a full application from a quick join.
+--   cancellation_reason: the withdrawal reason from the Figma "Withdrawal
+--     Process" screen. Unlike cancelled_at/late_cancellation this is NOT
+--     V-Score input, so it stays volunteer-writable.
+alter table applications add column if not exists motivation text;
+alter table applications add column if not exists cancellation_reason text;
+
 drop trigger if exists trg_applications_updated_at on applications;
 create trigger trg_applications_updated_at
   before update on applications
@@ -364,11 +378,33 @@ create policy "applications_select_own_or_org"
     )
   );
 
+-- Phase 2 eligibility rule, enforced server-side rather than only in the
+-- application form: a volunteer may insert an application for themselves, to
+-- an outreach that is actually open, and -- if that outreach is clinical --
+-- only once their credentials are verified. Support-role (and unclassified)
+-- outreaches never require verification, so Quick Join stays open to
+-- everyone. The UI gates this too and explains what to do about it; this
+-- policy is the backstop that makes the rule real rather than cosmetic.
 drop policy if exists "applications_insert_own" on applications;
 create policy "applications_insert_own"
   on applications for insert
   to authenticated
-  with check (volunteer_id = auth.uid());
+  with check (
+    volunteer_id = auth.uid()
+    and exists (
+      select 1 from outreaches o
+      where o.id = applications.outreach_id
+        and o.status = 'open'
+        and (
+          o.role_type is distinct from 'clinical'
+          or exists (
+            select 1 from volunteer_profiles vp
+            where vp.id = auth.uid()
+              and vp.verification_status = 'verified'
+          )
+        )
+    )
+  );
 
 -- Volunteers may only update their own row, and only to cancel it (status ->
 -- 'cancelled'); they may never set status to accepted/rejected/waitlisted
@@ -404,6 +440,95 @@ create policy "applications_update_org_status"
         and o.organisation_id = auth.uid()
     )
   );
+
+-- ------------------------------------------------------------
+-- Cancellation stamping. cancelled_at and late_cancellation drive the
+-- V-Score penalty (-8 late vs -2 on-time), so both are revoked from
+-- `authenticated` at the bottom of this file -- a volunteer must not be able
+-- to backdate a withdrawal or claim it was on time. They are therefore
+-- stamped here instead, from a BEFORE trigger: column-level UPDATE
+-- privileges are checked against the columns named in the statement's SET
+-- clause, so a trigger may write columns the caller itself cannot, while the
+-- applications_update_own_cancel policy still holds the caller to
+-- status = 'cancelled'.
+--
+-- "Late" = within 24 hours of the event start. Ghana observes GMT (UTC+0)
+-- year-round with no DST, so reading the naive date + start_time as UTC is
+-- exact, not an approximation. An outreach with no start_time is treated as
+-- starting at midnight, and a cancellation after the event has already
+-- started is always late.
+-- ------------------------------------------------------------
+create or replace function stamp_application_cancellation()
+returns trigger as $$
+declare
+  event_start timestamptz;
+begin
+  if new.status = 'cancelled' and old.status is distinct from 'cancelled' then
+    select (o.date + coalesce(o.start_time, '00:00'::time)) at time zone 'UTC'
+      into event_start
+    from outreaches o
+    where o.id = new.outreach_id;
+
+    new.cancelled_at := now();
+    new.late_cancellation :=
+      event_start is not null and now() >= event_start - interval '24 hours';
+  end if;
+
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_applications_stamp_cancellation on applications;
+create trigger trg_applications_stamp_cancellation
+  before update of status on applications
+  for each row execute function stamp_application_cancellation();
+
+-- ------------------------------------------------------------
+-- outreaches.slots_filled is DERIVED from accepted applications, never
+-- written by a client. Recomputing it as a full count (rather than +1/-1)
+-- makes it idempotent and immune to two orgs accepting concurrently: each
+-- transaction re-counts, and the slots_filled_le_total check constraint
+-- rejects the accept that would overfill the event, rolling back that
+-- application update atomically with it.
+--
+-- security definer (with a pinned search_path) is required: a volunteer
+-- cancelling their own accepted application must decrement the counter, but
+-- outreaches_update_own only lets the owning organisation update that row.
+-- ------------------------------------------------------------
+create or replace function sync_outreach_slots_filled()
+returns trigger as $$
+declare
+  target_outreach uuid;
+begin
+  -- NEW is unassigned on DELETE (and OLD on INSERT), so branch on TG_OP
+  -- rather than coalescing the two — touching the unassigned record raises.
+  if tg_op = 'DELETE' then
+    target_outreach := old.outreach_id;
+  else
+    target_outreach := new.outreach_id;
+  end if;
+
+  update outreaches o
+  set slots_filled = (
+    select count(*)
+    from applications a
+    where a.outreach_id = target_outreach
+      and a.status = 'accepted'
+  )
+  where o.id = target_outreach;
+
+  -- AFTER trigger: the return value is ignored, but must still be a valid record.
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_applications_sync_slots_filled on applications;
+create trigger trg_applications_sync_slots_filled
+  after insert or delete or update of status on applications
+  for each row execute function sync_outreach_slots_filled();
 
 -- ============================================================
 -- event_reviews — org's post-event review of a volunteer per outreach
@@ -496,22 +621,220 @@ alter table skill_match_cache enable row level security;
 -- Intentionally no policies: only service_role (which bypasses RLS) may access this table.
 
 -- ============================================================
--- Column-level write protection for v_score and match_score.
--- RLS row policies above allow owners to UPDATE their volunteer_profiles /
--- applications rows, but these two specific columns must remain writable
--- only by the serverless API's service-role key. REVOKE at the column level
--- since RLS alone cannot restrict individual columns within an allowed row.
+-- Public discovery views.
+--
+-- This is the FOLLOW-UP promised on profiles_select_authenticated: the
+-- "Volunteer Public Profile" and "Organization Public Profile" screens need
+-- pre-application browsing, but profiles/volunteer_profiles are row-scoped to
+-- the two parties of an application precisely so phone/email are not readable
+-- by unrelated authenticated users. Loosening those policies back to
+-- using (true) would expose that PII, so the access is widened here instead,
+-- through views whose SELECT list is the whitelist.
+--
+-- security_invoker = false is deliberate (and is why the column list matters):
+-- the view runs with its owner's rights, so it sees past the underlying row
+-- policies and returns the non-sensitive columns for any volunteer/org. NOTE
+-- FOR ANY FUTURE EDIT: phone and email must never be added to either select
+-- list, and the views must never be granted to `anon` -- discovery is for
+-- signed-in users only.
+--
+-- drop + create rather than create or replace: replace cannot change a view's
+-- column list, which would make this file no longer safe to re-run after a
+-- column is added or removed here.
 -- ============================================================
-revoke update (v_score) on volunteer_profiles from authenticated;
-revoke update (match_score) on applications from authenticated;
+drop view if exists public_volunteer_profiles;
+create view public_volunteer_profiles
+with (security_invoker = false) as
+  select
+    p.id,
+    p.full_name,
+    p.avatar_url,
+    p.region,
+    p.district,
+    p.created_at,
+    vp.category,
+    vp.skill_tags,
+    vp.specialties,
+    vp.experience_level,
+    vp.availability_slots,
+    vp.bio,
+    vp.v_score,
+    vp.events_attended,
+    vp.verification_status
+  from profiles p
+  join volunteer_profiles vp on vp.id = p.id
+  where p.role = 'volunteer';
 
--- late_cancellation directly drives the V-Score penalty (-8 late vs -2
--- on-time cancellation per CLAUDE.md); cancelled_at is the timestamp used to
--- derive it. A volunteer must not be able to set late_cancellation=false to
--- dodge the bigger penalty, so both columns are service-role write-only.
-revoke update (late_cancellation, cancelled_at) on applications from authenticated;
+revoke all on public_volunteer_profiles from anon;
+grant select on public_volunteer_profiles to authenticated;
 
--- verification_status and events_attended must only be set by an
--- organisation/admin verification flow or the serverless /api/vscore
--- pipeline — never directly by the volunteer who owns the row.
-revoke update (verification_status, events_attended) on volunteer_profiles from authenticated;
+drop view if exists public_organisation_profiles;
+create view public_organisation_profiles
+with (security_invoker = false) as
+  select
+    p.id,
+    p.avatar_url,
+    p.region,
+    p.district,
+    p.created_at,
+    op.org_name,
+    op.org_type,
+    op.description,
+    op.website,
+    op.verified
+  from profiles p
+  join organisation_profiles op on op.id = p.id
+  where p.role = 'organisation';
+
+revoke all on public_organisation_profiles from anon;
+grant select on public_organisation_profiles to authenticated;
+
+-- ============================================================
+-- Column-level write protection.
+--
+-- RLS row policies above decide WHICH rows a user may update; they cannot
+-- restrict which columns within an allowed row. Several columns must stay
+-- writable only by the serverless API's service-role key (which bypasses all
+-- of this):
+--   volunteer_profiles.v_score          -- recomputed only by /api/vscore
+--   volunteer_profiles.verification_status, events_attended
+--   applications.match_score            -- written only by /api/match
+--   applications.cancelled_at, late_cancellation
+--                                       -- stamped by trg_applications_stamp_cancellation;
+--                                       -- a volunteer must not be able to set
+--                                       -- late_cancellation = false to dodge the
+--                                       -- -8 penalty (vs -2 on time)
+--   outreaches.slots_filled             -- derived by trg_applications_sync_slots_filled
+--
+-- IMPORTANT — this is expressed as "revoke the whole table, then grant back
+-- the specific columns", NOT as `revoke update (col) ...`. Supabase's default
+-- privileges grant `authenticated` a TABLE-level UPDATE on everything in
+-- `public`, and in PostgreSQL a column-level REVOKE does not carve a hole in
+-- a table-level grant -- the table grant keeps allowing every column and the
+-- revoke is effectively a no-op. Written the other way round, every
+-- protection listed above would have silently done nothing, and a volunteer
+-- could have PATCHed their own v_score to 100.
+--
+-- Trigger writes are unaffected either way: column privileges are checked
+-- against the columns named in the statement's SET clause, so the BEFORE
+-- triggers may still write the columns revoked here.
+--
+-- Adding a column to one of these tables? Add it to the matching grant list
+-- below or clients will not be able to write it.
+-- ============================================================
+
+revoke update on volunteer_profiles from authenticated;
+grant update (
+  category,
+  skill_tags,
+  specialties,
+  experience_level,
+  availability_slots,
+  bio,
+  declaration_signed
+) on volunteer_profiles to authenticated;
+
+revoke update on applications from authenticated;
+-- status: orgs set accepted/rejected/waitlisted, volunteers set cancelled --
+-- which value each may write is constrained by the RLS policies above, not here.
+-- cancellation_reason: free text, not V-Score input.
+grant update (status, cancellation_reason) on applications to authenticated;
+
+revoke update on outreaches from authenticated;
+grant update (
+  title,
+  description,
+  date,
+  start_time,
+  end_time,
+  region,
+  district,
+  location_name,
+  required_skills,
+  required_category,
+  role_type,
+  slots_total,
+  status
+) on outreaches to authenticated;
+
+-- ============================================================
+-- Column-level write protection — INSERT.
+--
+-- Everything the UPDATE block above says applies identically to INSERT, and
+-- for exactly the same reason: Supabase's default privileges grant
+-- `authenticated` a TABLE-level INSERT on everything in `public`, and RLS
+-- WITH CHECK clauses only validate row OWNERSHIP/eligibility, never which
+-- columns the payload carries. Without this block a client could set the
+-- server-only columns on the very first insert — the moment a row is created,
+-- before any UPDATE is ever attempted — which the UPDATE protection can't
+-- catch. Concretely, this is what would otherwise be possible with just the
+-- shipped anon key + a real session JWT (curl/PostgREST, bypassing the app):
+--   * applications: insert status = 'accepted' (self-accept, skipping org
+--     review) or match_score = 100 (forge the Phase 3 ranking). Omitting
+--     `status` also forces the default 'pending', which is what makes
+--     trg_applications_stamp_cancellation reachable: a row can no longer be
+--     born 'cancelled' and skip the late/on-time penalty stamping.
+--   * volunteer_profiles: insert verification_status = 'verified' (defeating
+--     the clinical-outreach eligibility gate the insert policy itself reads),
+--     v_score = 100, or events_attended = 999.
+--   * organisation_profiles: insert verified = true (self-assigned trust badge).
+--   * outreaches: insert a bogus slots_filled (corrupts dashboard counts until
+--     the next accept/cancel re-derives it via trigger).
+--
+-- Same mechanism as UPDATE: revoke the whole-table privilege, then grant back
+-- only the columns a client legitimately supplies. Every omitted column has a
+-- DB default or is nullable, so inserts that don't mention it still succeed
+-- (signup's `insert({ id })` relies on exactly this). Adding a column? Add it
+-- to the matching grant list below or clients won't be able to insert it.
+-- ============================================================
+
+revoke insert on volunteer_profiles from authenticated;
+grant insert (
+  id,
+  category,
+  skill_tags,
+  specialties,
+  experience_level,
+  availability_slots,
+  bio,
+  declaration_signed
+) on volunteer_profiles to authenticated;
+
+revoke insert on organisation_profiles from authenticated;
+grant insert (
+  id,
+  org_name,
+  org_type,
+  description,
+  website
+) on organisation_profiles to authenticated;
+
+revoke insert on outreaches from authenticated;
+grant insert (
+  organisation_id,
+  title,
+  description,
+  date,
+  start_time,
+  end_time,
+  region,
+  district,
+  location_name,
+  required_skills,
+  required_category,
+  role_type,
+  slots_total,
+  status
+) on outreaches to authenticated;
+
+-- status omitted deliberately: it must default to 'pending' so a client can
+-- neither self-accept nor sidestep the cancellation-stamp trigger. match_score
+-- omitted: written only by /api/match. motivation is the volunteer's own
+-- Full-Application free text and stays insertable.
+revoke insert on applications from authenticated;
+grant insert (
+  outreach_id,
+  volunteer_id,
+  type,
+  motivation
+) on applications to authenticated;
