@@ -86,6 +86,17 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   attended but reliability missing (data gap) → neutral 60. Separate from the flat
   cancellation/no-show penalties (−15 / −8 / −2), which are a distinct mechanism.
 
+- **Automatic waitlist promotion (2026-07-28, owner-approved).** When an
+  accepted volunteer cancels and frees a slot, the serverless
+  `/api/application-status` endpoint automatically promotes the highest-`match_score`
+  waitlisted applicant (earliest application on a tie) and notifies them by email
+  and push. Rationale: automatic promotion directly attacks the no-show /
+  unfilled-slot problem the project exists to solve; a manual org promotion step
+  would reintroduce coordination delay and the risk of slots sitting empty. The
+  volunteer client's existing direct-Supabase cancel should ALSO call
+  `/api/application-status` with `status:"cancelled"` (idempotent) so promotion
+  actually runs — wired in Phase 3.3.
+
 ## Before final submission / demo
 
 - **Delete all test accounts and test data from Supabase.** Every account

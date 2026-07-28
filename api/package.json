@@ -1,0 +1,25 @@
+{
+  "name": "vhub-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "V-HUB serverless API (Next.js on Vercel). Owns every secret (Supabase service-role key, Gemini key, Resend key) -- the Expo app never sees them.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^16.2.12",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^3.25.0",
+    "@supabase/supabase-js": "^2.110.1",
+    "resend": "^4.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.2.2"
+  }
+}
