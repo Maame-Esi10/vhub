@@ -3,9 +3,17 @@ import { getSupabaseAdmin } from "./supabaseAdmin";
 import { dispatchExpoPush } from "./expoPush";
 import { env } from "./env";
 
-/** Reminder window: outreaches starting between 23 and 25 hours from now (a 2-hour band, assuming an hourly cron). */
-const REMINDER_WINDOW_START_HOURS = 23;
-const REMINDER_WINDOW_END_HOURS = 25;
+/**
+ * Reminder window: outreaches starting between 12 and 36 hours from now -- a
+ * 24-hour band centred on the 24-hour mark, sized to match the daily cron in
+ * vercel.json ("0 8 * * *"; Vercel's Hobby plan only permits once-daily crons).
+ * Consecutive daily runs tile this band exactly, so every outreach falls into
+ * one run's window and none falls through the gap between runs. Lead time
+ * therefore varies between 12 and 36 hours -- hence "about 24 hours" in the
+ * push copy below.
+ */
+const REMINDER_WINDOW_START_HOURS = 12;
+const REMINDER_WINDOW_END_HOURS = 36;
 
 /** Throws unless the caller presented `Authorization: Bearer <CRON_SECRET>`. */
 export function assertCronSecret(req: Request): void {
@@ -21,7 +29,7 @@ export function assertCronSecret(req: Request): void {
 
 /**
  * The 24-hour event reminder push. Scans `open` outreaches starting in the
- * next ~24-25 hours, and pushes every `accepted` applicant who hasn't been
+ * reminder window above, and pushes every `accepted` applicant who hasn't been
  * reminded yet (applications.reminder_sent_at is null -- see
  * api/sql/reminder_sent_at.sql), then stamps reminder_sent_at so a re-run
  * (e.g. the cron firing again within the window) never double-sends.
