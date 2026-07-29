@@ -1,11 +1,14 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { SignOutButton } from '@/components/ui';
+import { useRouter } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { SignOutButton, VScoreBadge } from '@/components/ui';
 import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function VolunteerProfile() {
+  const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
 
@@ -31,6 +34,27 @@ export default function VolunteerProfile() {
           ) : null}
         </View>
       </View>
+
+      {typeof volunteerProfile?.v_score === 'number' ? (
+        <Pressable
+          style={({ pressed }) => [styles.vScoreCard, pressed && styles.vScoreCardPressed]}
+          onPress={() => router.push('/(volunteer)/info-hub')}
+          accessibilityRole="button"
+          accessibilityLabel="Your V-Score. Learn how it is calculated."
+        >
+          <VScoreBadge score={volunteerProfile.v_score} />
+          <View style={styles.vScoreText}>
+            <Text style={styles.vScoreTitle}>Your V-Score</Text>
+            <Text style={styles.vScoreBody}>
+              {volunteerProfile.events_attended === 1
+                ? 'Based on 1 event so far.'
+                : `Based on ${volunteerProfile.events_attended} events so far.`}{' '}
+              Tap to see how it&apos;s worked out.
+            </Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
+        </Pressable>
+      ) : null}
 
       <View style={styles.spacer} />
 
@@ -83,6 +107,34 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.medium,
     fontSize: 12,
     color: colors.primary,
+  },
+  vScoreCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.base,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.base,
+    marginTop: spacing.base,
+  },
+  vScoreCardPressed: {
+    opacity: 0.8,
+  },
+  vScoreText: {
+    flex: 1,
+  },
+  vScoreTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  vScoreBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   spacer: {
     flex: 1,

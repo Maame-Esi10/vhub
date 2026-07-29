@@ -5,7 +5,7 @@ import {
   type Layer1OutreachInput,
   type Layer1VolunteerInput,
 } from "@/lib/matching/layer1";
-import { authenticate, assertOwnsOutreach } from "../../../server/auth";
+import { authenticate, assertOwnsOutreach, type AuthedCaller } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { checkSkillEquivalences, type SkillPair } from "../../../server/gemini";
@@ -25,13 +25,9 @@ export const runtime = "nodejs";
 // ---------------------------------------------------------------------------
 // Request contract
 //
-// The generic CLAUDE.md sketch ("body: { volunteerProfile, outreaches[] }")
-// describes a stateless volunteer-feed ranking call. This endpoint
-// implements a DIFFERENT, deliberately chosen contract per this task's
-// explicit brief ("Auth: caller must be the organisation that owns the
-// outreach... you choose a sane contract and document it"):
+// Three modes, two audiences:
 //
-//   mode "score_applicants" (primary): given an outreachId the caller's
+//   mode "score_applicants" (ORGANISATION): given an outreachId the caller's
 //   organisation owns, (re)compute match_score for that outreach's
 //   applications (all of them, or a supplied volunteerIds subset -- e.g.
 //   right after a single new application comes in) and persist it to
@@ -40,14 +36,22 @@ export const runtime = "nodejs";
 //   descending, which is exactly the order hooks/useApplications.ts's
 //   useOutreachApplications already expects (`.order('match_score', ...)`).
 //
-//   mode "notify_candidates" (extension, see docs/REPORT_NOTES.md /
-//   the final report's "assumptions" section): a broad Layer-1-only scan
-//   over verified volunteers who haven't yet applied, to push a "new
-//   high-match outreach" notification -- this is /api/notifications'
-//   "new high-match outreach" trigger, implemented here (not in
-//   /api/notifications) because it needs the matching engine, and kept
-//   Layer-1-only (no Gemini) since it is a broad, low-stakes scan rather
-//   than a per-applicant decision.
+//   mode "rank_feed" (VOLUNTEER): the mirror image -- given the caller's own
+//   volunteer profile, rank every OPEN outreach for them and return the
+//   outreaches themselves, best match first. Owner decision (2026-07-29, see
+//   docs/REPORT_NOTES.md): the volunteer feed is where AI matching adds the
+//   most value, so it runs the SAME Layer 1 + Layer 2 pipeline as the
+//   organisation side rather than a cheaper client-side Layer-1-only ranking.
+//   Nothing is persisted -- a feed ranking is a read, and
+//   `applications.match_score` only means "score at apply time".
+//
+//   mode "notify_candidates" (ORGANISATION, extension -- see
+//   docs/REPORT_NOTES.md): a broad Layer-1-only scan over verified volunteers
+//   who haven't yet applied, to push a "new high-match outreach"
+//   notification. This is /api/notifications' "new high-match outreach"
+//   trigger, implemented here (not in /api/notifications) because it needs
+//   the matching engine, and kept Layer-1-only (no Gemini) since it is a
+//   broad, low-stakes scan rather than a per-applicant decision.
 // ---------------------------------------------------------------------------
 
 const ScoreApplicantsBody = z.object({
@@ -62,7 +66,28 @@ const NotifyCandidatesBody = z.object({
   outreachId: z.string().uuid(),
 });
 
-const MatchRequestBody = z.discriminatedUnion("mode", [ScoreApplicantsBody, NotifyCandidatesBody]);
+const ScoreMyApplicationBody = z.object({
+  mode: z.literal("score_my_application"),
+  outreachId: z.string().uuid(),
+});
+
+const RankFeedBody = z.object({
+  mode: z.literal("rank_feed"),
+  /** Ghana region name, or null/absent for every region. Mirrors the feed's own filter chips. */
+  region: z.string().min(1).nullish(),
+  roleType: z.enum(["clinical", "support"]).nullish(),
+  /** Hard-capped: the whole feed is ranked in one request, so this also bounds the Layer 2 fan-out. */
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+const FEED_DEFAULT_LIMIT = 50;
+
+const MatchRequestBody = z.discriminatedUnion("mode", [
+  ScoreApplicantsBody,
+  ScoreMyApplicationBody,
+  RankFeedBody,
+  NotifyCandidatesBody,
+]);
 
 // ---------------------------------------------------------------------------
 // Shared shapes fetched from Supabase
@@ -97,6 +122,11 @@ function toOutreachInput(outreach: Record<string, unknown>): Layer1OutreachInput
   return {
     required_skills: (outreach.required_skills as string[] | null) ?? null,
     required_category: (outreach.required_category as string | null) ?? null,
+    // role_type drives computeLayer1MatchScore's support-role category
+    // override (a `support` outreach needs no specific profession, so its
+    // category component is forced to 1.0). Omitting it silently disabled
+    // that owner-approved rule for every scored applicant.
+    role_type: (outreach.role_type as Layer1OutreachInput["role_type"]) ?? null,
     region: (outreach.region as string | null) ?? null,
     district: (outreach.district as string | null) ?? null,
     date: (outreach.date as string | null) ?? null,
@@ -112,6 +142,15 @@ export async function POST(req: Request): Promise<Response> {
       throw Errors.badRequest("Request body must be valid JSON.");
     });
     const body = MatchRequestBody.parse(json);
+
+    // The two volunteer-facing modes are dispatched before the
+    // organisation-ownership check that the other two share.
+    if (body.mode === "rank_feed") {
+      return Response.json(await rankFeed(caller, body));
+    }
+    if (body.mode === "score_my_application") {
+      return Response.json(await scoreMyApplication(caller, body.outreachId));
+    }
 
     const outreach = await assertOwnsOutreach(caller, body.outreachId);
 
@@ -148,7 +187,7 @@ async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?:
 
   const applications = (data ?? []) as unknown as ApplicantRow[];
   if (applications.length === 0) {
-    return { outreachId: outreach.id, results: [] as ScoredApplicant[] };
+    return { outreachId: outreach.id, layer2Applied: true, results: [] as ScoredApplicant[] };
   }
 
   const outreachInput = toOutreachInput(outreach);
@@ -165,16 +204,23 @@ async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?:
 
   // Layer 2 is entirely best-effort: any failure anywhere in this block
   // leaves layer1Results (and therefore the final scores) untouched.
-  let equivalencesByApplication = new Map<string, Map<string, Set<string>>>();
+  let layer2: Layer2Outcome = { byKey: new Map(), applied: false };
   try {
-    equivalencesByApplication = await computeLayer2Equivalences(admin, outreachInput, applications);
+    layer2 = await computeLayer2Equivalences(
+      admin,
+      applications.map((application) => ({
+        key: application.id,
+        requiredSkills: outreachInput.required_skills ?? [],
+        volunteerSkills: application.volunteer?.skill_tags ?? [],
+      }))
+    );
   } catch (err) {
     console.error("[match] Layer 2 failed, falling back to Layer 1:", err instanceof Error ? err.message : err);
-    equivalencesByApplication = new Map();
+    layer2 = { byKey: new Map(), applied: false };
   }
 
   const results: ScoredApplicant[] = applications.map((application) => {
-    const equivalences = equivalencesByApplication.get(application.id);
+    const equivalences = layer2.byKey.get(application.id);
     const final = equivalences
       ? computeLayer1MatchScore(toVolunteerInput(application.volunteer), outreachInput, {
           skillEquivalences: equivalences,
@@ -195,7 +241,7 @@ async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?:
   );
 
   results.sort((a, b) => b.matchScore - a.matchScore);
-  return { outreachId: outreach.id, results };
+  return { outreachId: outreach.id, layer2Applied: layer2.applied, results };
 }
 
 interface ScoredApplicant {
@@ -205,56 +251,297 @@ interface ScoredApplicant {
   breakdown: Layer1MatchResult;
 }
 
+// ---------------------------------------------------------------------------
+// mode: score_my_application
+// ---------------------------------------------------------------------------
+
 /**
- * Layer 2: for every applicant, finds required skills the volunteer doesn't
- * literally have and volunteer skills that aren't literally required, checks
+ * Scores the caller's OWN application to one outreach and persists
+ * `applications.match_score`.
+ *
+ * This exists because match_score is service-role write-only, so a volunteer
+ * cannot set it themselves under RLS, and `score_applicants` is deliberately
+ * organisation-only. Without this, a new application would sit unscored until
+ * the organisation happened to open its applicant list -- which is exactly
+ * when a fair, best-match-first ordering matters most.
+ *
+ * The volunteer can only ever reach their own row: the application is looked
+ * up by (outreachId, caller.userId), never by a client-supplied application
+ * id, so there is nothing to tamper with. The score is computed here from the
+ * database's own copy of both profiles, never from anything the client sent.
+ */
+async function scoreMyApplication(caller: AuthedCaller, outreachId: string) {
+  if (caller.role !== "volunteer") {
+    throw Errors.forbidden("Only a volunteer can score their own application.");
+  }
+
+  const admin = getSupabaseAdmin();
+
+  const { data: outreach, error: outreachError } = await admin
+    .from("outreaches")
+    .select("*")
+    .eq("id", outreachId)
+    .maybeSingle();
+  if (outreachError) throw Errors.internal("Could not load the outreach.");
+  if (!outreach) throw Errors.notFound("Outreach not found.");
+
+  const { data: application, error: applicationError } = await admin
+    .from("applications")
+    .select(APPLICANT_SELECT)
+    .eq("outreach_id", outreachId)
+    .eq("volunteer_id", caller.userId)
+    .maybeSingle();
+  if (applicationError) throw Errors.internal("Could not load your application.");
+  if (!application) throw Errors.notFound("You have not applied to this outreach.");
+
+  const applicant = application as unknown as ApplicantRow;
+  const outreachInput = toOutreachInput(outreach);
+  const volunteerInput = toVolunteerInput(applicant.volunteer);
+
+  // Layer 1 first, always -- the score that stands if Layer 2 is unavailable.
+  let result = computeLayer1MatchScore(volunteerInput, outreachInput);
+  let layer2Applied = false;
+
+  try {
+    const layer2 = await computeLayer2Equivalences(admin, [
+      {
+        key: applicant.id,
+        requiredSkills: outreachInput.required_skills ?? [],
+        volunteerSkills: applicant.volunteer?.skill_tags ?? [],
+      },
+    ]);
+    layer2Applied = layer2.applied;
+    const equivalences = layer2.byKey.get(applicant.id);
+    if (equivalences) {
+      result = computeLayer1MatchScore(volunteerInput, outreachInput, {
+        skillEquivalences: equivalences,
+      });
+    }
+  } catch (err) {
+    console.error("[match] Layer 2 failed, falling back to Layer 1:", err instanceof Error ? err.message : err);
+  }
+
+  const { error: updateError } = await admin
+    .from("applications")
+    .update({ match_score: result.total })
+    .eq("id", applicant.id);
+  if (updateError) throw Errors.internal("Could not save your match score.");
+
+  return {
+    applicationId: applicant.id,
+    outreachId,
+    matchScore: result.total,
+    breakdown: result,
+    layer2Applied,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// mode: rank_feed
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirrors hooks/useOutreaches.ts's OUTREACH_WITH_ORGANISATION_SELECT so the
+ * ranked rows drop straight into the feed's existing card component.
+ * `organisation_profiles` holds no PII and is readable by every authenticated
+ * user under RLS, so embedding it here exposes nothing the app could not
+ * already read for itself.
+ */
+const FEED_OUTREACH_SELECT = `
+  *,
+  organisation:organisation_profiles ( id, org_name, org_type, verified )
+`;
+
+interface RankedOutreach {
+  outreachId: string;
+  matchScore: number;
+  breakdown: Layer1MatchResult;
+  outreach: Record<string, unknown>;
+}
+
+/**
+ * Ranks every open outreach for the signed-in volunteer.
+ *
+ * Reads only: unlike score_applicants this writes nothing back, because a
+ * feed ranking is transient (it changes whenever the volunteer edits their
+ * skills) whereas `applications.match_score` is a record of the score AT
+ * APPLY TIME. The two must not be conflated.
+ *
+ * Cost control -- the reason this can be a live Gemini-backed ranking rather
+ * than a nightly batch:
+ *   1. One request ranks the WHOLE feed, so scrolling costs nothing: the
+ *      client holds the ranked list and never pages back to this endpoint.
+ *   2. Every (skill, skill) verdict Gemini returns is written to
+ *      `skill_match_cache`, which is shared across all volunteers and all
+ *      outreaches. The vocabulary in constants/skills.ts is small and closed,
+ *      so the cache saturates quickly and steady-state refetches make ZERO
+ *      Gemini calls.
+ *   3. Only skills that don't literally match are ever sent (see
+ *      computeLayer2Equivalences), and the whole feed is batched into a
+ *      single call rather than one per outreach.
+ */
+async function rankFeed(caller: AuthedCaller, body: z.infer<typeof RankFeedBody>) {
+  if (caller.role !== "volunteer") {
+    throw Errors.forbidden("Only a volunteer can rank their own feed.");
+  }
+
+  const admin = getSupabaseAdmin();
+
+  const { data: volunteerRow, error: volunteerError } = await admin
+    .from("volunteer_profiles")
+    .select(
+      `
+      id, category, skill_tags, experience_level, availability_slots,
+      profile:profiles ( region, district )
+    `
+    )
+    .eq("id", caller.userId)
+    .maybeSingle();
+
+  if (volunteerError) throw Errors.internal("Could not load your volunteer profile.");
+  if (!volunteerRow) throw Errors.notFound("Volunteer profile not found. Finish onboarding first.");
+
+  const volunteer = toVolunteerInput(volunteerRow as unknown as ApplicantRow["volunteer"]);
+
+  let query = admin.from("outreaches").select(FEED_OUTREACH_SELECT).eq("status", "open");
+  if (body.region) query = query.eq("region", body.region);
+  if (body.roleType) query = query.eq("role_type", body.roleType);
+
+  const { data, error } = await query
+    .order("date", { ascending: true })
+    .limit(body.limit ?? FEED_DEFAULT_LIMIT);
+  if (error) throw Errors.internal("Could not load open outreaches.");
+
+  const outreaches = (data ?? []) as Array<Record<string, unknown>>;
+  if (outreaches.length === 0) {
+    return { volunteerId: caller.userId, layer2Applied: true, results: [] as RankedOutreach[] };
+  }
+
+  const inputs = new Map<string, Layer1OutreachInput>();
+  for (const outreach of outreaches) {
+    inputs.set(outreach.id as string, toOutreachInput(outreach));
+  }
+
+  // Layer 1 first, always -- the ranking that survives any Layer 2 failure.
+  const layer1Results = new Map<string, Layer1MatchResult>();
+  for (const outreach of outreaches) {
+    const id = outreach.id as string;
+    layer1Results.set(id, computeLayer1MatchScore(volunteer, inputs.get(id)!));
+  }
+
+  let layer2: Layer2Outcome = { byKey: new Map(), applied: false };
+  try {
+    layer2 = await computeLayer2Equivalences(
+      admin,
+      outreaches.map((outreach) => ({
+        key: outreach.id as string,
+        requiredSkills: inputs.get(outreach.id as string)?.required_skills ?? [],
+        volunteerSkills: volunteer.skill_tags ?? [],
+      }))
+    );
+  } catch (err) {
+    console.error("[match] Layer 2 failed, falling back to Layer 1:", err instanceof Error ? err.message : err);
+    layer2 = { byKey: new Map(), applied: false };
+  }
+
+  const results: RankedOutreach[] = outreaches.map((outreach) => {
+    const id = outreach.id as string;
+    const equivalences = layer2.byKey.get(id);
+    const final = equivalences
+      ? computeLayer1MatchScore(volunteer, inputs.get(id)!, { skillEquivalences: equivalences })
+      : layer1Results.get(id)!;
+
+    return { outreachId: id, matchScore: final.total, breakdown: final, outreach };
+  });
+
+  // Best match first; ties broken by the soonest event, so an equally-good
+  // pair of outreaches surfaces the one the volunteer must decide about first.
+  results.sort((a, b) => {
+    if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+    const dateA = (a.outreach.date as string | null) ?? "";
+    const dateB = (b.outreach.date as string | null) ?? "";
+    return dateA.localeCompare(dateB);
+  });
+
+  return { volunteerId: caller.userId, layer2Applied: layer2.applied, results };
+}
+
+// ---------------------------------------------------------------------------
+// Layer 2 (shared by score_applicants and rank_feed)
+// ---------------------------------------------------------------------------
+
+/** One thing to be scored: a set of required skills vs a set of volunteer skills. */
+interface Layer2Subject {
+  /** Opaque identifier the caller uses to get its equivalence map back (an applicationId, or an outreachId). */
+  key: string;
+  requiredSkills: readonly string[];
+  volunteerSkills: readonly string[];
+}
+
+interface Layer2Outcome {
+  /** key -> (required skill -> volunteer skills Gemini judged equivalent). Ready for `computeLayer1MatchScore`'s `skillEquivalences`. */
+  byKey: Map<string, Map<string, Set<string>>>;
+  /**
+   * True when the Layer 2 step completed -- either the cache answered
+   * everything (including "there was nothing to ask") or Gemini responded.
+   * False means Gemini was needed and unavailable, so the caller's scores are
+   * pure Layer 1. Surfaced in the response purely for observability; it never
+   * changes whether a result is returned.
+   */
+  applied: boolean;
+}
+
+/**
+ * For each subject, finds required skills the volunteer doesn't literally
+ * have and volunteer skills that aren't literally required, checks
  * `skill_match_cache` for each (required, volunteer) pair first, asks Gemini
- * ONLY for the pairs still missing (one batched call for the whole
- * outreach, not one call per applicant, to conserve the ~1,500/day free-tier
- * quota), writes new results back to the cache, and returns a per-application
- * equivalence map ready for `computeLayer1MatchScore`'s `skillEquivalences`
- * option. If Gemini is unavailable, uncached pairs are simply left out of
- * the map (equivalent to "no semantic match found") rather than blocking.
+ * ONLY for the pairs still missing (one batched call for ALL subjects, not
+ * one per subject, to conserve the ~1,500/day free-tier quota), writes new
+ * results back to the cache, and returns a per-subject equivalence map.
+ *
+ * If Gemini is unavailable, uncached pairs are simply left out of the map
+ * (equivalent to "no semantic match found") rather than blocking -- CLAUDE.md's
+ * "matching must never halt" rule.
  */
 async function computeLayer2Equivalences(
   admin: ReturnType<typeof getSupabaseAdmin>,
-  outreachInput: Layer1OutreachInput,
-  applications: ApplicantRow[]
-): Promise<Map<string, Map<string, Set<string>>>> {
-  const result = new Map<string, Map<string, Set<string>>>();
-  const requiredSkills = [...new Set((outreachInput.required_skills ?? []).map(normalizeSkill).filter(Boolean))];
-  if (requiredSkills.length === 0) return result;
-  const requiredSet = new Set(requiredSkills);
+  subjects: readonly Layer2Subject[]
+): Promise<Layer2Outcome> {
+  const byKey = new Map<string, Map<string, Set<string>>>();
 
   interface PendingPair extends OrderedSkillPair {
-    applicationId: string;
+    key: string;
     required: string;
     volunteer: string;
   }
   const pending: PendingPair[] = [];
 
-  for (const application of applications) {
-    const volunteerTags = [
-      ...new Set((application.volunteer?.skill_tags ?? []).map(normalizeSkill).filter(Boolean)),
-    ];
+  for (const subject of subjects) {
+    const requiredSkills = [...new Set(subject.requiredSkills.map(normalizeSkill).filter(Boolean))];
+    if (requiredSkills.length === 0) continue;
+    const requiredSet = new Set(requiredSkills);
+
+    const volunteerTags = [...new Set(subject.volunteerSkills.map(normalizeSkill).filter(Boolean))];
     const volunteerSet = new Set(volunteerTags);
+
     const unmatchedRequired = requiredSkills.filter((r) => !volunteerSet.has(r));
     const unmatchedVolunteer = volunteerTags.filter((v) => !requiredSet.has(v));
     if (unmatchedRequired.length === 0 || unmatchedVolunteer.length === 0) continue;
 
     for (const required of unmatchedRequired) {
       for (const volunteer of unmatchedVolunteer) {
-        const ordered = orderPair(required, volunteer);
-        pending.push({ ...ordered, applicationId: application.id, required, volunteer });
+        pending.push({ ...orderPair(required, volunteer), key: subject.key, required, volunteer });
       }
     }
   }
 
-  if (pending.length === 0) return result;
+  // Nothing semantically ambiguous anywhere -- Layer 1 was already exact.
+  if (pending.length === 0) return { byKey, applied: true };
 
   const distinctPairs = dedupePairs(pending);
   const cacheMap = await lookupSkillCache(admin, distinctPairs);
 
+  let applied = true;
   const uncached = distinctPairs.filter((p) => !cacheMap.has(`${p.skillA}::${p.skillB}`));
   if (uncached.length > 0) {
     const geminiPairs: SkillPair[] = uncached.map((p) => ({ skillA: p.skillA, skillB: p.skillB }));
@@ -265,22 +552,24 @@ async function computeLayer2Equivalences(
         admin,
         geminiResults.map((r) => ({ skillA: r.skillA, skillB: r.skillB, isMatch: r.isMatch }))
       );
+    } else {
+      // Layer 2 unavailable (no key, quota, timeout, bad shape). Those pairs
+      // stay absent from cacheMap, i.e. "no equivalence found" below.
+      applied = false;
     }
-    // geminiResults === null -> Layer 2 unavailable; those pairs simply stay
-    // absent from cacheMap, i.e. "no equivalence found" below.
   }
 
   for (const pair of pending) {
     const isMatch = cacheMap.get(`${pair.skillA}::${pair.skillB}`);
     if (!isMatch) continue;
-    const perApp = result.get(pair.applicationId) ?? new Map<string, Set<string>>();
-    const set = perApp.get(pair.required) ?? new Set<string>();
+    const perSubject = byKey.get(pair.key) ?? new Map<string, Set<string>>();
+    const set = perSubject.get(pair.required) ?? new Set<string>();
     set.add(pair.volunteer);
-    perApp.set(pair.required, set);
-    result.set(pair.applicationId, perApp);
+    perSubject.set(pair.required, set);
+    byKey.set(pair.key, perSubject);
   }
 
-  return result;
+  return { byKey, applied };
 }
 
 // ---------------------------------------------------------------------------

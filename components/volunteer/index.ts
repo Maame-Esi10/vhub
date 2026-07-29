@@ -1,5 +1,7 @@
 export { MatchScoreBadge } from './MatchScoreBadge';
 export type { MatchScoreBadgeProps } from './MatchScoreBadge';
+export { MatchBreakdownSheet } from './MatchBreakdownSheet';
+export type { MatchBreakdownSheetProps } from './MatchBreakdownSheet';
 export { OutreachFeedCard } from './OutreachFeedCard';
 export type { OutreachFeedCardProps } from './OutreachFeedCard';
 export { VolunteerApplicationCard } from './VolunteerApplicationCard';

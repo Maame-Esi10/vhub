@@ -4,6 +4,8 @@ export { OutreachPicker } from './OutreachPicker';
 export type { OutreachPickerProps } from './OutreachPicker';
 export { ApplicantCard } from './ApplicantCard';
 export type { ApplicantCardProps } from './ApplicantCard';
+export { EventReviewSheet } from './EventReviewSheet';
+export type { EventReviewSheetProps, EventReviewDraft } from './EventReviewSheet';
 export { OutreachPreviewCard } from './OutreachPreviewCard';
 export type { OutreachPreviewCardProps } from './OutreachPreviewCard';
 export {

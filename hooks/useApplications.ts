@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PostgrestError } from '@supabase/supabase-js';
+import { scoreMyApplication, setApplicationStatus } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 import { outreachKeys } from '@/hooks/useOutreaches';
 import type { OutreachOrganisation } from '@/hooks/useOutreaches';
@@ -134,32 +135,46 @@ export interface UpdateApplicationStatusParams {
 /**
  * Accept / reject / waitlist an application (or move one back to pending).
  *
- * Only `status` is written. slots_filled is recomputed from accepted
- * applications by `trg_applications_sync_slots_filled` (supabase/schema.sql)
- * so two orgs accepting concurrently can never double-count a slot, and
- * `slots_filled_le_total` rejects the accept that would overfill the event —
- * that constraint violation is surfaced here as a readable message.
+ * Accept, reject and waitlist all go through `/api/application-status` rather
+ * than writing Supabase directly, because the decision has side effects only
+ * the service role can perform: the Resend status email to the applicant, the
+ * Expo push, and — when an accepted spot is later freed — promoting the
+ * highest-match waitlisted applicant, which is another volunteer's row and so
+ * is unreachable under this organisation's RLS.
  *
- * Email notification of the decision is Phase 3 (`/api/application-status`);
- * this writes the status directly.
+ * Reverting a decision back to `pending` stays a direct Supabase write: the
+ * endpoint deliberately does not accept `pending` (there is no such thing as
+ * an "un-decided" email to send), and the org's own RLS policy already
+ * permits it.
+ *
+ * Either way only `status` moves. slots_filled is recomputed from accepted
+ * applications by `trg_applications_sync_slots_filled` (supabase/schema.sql)
+ * so two admins accepting concurrently can never double-count a slot, and
+ * `slots_filled_le_total` rejects the accept that would overfill the event —
+ * surfaced here, and by the endpoint, as the same readable message.
  */
 export function useUpdateApplicationStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (params: UpdateApplicationStatusParams): Promise<Application> => {
-      const { data, error } = await supabase
-        .from('applications')
-        .update({ status: params.status })
-        .eq('id', params.applicationId)
-        .select()
-        .single();
+      if (params.status === 'pending') {
+        const { data, error } = await supabase
+          .from('applications')
+          .update({ status: 'pending' })
+          .eq('id', params.applicationId)
+          .select()
+          .single();
 
-      if (error || !data) {
-        throw new Error(applicationUpdateMessage(error));
+        if (error || !data) {
+          throw new Error(applicationUpdateMessage(error));
+        }
+
+        return data as Application;
       }
 
-      return data as Application;
+      const response = await setApplicationStatus(params.applicationId, params.status);
+      return response.application as unknown as Application;
     },
     onSuccess: (_application, params) => {
       queryClient.invalidateQueries({ queryKey: applicationKeys.byOutreach(params.outreachId) });
@@ -276,10 +291,18 @@ export interface CreateApplicationParams {
 }
 
 /**
- * Applies to an outreach.
+ * Applies to an outreach, then scores the new application.
  *
- * status/match_score are not sent: status defaults to 'pending', and
- * match_score is service-role write-only until Phase 3's /api/match runs.
+ * status/match_score are not sent on the insert: status defaults to
+ * 'pending', and match_score is service-role write-only. The follow-up
+ * `scoreMyApplication` call is what fills it in, running Layer 1 (+ Gemini
+ * Layer 2) against the database's own copy of both profiles.
+ *
+ * That second call is deliberately BEST-EFFORT: the application already
+ * exists and is valid without a score, so a scoring failure must not surface
+ * as "your application failed" or roll anything back. An unscored application
+ * simply sorts last in the organisation's list until the org's own
+ * `scoreApplicants` run picks it up.
  */
 export function useCreateApplication() {
   const queryClient = useQueryClient();
@@ -301,7 +324,16 @@ export function useCreateApplication() {
         throw new Error(applicationInsertMessage(error));
       }
 
-      return data as Application;
+      try {
+        const scored = await scoreMyApplication(params.outreachId);
+        return { ...(data as Application), match_score: scored.matchScore };
+      } catch (scoringError) {
+        console.warn(
+          '[applications] could not score this application:',
+          scoringError instanceof Error ? scoringError.message : scoringError
+        );
+        return data as Application;
+      }
     },
     onSuccess: (application, params) => {
       queryClient.invalidateQueries({
@@ -350,6 +382,15 @@ export interface CancelApplicationParams {
  * hours of the event start). Doing it there rather than here means a
  * volunteer can't backdate a withdrawal to dodge the bigger V-Score penalty,
  * and the returned row carries the values the trigger actually wrote.
+ *
+ * `/api/application-status` is then called with the same 'cancelled' status.
+ * That second call is idempotent (the row is already cancelled, so it is a
+ * no-op write) and exists purely to run the step this direct write cannot:
+ * promoting the highest-match waitlisted applicant into the freed slot and
+ * notifying them, which touches another volunteer's row and so needs the
+ * service role. Best-effort — the withdrawal itself has already succeeded, so
+ * a promotion failure must not be reported to the volunteer as a failed
+ * withdrawal.
  */
 export function useCancelApplication() {
   const queryClient = useQueryClient();
@@ -368,6 +409,15 @@ export function useCancelApplication() {
 
       if (error || !data) {
         throw new Error(error?.message || 'Could not withdraw your application. Please try again.');
+      }
+
+      try {
+        await setApplicationStatus(params.applicationId, 'cancelled');
+      } catch (promotionError) {
+        console.warn(
+          '[applications] withdrawal saved, but waitlist promotion could not run:',
+          promotionError instanceof Error ? promotionError.message : promotionError
+        );
       }
 
       return data as Application;

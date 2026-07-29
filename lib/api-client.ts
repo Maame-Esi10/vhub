@@ -1,7 +1,7 @@
 import type { Layer1MatchResult } from '@/lib/matching/layer1';
 import { supabase } from '@/lib/supabase';
 import type { VScoreBand, VScorePenaltyType } from '@/lib/vscore';
-import type { ApplicationStatus } from '@/types/database';
+import type { ApplicationStatus, Outreach, OutreachRoleType } from '@/types/database';
 
 /**
  * Typed fetch wrapper around the serverless API in `api/` (deployed on
@@ -192,6 +192,12 @@ export interface ScoredApplicant {
 
 export interface ScoreApplicantsResponse {
   outreachId: string;
+  /**
+   * False when Gemini was needed but unavailable, so these scores are pure
+   * Layer 1. Observability only -- a result is always returned either way
+   * (CLAUDE.md: "matching must never halt").
+   */
+  layer2Applied: boolean;
   results: ScoredApplicant[];
 }
 
@@ -211,6 +217,88 @@ export function scoreApplicants(
   return apiPost<ScoreApplicantsResponse>(
     API_ROUTES.match,
     { mode: 'score_applicants', outreachId, volunteerIds },
+    options
+  );
+}
+
+export interface ScoreMyApplicationResponse {
+  applicationId: string;
+  outreachId: string;
+  matchScore: number;
+  breakdown: Layer1MatchResult;
+  layer2Applied: boolean;
+}
+
+/**
+ * Scores and persists `match_score` on the signed-in volunteer's own
+ * application to `outreachId`. Called right after applying, because
+ * match_score is service-role write-only and the organisation-side
+ * `scoreApplicants` is not something a volunteer may call.
+ */
+export function scoreMyApplication(
+  outreachId: string,
+  options?: RequestOptions
+): Promise<ScoreMyApplicationResponse> {
+  return apiPost<ScoreMyApplicationResponse>(
+    API_ROUTES.match,
+    { mode: 'score_my_application', outreachId },
+    options
+  );
+}
+
+/** The organisation fields embedded on each ranked outreach. Structurally identical to `OutreachOrganisation` in hooks/useOutreaches.ts. */
+export interface RankedOutreachOrganisation {
+  id: string;
+  org_name: string;
+  org_type: string | null;
+  verified: boolean;
+}
+
+export interface RankedOutreach {
+  outreachId: string;
+  /** 0-100 weighted total. */
+  matchScore: number;
+  /** Per-component detail behind `matchScore`, for the feed card's "why this match" panel. */
+  breakdown: Layer1MatchResult;
+  outreach: Outreach & { organisation: RankedOutreachOrganisation | null };
+}
+
+export interface RankFeedResponse {
+  volunteerId: string;
+  /** False when Gemini was unavailable and the ranking is pure Layer 1. */
+  layer2Applied: boolean;
+  /** Best match first; ties broken by the soonest event date. */
+  results: RankedOutreach[];
+}
+
+export interface RankFeedFilters {
+  /** Ghana region name, or null for every region. */
+  region?: string | null;
+  roleType?: OutreachRoleType | null;
+  /** Max outreaches to rank. Server default 50, hard cap 100. */
+  limit?: number;
+}
+
+/**
+ * Ranks every open outreach for the signed-in volunteer, best match first,
+ * running the same Layer 1 + Layer 2 pipeline the organisation side uses.
+ *
+ * One call ranks the whole feed, so scrolling never returns here -- pair it
+ * with a React Query `staleTime` and the endpoint is hit once per filter
+ * change, not once per screenful.
+ */
+export function rankFeed(
+  filters: RankFeedFilters = {},
+  options?: RequestOptions
+): Promise<RankFeedResponse> {
+  return apiPost<RankFeedResponse>(
+    API_ROUTES.match,
+    {
+      mode: 'rank_feed',
+      region: filters.region ?? null,
+      roleType: filters.roleType ?? null,
+      limit: filters.limit,
+    },
     options
   );
 }

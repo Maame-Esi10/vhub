@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PostgrestError } from '@supabase/supabase-js';
+import { ApiClientError, rankFeed } from '@/lib/api-client';
+import type { Layer1MatchResult } from '@/lib/matching/layer1';
 import { supabase } from '@/lib/supabase';
 import type {
   ApplicationStatus,
@@ -17,6 +19,8 @@ export const outreachKeys = {
     [...outreachKeys.all, 'organisation-public', organisationId] as const,
   feed: (filters: FeedFilters) =>
     [...outreachKeys.all, 'feed', filters.region ?? 'all', filters.roleType ?? 'all'] as const,
+  rankedFeed: (filters: FeedFilters) =>
+    [...outreachKeys.all, 'ranked-feed', filters.region ?? 'all', filters.roleType ?? 'all'] as const,
 };
 
 /** Per-status applicant tally for one outreach, plus a `total` across all statuses. */
@@ -182,29 +186,101 @@ export interface FeedFilters {
 export function useOpenOutreaches(filters: FeedFilters) {
   return useQuery({
     queryKey: outreachKeys.feed(filters),
-    queryFn: async (): Promise<OutreachWithOrganisation[]> => {
-      let query = supabase
-        .from('outreaches')
-        .select(OUTREACH_WITH_ORGANISATION_SELECT)
-        .eq('status', 'open');
+    queryFn: () => fetchOpenOutreaches(filters),
+  });
+}
 
-      if (filters.region) {
-        query = query.eq('region', filters.region);
+/** The raw, unranked feed query. Shared by `useOpenOutreaches` and `useRankedFeed`'s fallback. */
+async function fetchOpenOutreaches(filters: FeedFilters): Promise<OutreachWithOrganisation[]> {
+  let query = supabase
+    .from('outreaches')
+    .select(OUTREACH_WITH_ORGANISATION_SELECT)
+    .eq('status', 'open');
+
+  if (filters.region) {
+    query = query.eq('region', filters.region);
+  }
+  if (filters.roleType) {
+    query = query.eq('role_type', filters.roleType);
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message || 'Could not load outreaches. Please try again.');
+  }
+
+  return (data ?? []) as unknown as OutreachWithOrganisation[];
+}
+
+/** One outreach in the ranked feed, carrying the score that put it where it is. */
+export interface RankedFeedItem {
+  outreach: OutreachWithOrganisation;
+  /** 0-100, or null when the ranking service was unreachable and this is the unranked fallback. */
+  matchScore: number | null;
+  breakdown: Layer1MatchResult | null;
+}
+
+export interface RankedFeed {
+  items: RankedFeedItem[];
+  /** False when the API was unreachable and these are unranked, newest-first outreaches. */
+  ranked: boolean;
+  /** False when the server ranked with pure Layer 1 because Gemini was unavailable. Meaningless when `ranked` is false. */
+  layer2Applied: boolean;
+}
+
+/**
+ * The volunteer feed, ranked by the matching engine (`/api/match` mode
+ * `rank_feed`): Layer 1 always, Gemini Layer 2 on top where it can help.
+ *
+ * Degrades in two independent steps, so the volunteer always sees events:
+ *   1. Gemini unavailable -> the server still returns a Layer 1 ranking
+ *      (`layer2Applied: false`). Handled server-side; nothing to do here.
+ *   2. The API itself unreachable (offline, deploy down) -> falls back to the
+ *      plain Supabase query, newest first, with `ranked: false` so the screen
+ *      can say the list isn't personalised rather than silently showing a
+ *      worse order and calling it a match ranking.
+ * An auth error is NOT swallowed: that means the session is bad, which the
+ * screen should surface rather than paper over.
+ *
+ * `staleTime` is what keeps this off the network while the volunteer scrolls
+ * -- one request ranks the whole feed, and re-entering the tab inside the
+ * window reuses it. Pull-to-refresh still forces a refetch.
+ */
+export function useRankedFeed(filters: FeedFilters, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: outreachKeys.rankedFeed(filters),
+    enabled: options?.enabled ?? true,
+    staleTime: RANKED_FEED_STALE_TIME_MS,
+    queryFn: async (): Promise<RankedFeed> => {
+      try {
+        const response = await rankFeed({ region: filters.region, roleType: filters.roleType });
+        return {
+          ranked: true,
+          layer2Applied: response.layer2Applied,
+          items: response.results.map((result) => ({
+            outreach: result.outreach as OutreachWithOrganisation,
+            matchScore: result.matchScore,
+            breakdown: result.breakdown,
+          })),
+        };
+      } catch (err) {
+        if (err instanceof ApiClientError && !err.isAuthError) {
+          const outreaches = await fetchOpenOutreaches(filters);
+          return {
+            ranked: false,
+            layer2Applied: false,
+            items: outreaches.map((outreach) => ({ outreach, matchScore: null, breakdown: null })),
+          };
+        }
+        throw err;
       }
-      if (filters.roleType) {
-        query = query.eq('role_type', filters.roleType);
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false });
-
-      if (error) {
-        throw new Error(error.message || 'Could not load outreaches. Please try again.');
-      }
-
-      return (data ?? []) as unknown as OutreachWithOrganisation[];
     },
   });
 }
+
+/** Five minutes: long enough that scrolling and tab-switching never re-rank, short enough that a newly published outreach shows up quickly. */
+const RANKED_FEED_STALE_TIME_MS = 5 * 60 * 1000;
 
 /**
  * Every published outreach belonging to one organisation, for the public

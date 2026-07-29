@@ -9,6 +9,7 @@ export {
   useOrganisationOutreaches,
   useOutreach,
   useOpenOutreaches,
+  useRankedFeed,
   usePublicOrganisationOutreaches,
   useCreateOutreach,
   useUpdateOutreachStatus,
@@ -18,6 +19,8 @@ export type {
   OutreachWithCounts,
   OutreachOrganisation,
   OutreachWithOrganisation,
+  RankedFeed,
+  RankedFeedItem,
   FeedFilters,
   CreateOutreachParams,
   UpdateOutreachStatusParams,
@@ -41,6 +44,8 @@ export type {
   CreateApplicationParams,
   CancelApplicationParams,
 } from './useApplications';
+export { eventReviewKeys, useOutreachReviews, useSubmitEventReview } from './useEventReviews';
+export type { SubmitEventReviewParams } from './useEventReviews';
 export {
   publicProfileKeys,
   usePublicVolunteerProfile,

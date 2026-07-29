@@ -1,42 +1,72 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
 export interface MatchScoreBadgeProps {
   /**
-   * 0–100 match score, or null when the outreach hasn't been scored yet.
-   * Nothing produces a score in Phase 2 — `applications.match_score` is
-   * service-role write-only and stays null until Phase 3's /api/match runs
-   * Layer 1 (and Gemini Layer 2 on top of it). Every caller passes null
-   * today; the scored branch exists so wiring the real value in Phase 3 is a
-   * one-line change at the call site rather than a redesign here.
+   * 0–100 match score from `/api/match`, or null when this outreach hasn't
+   * been ranked for the viewer — which now means the ranking service was
+   * unreachable and the feed fell back to an unranked list, not that scoring
+   * is unimplemented.
    */
   score?: number | null;
   /** Dark pill for use over a coloured card header, per the Figma feed cards. */
   onDark?: boolean;
+  /** When provided, the pill becomes tappable and shows the "why this match" affordance. */
+  onPress?: () => void;
 }
 
 /**
  * The "98% MATCH" pill from design-refs/Volunteer Home Feed.png.
  *
  * Deliberately renders "NOT RANKED YET" rather than a plausible-looking
- * number while scoring is unimplemented — a fake percentage is exactly the
- * kind of thing that survives into a demo and gets mistaken for the real
- * matching engine.
+ * number when no score is available — a fake percentage is exactly the kind
+ * of thing that survives into a demo and gets mistaken for the real matching
+ * engine.
  */
-export function MatchScoreBadge({ score = null, onDark = false }: MatchScoreBadgeProps) {
+export function MatchScoreBadge({ score = null, onDark = false, onPress }: MatchScoreBadgeProps) {
   const scored = typeof score === 'number';
   const label = scored ? `${Math.round(score)}% MATCH` : 'NOT RANKED YET';
+  const accessibilityLabel = scored
+    ? `${Math.round(score)} percent match${onPress ? ', see breakdown' : ''}`
+    : 'Match score not available';
 
-  return (
-    <View
-      style={[styles.pill, onDark && styles.pillOnDark]}
-      accessibilityLabel={scored ? `${Math.round(score)} percent match` : 'Match score not calculated yet'}
-    >
+  const content = (
+    <>
       <View style={[styles.dot, scored ? styles.dotScored : styles.dotUnscored]} />
       <Text style={[styles.label, onDark && styles.labelOnDark]} numberOfLines={1}>
         {label}
       </Text>
-    </View>
+      {onPress && scored ? (
+        <MaterialCommunityIcons
+          name="information-outline"
+          size={12}
+          color={onDark ? colors.navy : colors.textSecondary}
+        />
+      ) : null}
+    </>
+  );
+
+  // Only scored pills are interactive — there is nothing to break down when
+  // the feed is showing its unranked fallback.
+  if (!onPress || !scored) {
+    return (
+      <View style={[styles.pill, onDark && styles.pillOnDark]} accessibilityLabel={accessibilityLabel}>
+        {content}
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={8}
+      style={({ pressed }) => [styles.pill, onDark && styles.pillOnDark, pressed && styles.pillPressed]}
+    >
+      {content}
+    </Pressable>
   );
 }
 
@@ -53,6 +83,9 @@ const styles = StyleSheet.create({
   },
   pillOnDark: {
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
+  },
+  pillPressed: {
+    opacity: 0.75,
   },
   dot: {
     width: 7,

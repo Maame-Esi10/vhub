@@ -97,6 +97,71 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   `/api/application-status` with `status:"cancelled"` (idempotent) so promotion
   actually runs — wired in Phase 3.3.
 
+- **Volunteer feed ranked server-side by the full two-layer engine
+  (2026-07-29, owner-approved).** `/api/match` was originally built
+  organisation-oriented only: `score_applicants` ("score the people who applied
+  to my outreach"), which `assertOwnsOutreach` restricts to the owning
+  organisation. The ranked volunteer feed needs the mirror image — "rank these
+  open outreaches for me" — and a volunteer JWT could not call anything.
+
+  Two options were weighed:
+
+  1. **Rank client-side** with the pure `lib/matching/layer1.ts` scorer. Free,
+     offline-capable, no quota use — but Layer 1 only. The volunteer's feed
+     would have been strictly less intelligent than the organisation's
+     applicant list, matching only on exact skill wording.
+  2. **Add a volunteer mode to `/api/match`** running the same Layer 1 + Gemini
+     Layer 2 pipeline.
+
+  Option 2 was chosen. Rationale (owner): the volunteer feed is the surface
+  where AI-assisted matching adds the most value — it is the one screen every
+  volunteer sees on every visit, and semantic skill matching is exactly what
+  stops a qualified volunteer missing an event that described the same skill in
+  different words. A feed that silently used weaker matching than the
+  organisation view would also undercut the project's central claim.
+
+  Implemented as `mode: "rank_feed"`, plus `mode: "score_my_application"` for
+  the apply-time write (see below). Design points worth reporting:
+
+  - **Nothing is persisted by `rank_feed`.** A feed ranking is transient — it
+    changes the moment a volunteer edits their skills — whereas
+    `applications.match_score` records the score *at apply time*. Conflating
+    the two would have made `match_score` unstable and meaningless as an
+    audit trail of why an applicant was ranked where they were.
+  - **Quota control, three mechanisms.** (a) One request ranks the entire feed,
+    so scrolling costs nothing — the client holds the ranked list and never
+    pages back; (b) every (skill, skill) verdict Gemini returns is written to
+    the shared `skill_match_cache` table, and because `constants/skills.ts` is
+    a small closed vocabulary the cache saturates quickly, so steady-state
+    refetches make **zero** Gemini calls; (c) only skill pairs that don't
+    literally match are ever sent, batched into a single call for the whole
+    feed rather than one per outreach. React Query's 5-minute `staleTime` on
+    the client is the fourth layer.
+  - **`score_my_application` (new).** `applications.match_score` is
+    service-role write-only, and `score_applicants` is organisation-only, so a
+    volunteer could not cause their own application to be scored. This mode
+    scores and persists exactly one row, looked up by
+    `(outreachId, caller.userId)` — never by a client-supplied application id,
+    so a volunteer cannot reach anyone else's row. Called best-effort right
+    after the application insert: the application is valid without a score, so
+    a scoring failure must never surface as a failed application.
+  - **Two-step degradation, surfaced honestly.** Gemini unavailable → the
+    server still returns a Layer 1 ranking and reports `layer2Applied: false`.
+    The API itself unreachable → `useRankedFeed` falls back to the plain
+    Supabase query and reports `ranked: false`, and the feed header says the
+    list is newest-first rather than ranked. Showing an unranked list while
+    implying it is a match ranking would misrepresent the engine.
+
+- **Bug found and fixed while adding the feed mode (2026-07-29).**
+  `toOutreachInput` in `/api/match` never passed `role_type` through to
+  `computeLayer1MatchScore`, so the owner-approved support-role category
+  override (a `support` outreach forces the category component to 1.0) had
+  been silently inactive for every applicant scored through the API since
+  Phase 3.2 — the pure scorer implemented the rule correctly, but the API
+  never fed it the field it keys on. Worth reporting as an example of a
+  correct unit-tested function being defeated at its integration boundary,
+  which unit tests by construction cannot catch.
+
 ## Before final submission / demo
 
 - **Delete all test accounts and test data from Supabase.** Every account

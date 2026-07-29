@@ -8,8 +8,10 @@ import type { OutreachWithOrganisation } from '@/hooks';
 export interface OutreachFeedCardProps {
   outreach: OutreachWithOrganisation;
   onPress: () => void;
-  /** Phase 3 passes the real Layer 1/2 score; null until then. */
+  /** 0–100 from `/api/match`, or null when the feed is showing its unranked fallback. */
   matchScore?: number | null;
+  /** Opens the "why this match" breakdown. Omit to leave the match pill non-interactive. */
+  onPressScore?: () => void;
 }
 
 /**
@@ -20,7 +22,12 @@ export interface OutreachFeedCardProps {
  * coloured band carrying the same content (match pill, category eyebrow,
  * title) rather than a stock photo standing in for real data.
  */
-export function OutreachFeedCard({ outreach, onPress, matchScore = null }: OutreachFeedCardProps) {
+export function OutreachFeedCard({
+  outreach,
+  onPress,
+  matchScore = null,
+  onPressScore,
+}: OutreachFeedCardProps) {
   const slotsLeft = Math.max(0, outreach.slots_total - outreach.slots_filled);
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
   const place = [outreach.location_name, outreach.district ?? outreach.region]
@@ -35,7 +42,7 @@ export function OutreachFeedCard({ outreach, onPress, matchScore = null }: Outre
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.header}>
-        <MatchScoreBadge score={matchScore} onDark />
+        <MatchScoreBadge score={matchScore} onDark onPress={onPressScore} />
         <Text style={styles.eyebrow} numberOfLines={1}>
           {outreach.organisation?.org_name?.toUpperCase() ?? 'ORGANISATION'}
         </Text>
