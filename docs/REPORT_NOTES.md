@@ -460,3 +460,37 @@ and the standalone re-verification screen already noted above.
     not quietly become a distance calculation — that would be a change to a
     spec CLAUDE.md marks final. Coordinates are for display and directions
     only unless the owner decides otherwise.
+
+## Test on device next session (as of 2026-07-31)
+
+All SQL below has been RUN successfully against the live Supabase project.
+The code is committed and pushed (05f345e). What is outstanding is device
+verification, not implementation.
+
+**Confirmed working on device by the owner:**
+- Quick Join, Apply Now, withdraw, and re-apply after withdrawal.
+
+**Written and typechecked but NOT yet exercised on a device:**
+1. **Calendar / clock pickers** on create-outreach (step 2). NOTE: this added
+   a native module (`@react-native-community/datetimepicker`), so a plain
+   `npx expo start --dev-client -c` may not be enough — the dev client itself
+   may need rebuilding. Check: past dates are blocked; the saved value still
+   round-trips as `YYYY-MM-DD` / `HH:MM`.
+2. **Accept / Waitlist / Reject on the volunteer's full profile.** Reached
+   from Applicant Vetting -> View Full Profile. Confirm the bar appears only
+   when arriving from the applicant list, and that deciding returns to the
+   list with the status updated.
+3. **The rejected -> pending trigger.** Reject an application as the
+   organisation, then confirm that volunteer cannot re-apply to it (the
+   withdraw -> re-apply path must still work). This is the one piece of the
+   security model with no test coverage at all.
+4. **Settings + organisation Info Hub**, reached from the gear on each Profile
+   tab — both were built after the last device session.
+5. **Tab bar safe-area and label fit** on the organisation's five-tab bar.
+
+**Still unbuilt, in rough priority order:** change-password flow (Account
+Security row); standalone re-verification screen (the Identity Verification
+row in Settings is read-only until it exists); the Gemini-key fallback proof
+(remove `GEMINI_API_KEY` from Vercel, confirm the feed still ranks with
+`layer2Applied: false`, restore it); then the deferred Cloudinary flyer upload
+and OpenStreetMap location work described above.
