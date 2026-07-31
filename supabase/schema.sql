@@ -444,6 +444,17 @@ create policy "applications_insert_own"
 -- their own outreaches (pending/accepted/rejected/waitlisted).
 drop policy if exists "applications_update_own_or_org" on applications;
 
+-- Volunteers may set exactly two statuses on their own row: 'cancelled'
+-- (withdraw) and 'pending' (re-apply to something they withdrew from --
+-- applications has unique (outreach_id, volunteer_id), so re-applying
+-- reactivates the existing row rather than inserting a second one; see
+-- useCreateApplication). Re-applying is gated by the SAME eligibility test as
+-- applications_insert_own, so it cannot be used to slip into a clinical
+-- outreach unverified, or into a closed one. accepted/rejected/waitlisted
+-- remain org-only.
+-- See supabase/migrations/20260731_allow_reapply_after_withdrawal.sql for the
+-- full rationale and one accepted limitation (a volunteer can also move their
+-- own rejected application back to pending).
 drop policy if exists "applications_update_own_cancel" on applications;
 create policy "applications_update_own_cancel"
   on applications for update
@@ -451,7 +462,25 @@ create policy "applications_update_own_cancel"
   using (volunteer_id = auth.uid())
   with check (
     volunteer_id = auth.uid()
-    and status = 'cancelled'
+    and (
+      status = 'cancelled'
+      or (
+        status = 'pending'
+        and exists (
+          select 1 from outreaches o
+          where o.id = applications.outreach_id
+            and o.status = 'open'
+            and (
+              o.role_type is distinct from 'clinical'
+              or exists (
+                select 1 from volunteer_profiles vp
+                where vp.id = auth.uid()
+                  and vp.verification_status = 'verified'
+              )
+            )
+        )
+      )
+    )
   );
 
 drop policy if exists "applications_update_org_status" on applications;
@@ -834,7 +863,11 @@ revoke update on applications from authenticated;
 -- status: orgs set accepted/rejected/waitlisted, volunteers set cancelled --
 -- which value each may write is constrained by the RLS policies above, not here.
 -- cancellation_reason: free text, not V-Score input.
-grant update (status, cancellation_reason) on applications to authenticated;
+-- type + motivation: volunteer-authored (both already in the INSERT grant
+-- list), needed so re-applying to a withdrawn outreach can rewrite them --
+-- someone may withdraw a Quick Join and return with a Full Application.
+-- match_score, cancelled_at and late_cancellation stay absent: service-role only.
+grant update (status, cancellation_reason, type, motivation) on applications to authenticated;
 
 revoke update on outreaches from authenticated;
 grant update (

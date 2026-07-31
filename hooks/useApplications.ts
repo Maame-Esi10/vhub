@@ -309,16 +309,56 @@ export function useCreateApplication() {
 
   return useMutation({
     mutationFn: async (params: CreateApplicationParams): Promise<Application> => {
-      const { data, error } = await supabase
+      const motivation = params.motivation?.trim() ? params.motivation.trim() : null;
+
+      // A withdrawn application still occupies the UNIQUE (outreach_id,
+      // volunteer_id) slot, so re-applying cannot INSERT — it would fail with
+      // a unique violation whose message ("You've already applied to this
+      // outreach") is nonsense to someone who just withdrew. Reactivate the
+      // existing row instead.
+      //
+      // Not an .upsert(): PostgREST compiles ON CONFLICT DO UPDATE with every
+      // payload column in the SET clause, and applications' UPDATE grant list
+      // deliberately excludes outreach_id/volunteer_id, so the statement would
+      // be rejected outright (42501). An explicit .update() names only the
+      // granted columns.
+      const { data: existing, error: existingError } = await supabase
         .from('applications')
-        .insert({
-          outreach_id: params.outreachId,
-          volunteer_id: params.volunteerId,
-          type: params.type,
-          motivation: params.motivation?.trim() ? params.motivation.trim() : null,
-        })
-        .select()
-        .single();
+        .select('id, status')
+        .eq('outreach_id', params.outreachId)
+        .eq('volunteer_id', params.volunteerId)
+        .maybeSingle();
+
+      if (existingError) {
+        throw new Error(existingError.message || 'Could not check your application status.');
+      }
+
+      if (existing && existing.status !== 'cancelled') {
+        throw new Error("You've already applied to this outreach.");
+      }
+
+      const { data, error } = existing
+        ? await supabase
+            .from('applications')
+            .update({
+              status: 'pending',
+              type: params.type,
+              motivation,
+              cancellation_reason: null,
+            })
+            .eq('id', existing.id)
+            .select()
+            .single()
+        : await supabase
+            .from('applications')
+            .insert({
+              outreach_id: params.outreachId,
+              volunteer_id: params.volunteerId,
+              type: params.type,
+              motivation,
+            })
+            .select()
+            .single();
 
       if (error || !data) {
         throw new Error(applicationInsertMessage(error));

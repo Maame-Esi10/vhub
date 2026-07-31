@@ -374,3 +374,33 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   silent data loss. The row shows status only. A standalone re-verification
   screen must exist before it can become tappable; that is the same Phase 4
   pass as the change-password flow above.
+
+- **Re-applying after a withdrawal (2026-07-31).** `applications` has
+  `unique (outreach_id, volunteer_id)`, so a withdrawn application keeps
+  occupying that slot. The outreach detail screen correctly treats
+  `status = 'cancelled'` as "not applied" and re-shows Quick Join / Apply Now,
+  but the INSERT behind those buttons hit the unique constraint, and the error
+  mapping rendered 23505 as "You've already applied to this outreach" — told
+  to someone who had just withdrawn, with no way forward.
+  `useCreateApplication` now reactivates the existing cancelled row with an
+  `.update()` instead of inserting a second one. Deliberately not `.upsert()`:
+  PostgREST puts every payload column in the ON CONFLICT SET clause, and
+  `outreach_id`/`volunteer_id` are excluded from the applications UPDATE grant,
+  so the statement would be rejected with 42501. Two database changes were
+  needed alongside it — `type` and `motivation` added to the UPDATE grant list
+  (both volunteer-authored and already INSERT-grantable), and
+  `applications_update_own_cancel`'s WITH CHECK widened from a hard-coded
+  `status = 'cancelled'` to also allow `'pending'` under exactly the
+  eligibility test `applications_insert_own` uses, so re-applying cannot slip
+  an unverified volunteer into a clinical outreach.
+
+- **Known limitation — a volunteer can move their own rejected application
+  back to pending.** A policy's USING clause sees the old row and WITH CHECK
+  the new one, and Postgres ORs multiple permissive policies rather than
+  pairing them, so the re-apply allowance above cannot be restricted to rows
+  that were specifically *cancelled*. A rejected applicant can therefore
+  re-enter the queue. Judged a nuisance rather than an escalation: they still
+  cannot write accepted/rejected/waitlisted, cannot alter `match_score`, and
+  cannot touch another volunteer's row, and the organisation sees the
+  resulting status. Constraining it precisely needs a `BEFORE UPDATE` trigger
+  comparing `old.status` to `new.status`; deferred, not built.
