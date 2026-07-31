@@ -19,6 +19,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
+import { useSignOut } from '@/hooks';
+import { useAuthStore } from '@/stores/authStore';
 
 interface Slide {
   key: string;
@@ -200,6 +202,24 @@ export default function Welcome() {
     [router]
   );
 
+  /**
+   * A volunteer who signed up but never finished the wizard (category still
+   * null) lands back here on every launch. Offering them the two role buttons
+   * would be nonsense — they already have an account and a role — so this
+   * screen swaps in a resume action for that state. Pushing (not replacing)
+   * is what leaves welcome underneath the wizard, so its back button has
+   * somewhere to go.
+   */
+  const resumingOnboarding = useAuthStore(
+    (state) =>
+      !!state.user && state.profile?.role === 'volunteer' && state.volunteerProfile?.category == null
+  );
+  const { signOut, signingOut } = useSignOut();
+
+  const continueOnboarding = useCallback(() => {
+    router.push('/(auth)/onboarding');
+  }, [router]);
+
   const onScroll = useMemo(
     () =>
       Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
@@ -303,22 +323,46 @@ export default function Welcome() {
       >
         <PagerDots count={SLIDES.length} scrollX={scrollX} width={width} />
 
-        <Button
-          title="BECOME A VOLUNTEER"
-          variant="outline"
-          inverted
-          onPress={() => goToRegister('volunteer')}
-          accessibilityLabel="Become a volunteer"
-          style={styles.primaryCta}
-        />
-        <Button
-          title="POST AN OUTREACH"
-          variant="text"
-          inverted
-          onPress={() => goToRegister('organisation')}
-          accessibilityLabel="Post an outreach"
-          textStyle={styles.postOutreachLabel}
-        />
+        {resumingOnboarding ? (
+          <>
+            <Button
+              title="FINISH SETTING UP"
+              variant="outline"
+              inverted
+              onPress={continueOnboarding}
+              accessibilityLabel="Finish setting up your volunteer profile"
+              style={styles.primaryCta}
+            />
+            <Button
+              title={signingOut ? 'SIGNING OUT...' : 'NOT YOU? SIGN OUT'}
+              variant="text"
+              inverted
+              disabled={signingOut}
+              onPress={signOut}
+              accessibilityLabel="Sign out"
+              textStyle={styles.postOutreachLabel}
+            />
+          </>
+        ) : (
+          <>
+            <Button
+              title="BECOME A VOLUNTEER"
+              variant="outline"
+              inverted
+              onPress={() => goToRegister('volunteer')}
+              accessibilityLabel="Become a volunteer"
+              style={styles.primaryCta}
+            />
+            <Button
+              title="POST AN OUTREACH"
+              variant="text"
+              inverted
+              onPress={() => goToRegister('organisation')}
+              accessibilityLabel="Post an outreach"
+              textStyle={styles.postOutreachLabel}
+            />
+          </>
+        )}
       </View>
     </View>
   );

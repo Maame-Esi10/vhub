@@ -10,12 +10,11 @@ import type { Profile, VolunteerProfile } from '@/types/database';
  * Screens within (auth) that should bounce an already-authenticated user
  * straight to their tab group. Onboarding/verify-identity are deliberately
  * excluded so a mid-onboarding session doesn't get yanked into the tabs
- * before the volunteer/organisation profile is complete.
+ * before the volunteer/organisation profile is complete. (A volunteer with
+ * incomplete onboarding never reaches this check at all — the
+ * onboardingIncomplete branch below returns first.)
  */
 const AUTH_ENTRY_SCREENS = new Set(['welcome', 'login', 'register']);
-
-/** (auth) screens that make up the volunteer onboarding wizard itself. */
-const ONBOARDING_SCREENS = new Set(['onboarding', 'verify-identity']);
 
 /**
  * onAuthStateChange events that should trigger a profile (re)fetch.
@@ -343,14 +342,26 @@ export function useAuthGuard() {
     // A volunteer whose onboarding wizard was abandoned partway (app closed
     // before reaching verify-identity.tsx) has category still null in the
     // DB — every completion path (Secure Verification AND Complete Later)
-    // writes it. Route them back into the wizard instead of the feed until
-    // it's set, rather than silently skipping onboarding forever.
+    // writes it. They must not reach the tabs until it's set.
+    //
+    // They are sent to WELCOME, not straight into the wizard. Redirecting
+    // into the wizard here did two bad things:
+    //   * it hijacked the launch, so the splash handed off directly to "My
+    //     Expertise" and the carousel appeared to be skipped entirely; and
+    //   * because the redirect is a `replace`, the wizard opened on a
+    //     single-entry stack with nothing behind it, and any attempt to back
+    //     out to welcome was immediately bounced straight back in here —
+    //     a trap with no exit and no sign-out.
+    // Welcome is where the flow is designed to start, and it now offers a
+    // "continue setting up" action for exactly this state, so resuming is
+    // one tap away and arrives with welcome underneath it in the stack.
     const onboardingIncomplete = profile.role === 'volunteer' && volunteerProfile?.category == null;
-    const inOnboardingFlow = inAuthGroup && !!authScreen && ONBOARDING_SCREENS.has(authScreen);
 
     if (onboardingIncomplete) {
-      if (!inOnboardingFlow) {
-        router.replace('/(auth)/onboarding');
+      // Anywhere inside (auth) is fine — welcome, login, register, and every
+      // wizard step. Only pull them out of the root or a tab group.
+      if (!inAuthGroup) {
+        router.replace('/(auth)/welcome');
       }
       return;
     }
