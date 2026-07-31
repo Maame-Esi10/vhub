@@ -1,0 +1,82 @@
+-- V-HUB migration: 2026-07-29
+-- Fixes: "permission denied for volunteer_profiles" (SQLSTATE 42501) thrown by
+-- useCompleteOnboarding.ts's `.upsert({ id, ... }, { onConflict: 'id' })` call
+-- (tapping "Complete Later" on the ID verification onboarding step), and by
+-- useAuthGuard.ts's repairMissingVolunteerProfile upsert on any call after the
+-- stub row already exists.
+--
+-- Root cause: PostgREST compiles `.upsert(payload, { onConflict: 'id' })` into
+--   INSERT INTO volunteer_profiles (id, category, ...) VALUES (...)
+--   ON CONFLICT (id) DO UPDATE SET id = excluded.id, category = excluded.category, ...
+-- i.e. PostgREST's generated UPDATE SET clause includes every column present
+-- in the request payload, INCLUDING the onConflict/PK column itself -- it does
+-- not special-case or omit the conflict target. Since `id` must be present in
+-- the payload to name the conflict target, every upsert-on-`id` statement
+-- against this table names `id` in its SET clause, whether or not the value
+-- actually changes.
+--
+-- schema.sql's column-level write-protection block (see "Column-level write
+-- protection" further down that file) revokes table-level UPDATE on
+-- volunteer_profiles from `authenticated` and grants back only:
+--   category, skill_tags, specialties, experience_level, availability_slots,
+--   bio, declaration_signed
+-- `id` was never in that list (it doesn't need runtime protection the way
+-- v_score/verification_status/events_attended do), so naming it in a SET
+-- clause -- which only .upsert() ever does; .update() never touches `id` --
+-- has been rejected with 42501 ("permission denied for table volunteer_profiles")
+-- since the column-privilege revoke was introduced. This is a GRANT/privilege
+-- error, distinct from an RLS policy rejection (which would instead read "new
+-- row violates row-level security policy for table volunteer_profiles").
+--
+-- Fix: grant UPDATE(id) back. This is safe specifically because
+-- volunteer_profiles_update_own's RLS clauses bound BOTH the row being
+-- targeted and the row being written to auth.uid() = id:
+--   using (auth.uid() = id)       -- the OLD row (the one ON CONFLICT locates
+--                                    via the unique `id` constraint) must
+--                                    already belong to the caller
+--   with check (auth.uid() = id)  -- the NEW row (post-SET) must still belong
+--                                    to the caller
+-- so a caller can only ever write their own uid back into `id` -- an upsert
+-- payload naming someone else's id is rejected by `using`, before `with
+-- check` is even reached, exactly as if `id` were never grantable at all. No
+-- other client-writable column on this table has that owner-locked identity
+-- relationship, which is why this grant does not set a precedent for
+-- widening the others.
+--
+-- Idempotent: GRANT may be re-run safely (no error, no duplicate effect) --
+-- this migration can be pasted into the Supabase SQL editor any number of
+-- times.
+--
+-- (b) verification_status: investigated separately and NOT touched here.
+-- Grepped the app for writes to volunteer_profiles.verification_status --
+-- there are none; every reference is read-only display logic
+-- (app/profile/volunteer/[id].tsx, components/organisation/ApplicantCard.tsx,
+-- app/(volunteer)/outreach/[id].tsx) or an explicit comment in
+-- useCompleteOnboarding.ts stating it is deliberately never set client-side.
+-- The upload/org-admin review flow that will eventually need to move a row
+-- unverified -> documents_pending -> verified is a later phase and, per the
+-- v_score precedent already established in this file, belongs behind the
+-- serverless API's service-role key (which bypasses RLS and all of these
+-- grants entirely) rather than a client-writable column -- a client-side
+-- WITH CHECK cannot express "any transition except into 'verified'" without
+-- also blocking an already-verified volunteer from editing unrelated columns
+-- like bio, since WITH CHECK evaluates the whole NEW row on every update.
+-- Leaving verification_status entirely service-role-only avoids that trap.
+-- No SQL change needed for this part.
+--
+-- Also checked and NOT affected by this bug:
+--   * organisation_profiles (useAuthGuard.ts's repairMissingOrganisationProfile
+--     upsert) -- this table has no UPDATE column-privilege revoke/grant block
+--     in schema.sql at all, so `authenticated` still holds Supabase's default
+--     table-level UPDATE grant covering every column, `id` included. (This is
+--     a separate, pre-existing gap -- organisation_profiles.verified is
+--     therefore self-writable via UPDATE, unlike the INSERT path which does
+--     correctly exclude it -- flagged for the schema owner as a follow-up,
+--     not fixed by this migration, which is scoped to the reported bug only.)
+--   * skill_match_cache / event_reviews / push_tokens upserts (api/src/server/
+--     skillCache.ts, api/src/app/api/vscore/route.ts, api/src/app/api/
+--     notifications/route.ts) -- all three use the service-role client, which
+--     bypasses RLS and every GRANT/REVOKE issued to `authenticated` here.
+-- ============================================================
+
+grant update (id) on volunteer_profiles to authenticated;

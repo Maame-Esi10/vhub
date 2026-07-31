@@ -162,6 +162,57 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   correct unit-tested function being defeated at its integration boundary,
   which unit tests by construction cannot catch.
 
+- **`profiles.role` and `organisation_profiles.verified` locked at the database
+  level (2026-07-31, owner-approved).** Found while tracing a
+  `permission denied for volunteer_profiles` bug during on-device testing.
+  `supabase/schema.sql` applied its "revoke table, grant back columns" UPDATE
+  protection to `volunteer_profiles`, `applications` and `outreaches`, but never
+  to `profiles` or `organisation_profiles` — so both kept Supabase's default
+  table-level UPDATE grant to `authenticated`, covering every column. RLS could
+  not compensate: `profiles_update_own` / `organisation_profiles_update_own`
+  check only row ownership (`auth.uid() = id`), never which columns changed.
+
+  That left a complete privilege-escalation chain, reachable with nothing but
+  the shipped publishable key and a valid session JWT (curl/PostgREST, no app
+  UI involved): `update profiles set role='organisation'` → insert an
+  `organisation_profiles` row (the insert policy checks `auth.uid() = id`, not
+  role) → `update organisation_profiles set verified=true` → create outreaches,
+  review volunteers (moving real V-Scores), and read the applicant PII that
+  `profiles_select_authenticated` exposes to "the organisation". Notably
+  `verified` was *already* excluded from the INSERT grant list, whose comment
+  names it a "self-assigned trust badge" — so the UPDATE path was an oversight,
+  not a deliberate exception.
+
+  Never reachable through the shipped app (there is no organisation-profile edit
+  screen, and nothing writes `role` after signup), so this closed a capability
+  rather than an active exploit. Fixed by extending the same column-grant
+  pattern to both tables, omitting `role` and `verified`. Owner rationale: a
+  health app handling professional credentials and patient-facing volunteer PII
+  should not rely on the absence of a UI screen for its access control, and
+  role being immutable after signup is correct behaviour regardless.
+
+  Worth reporting as a security-design point: the defence is *deny by omission*
+  — a column is protected precisely by not appearing in a grant list, so the
+  safe failure mode is a write that stops working (visible immediately) rather
+  than a privilege that silently stays open. The matching trap is documented in
+  CLAUDE.md: the fix for such a failure is to move the write to the serverless
+  API, never to widen the grant.
+
+## Known issues (open, not blocking)
+
+- **`/api/vscore` `action: "penalty"` is not idempotent.** There is no ledger of
+  penalties already applied per application, so the same `applicationId` can be
+  submitted repeatedly and each call re-subtracts the flat penalty (−15 no-show
+  / −8 late / −2 on-time) from `v_score`. Damage is bounded — the
+  `v_score >= 0` check constraint in `supabase/schema.sql` stops it going
+  negative — and both callers are authenticated and authorised, so this is a
+  data-integrity gap rather than a security hole. There is also no audit trail
+  of how many times a given no-show was penalised. Should get an
+  `applications.penalty_applied_at` (or a small penalty ledger table) plus a
+  server-side rejection of a repeat penalty for the same application/type before
+  final submission. Deferred deliberately on 2026-07-31: not urgent, and the
+  V-Score pipeline's correctness under normal single-call use is unaffected.
+
 ## Before final submission / demo
 
 - **Delete all test accounts and test data from Supabase.** Every account

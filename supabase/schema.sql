@@ -705,6 +705,10 @@ grant select on public_organisation_profiles to authenticated;
 -- restrict which columns within an allowed row. Several columns must stay
 -- writable only by the serverless API's service-role key (which bypasses all
 -- of this):
+--   profiles.role                       -- set once at signup, immutable after:
+--                                       -- it selects which branch of nearly
+--                                       -- every policy in this file applies
+--   organisation_profiles.verified      -- trust badge; admin/service-role review only
 --   volunteer_profiles.v_score          -- recomputed only by /api/vscore
 --   volunteer_profiles.verification_status, events_attended
 --   applications.match_score            -- written only by /api/match
@@ -730,10 +734,70 @@ grant select on public_organisation_profiles to authenticated;
 --
 -- Adding a column to one of these tables? Add it to the matching grant list
 -- below or clients will not be able to write it.
+--
+-- `id` columns: grant update (id) appears on volunteer_profiles below despite
+-- id never legitimately changing value. This is required because
+-- @supabase/postgrest-js's `.upsert(payload, { onConflict: 'id' })` compiles
+-- to `INSERT ... ON CONFLICT (id) DO UPDATE SET id = excluded.id, <other
+-- payload columns> = excluded.<col>` -- PostgREST's generated SET clause
+-- includes every column present in the payload, including the conflict
+-- target itself (it must be present in the payload to name the conflict
+-- target in the first place). Any table a client upserts on its PK therefore
+-- needs `update (id)` granted, or the whole statement is rejected with
+-- 42501 ("permission denied for table ..."), NOT an RLS violation --
+-- useCompleteOnboarding.ts and useAuthGuard.ts's repairMissingVolunteerProfile
+-- both upsert volunteer_profiles on `id` (self-healing a row dropped by a
+-- non-transactional two-insert signup flow), which is what surfaced this.
+-- Safe specifically because volunteer_profiles_update_own's `using (auth.uid()
+-- = id)` / `with check (auth.uid() = id)` bind BOTH the targeted row and the
+-- written row to the caller's own uid -- an upsert naming a different id is
+-- rejected by `using` before it ever reaches the SET clause, so granting this
+-- column can never let a caller touch (or repoint) a row that isn't theirs.
 -- ============================================================
+
+-- profiles: `role` is deliberately ABSENT from this grant list, which is what
+-- makes it immutable after signup. It is set once on INSERT (the insert path
+-- is unrestricted, which is what lets useSignUp/useAuthGuard create the row)
+-- and must never change afterwards: role decides which tab group the app
+-- routes to AND which branch of nearly every policy in this file applies, so
+-- a self-service role flip was the first step of a privilege-escalation chain
+-- (volunteer -> organisation -> self-verified organisation -> read applicant
+-- PII, review volunteers, move real V-Scores). `id` is absent because
+-- profiles is never upserted — only .insert() at signup and
+-- .update({region, district}) at onboarding. created_at is DB-managed.
+revoke update on profiles from authenticated;
+grant update (
+  full_name,
+  phone,
+  email,
+  region,
+  district,
+  avatar_url
+) on profiles to authenticated;
+
+-- organisation_profiles: `verified` is deliberately ABSENT — it is the trust
+-- badge volunteers use to judge whether an outreach is legitimate, so it must
+-- only ever be set by an admin/service-role review. The INSERT grant list
+-- below already excluded it and its comment calls it out by name as a
+-- "self-assigned trust badge"; the missing UPDATE block was an oversight that
+-- left the same value freely settable one PATCH later.
+-- `id` IS granted here (unlike profiles above) because
+-- useAuthGuard.ts's repairMissingOrganisationProfile upserts this table on
+-- `id` — see the upsert note in the header comment. Safe for the same reason
+-- as volunteer_profiles: organisation_profiles_update_own binds both the
+-- targeted and the written row to auth.uid() = id.
+revoke update on organisation_profiles from authenticated;
+grant update (
+  id,
+  org_name,
+  org_type,
+  description,
+  website
+) on organisation_profiles to authenticated;
 
 revoke update on volunteer_profiles from authenticated;
 grant update (
+  id,
   category,
   skill_tags,
   specialties,
