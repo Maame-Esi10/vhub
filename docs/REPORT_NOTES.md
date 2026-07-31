@@ -405,6 +405,34 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   resulting status. Constraining it precisely needs a `BEFORE UPDATE` trigger
   comparing `old.status` to `new.status`; deferred, not built.
 
+- **Profile-wiping bug via the clinical verification gate (found on device
+  2026-07-31, fixed).** The "Verify my identity" action on the outreach detail
+  screen's clinical gate pushed to `app/(auth)/verify-identity.tsx`. That
+  screen is a STEP OF THE ONBOARDING WIZARD, not a standalone verification
+  flow: it submits the whole wizard payload from `useOnboardingStore`, which
+  is `reset()` once onboarding completes. An already-onboarded volunteer who
+  reached it and pressed "Complete Later" therefore wrote
+  `category: null, skillTags: [], specialties: [], availabilitySlots: [],
+  region: null, district: null` over their saved profile — and the now-null
+  `category` made `useAuthGuard`'s incomplete-onboarding check drag them back
+  through the entire wizard. Reproduced and confirmed by the owner.
+
+  Fixed in two layers, because removing one link does not stop the next one
+  being added: (1) the gate no longer navigates at all — it opens a
+  ConfirmDialog explaining that verification is team-reviewed and not yet
+  available in-app; (2) `persistAndFinish` in verify-identity.tsx now refuses
+  to submit when the onboarding store is empty AND the saved profile already
+  has a category, which is precisely the "arrived from outside the wizard"
+  signature. The same trap was already closed on the Settings row earlier the
+  same day; this was the second, missed entry point.
+
+  **Still to build (Phase 4):** a standalone re-verification screen that does
+  NOT reuse the wizard's submit path — it should upload a credential document
+  (Cloudinary) and move `verification_status` to `documents_pending`, leaving
+  every other column untouched. Until it exists, nothing may link to
+  `(auth)/verify-identity` from outside the onboarding wizard. Both the
+  Settings row and this gate are waiting on it.
+
 ## Planned, not built (decided 2026-07-31)
 
 Both of these were raised, scoped, and deliberately deferred — they are not

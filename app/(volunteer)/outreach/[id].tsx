@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Badge,
   Button,
+  ConfirmDialog,
   ErrorState,
   ListSkeleton,
   formatEventDate,
@@ -46,6 +47,7 @@ export default function OutreachDetail() {
 
   const [fullFormVisible, setFullFormVisible] = useState(false);
   const [withdrawVisible, setWithdrawVisible] = useState(false);
+  const [verifyNotice, setVerifyNotice] = useState(false);
 
   const outreach = outreachQuery.data;
   const application = myApplicationQuery.data ?? null;
@@ -224,13 +226,24 @@ export default function OutreachDetail() {
                 This is a clinical outreach, so you need a verified profile before you can apply.
                 Support-role events are open to you now.
               </Text>
+              {/*
+                Deliberately NOT linking to (auth)/verify-identity. That screen
+                is a STEP OF THE ONBOARDING WIZARD: it reads useOnboardingStore
+                (which is reset() once onboarding finishes, so it is empty for
+                anyone who already onboarded) and submits useCompleteOnboarding.
+                Sending an onboarded volunteer there wiped their category,
+                skills, specialties, availability, region and district, and the
+                now-null category made useAuthGuard drag them back through the
+                whole wizard. A standalone re-verification screen has to exist
+                before this can navigate anywhere -- see docs/REPORT_NOTES.md.
+              */}
               <Pressable
-                onPress={() => router.push('/(auth)/verify-identity')}
+                onPress={() => setVerifyNotice(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Verify my identity"
+                accessibilityLabel="How to get verified"
                 style={styles.gateAction}
               >
-                <Text style={styles.gateActionText}>Verify my identity</Text>
+                <Text style={styles.gateActionText}>How do I get verified?</Text>
               </Pressable>
             </View>
           </View>
@@ -283,6 +296,17 @@ export default function OutreachDetail() {
           </View>
         )}
       </View>
+
+      <ConfirmDialog
+        visible={verifyNotice}
+        icon="shield-alert-outline"
+        title="Verification isn't open yet"
+        message="Identity verification is reviewed by the V-HUB team and isn't available in the app yet. You can still browse every outreach and join support-role events in the meantime."
+        confirmLabel="Got It"
+        cancelLabel="Close"
+        onConfirm={() => setVerifyNotice(false)}
+        onCancel={() => setVerifyNotice(false)}
+      />
 
       <FullApplicationSheet
         visible={fullFormVisible}

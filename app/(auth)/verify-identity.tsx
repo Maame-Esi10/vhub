@@ -26,6 +26,7 @@ import { useCompleteOnboarding } from '@/hooks';
 export default function VerifyIdentity() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const onboarding = useOnboardingStore();
   const completeOnboarding = useCompleteOnboarding();
 
@@ -39,6 +40,25 @@ export default function VerifyIdentity() {
   async function persistAndFinish(options: { declarationSigned: boolean }) {
     if (!user) {
       setValidationError('Your session expired. Please log in again.');
+      return;
+    }
+
+    // GUARD: this screen is a step of the onboarding wizard and submits the
+    // whole wizard payload from useOnboardingStore. That store is reset()
+    // once onboarding completes, so if a volunteer reaches this screen from
+    // anywhere OUTSIDE the wizard, every field below is blank -- and
+    // submitting would wipe their saved category, skills, specialties,
+    // availability, region and district. The now-null category would then
+    // make useAuthGuard force them back through the entire wizard.
+    //
+    // An empty store plus an already-set category on the saved profile is
+    // exactly that situation, so refuse rather than destroy their data. The
+    // real fix is a standalone re-verification screen that doesn't reuse the
+    // wizard's submit path; until it exists, nothing should link here.
+    if (onboarding.category === null && volunteerProfile?.category != null) {
+      setValidationError(
+        'Your profile is already set up. Identity verification is reviewed by the V-HUB team and is not available here yet.'
+      );
       return;
     }
 
