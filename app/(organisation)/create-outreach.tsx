@@ -18,8 +18,7 @@ import {
   NumberStepper,
   SelectField,
   StepProgressBar,
-  maskDateInput,
-  maskTimeInput,
+  DateTimeField,
 } from '@/components/ui';
 import type { SelectOption } from '@/components/ui';
 import {
@@ -225,39 +224,43 @@ export default function CreateOutreach() {
                 onChangeText={(text) => update('locationName', text)}
                 accessibilityLabel="Venue name"
               />
-              <Input
+              {/*
+                Native pickers rather than masked text entry: the organiser no
+                longer types punctuation, and an impossible date like 2026-13-45
+                is simply unreachable. They read and write the same
+                'YYYY-MM-DD' / 'HH:MM' strings the validation and the Layer 1
+                availability scorer already expect.
+              */}
+              <DateTimeField
                 label="Event Date"
-                placeholder="YYYY-MM-DD"
+                mode="date"
                 value={state.date}
-                onChangeText={(text) => update('date', maskDateInput(text))}
-                keyboardType="number-pad"
-                maxLength={10}
+                onChange={(next) => update('date', next)}
+                minimumToday
                 error={errors.date}
-                accessibilityLabel="Event date, format year dash month dash day"
+                accessibilityLabel="Event date"
               />
               <View style={styles.timeRow}>
-                <Input
-                  label="Start Time"
-                  placeholder="HH:MM"
-                  value={state.startTime}
-                  onChangeText={(text) => update('startTime', maskTimeInput(text))}
-                  keyboardType="number-pad"
-                  maxLength={5}
-                  error={errors.startTime}
-                  containerStyle={styles.timeField}
-                  accessibilityLabel="Start time, 24 hour format"
-                />
-                <Input
-                  label="End Time"
-                  placeholder="HH:MM"
-                  value={state.endTime}
-                  onChangeText={(text) => update('endTime', maskTimeInput(text))}
-                  keyboardType="number-pad"
-                  maxLength={5}
-                  error={errors.endTime}
-                  containerStyle={styles.timeField}
-                  accessibilityLabel="End time, 24 hour format"
-                />
+                <View style={styles.timeField}>
+                  <DateTimeField
+                    label="Start Time"
+                    mode="time"
+                    value={state.startTime}
+                    onChange={(next) => update('startTime', next)}
+                    error={errors.startTime}
+                    accessibilityLabel="Start time"
+                  />
+                </View>
+                <View style={styles.timeField}>
+                  <DateTimeField
+                    label="End Time"
+                    mode="time"
+                    value={state.endTime}
+                    onChange={(next) => update('endTime', next)}
+                    error={errors.endTime}
+                    accessibilityLabel="End time"
+                  />
+                </View>
               </View>
             </View>
           ) : null}

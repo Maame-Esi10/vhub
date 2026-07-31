@@ -6,7 +6,8 @@ import { Avatar, Badge, ErrorState, ListSkeleton, VScoreBadge } from '@/componen
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { EXPERIENCE_LEVELS, VOLUNTEER_CATEGORIES } from '@/constants/categories';
-import { usePublicVolunteerProfile } from '@/hooks';
+import { usePublicVolunteerProfile, useUpdateApplicationStatus } from '@/hooks';
+import type { OrganisationApplicationDecision } from '@/hooks';
 import { getVScoreBand } from '@/lib/vscore';
 import type { VerificationStatus } from '@/types/database';
 
@@ -52,10 +53,34 @@ function formatAvailabilitySlot(token: string): string {
  */
 export default function PublicVolunteerProfile() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // applicationId/outreachId arrive only when an organisation opens this
+  // screen from its applicant list. Their presence is what turns the
+  // read-only profile into a decision screen — a volunteer browsing another
+  // volunteer never has them, so the action bar simply never renders.
+  const { id, applicationId, outreachId } = useLocalSearchParams<{
+    id: string;
+    applicationId?: string;
+    outreachId?: string;
+  }>();
   const volunteerId = typeof id === 'string' ? id : undefined;
 
   const profileQuery = usePublicVolunteerProfile(volunteerId);
+  const updateStatus = useUpdateApplicationStatus();
+
+  // Mirrors the Accept / Waitlist / Reject actions on the applicant list
+  // card. The design (design-refs/Applicant Vetting.png) puts them on the
+  // card for fast triage; having them here too means an organisation that
+  // wants to read the whole profile first doesn't have to navigate back to
+  // act on what it just read.
+  const canDecide = !!applicationId && !!outreachId;
+
+  function decide(status: OrganisationApplicationDecision) {
+    if (!applicationId || !outreachId) return;
+    updateStatus.mutate(
+      { applicationId, outreachId, status },
+      { onSuccess: () => router.back() }
+    );
+  }
   const volunteer = profileQuery.data;
 
   if (profileQuery.isLoading) {
@@ -172,6 +197,62 @@ export default function PublicVolunteerProfile() {
           ))}
         </Section>
       </ScrollView>
+
+      {canDecide ? (
+        <View style={styles.decisionBar}>
+          {updateStatus.isError ? (
+            <Text style={styles.decisionError}>
+              {updateStatus.error instanceof Error
+                ? updateStatus.error.message
+                : 'Could not update this application.'}
+            </Text>
+          ) : null}
+          <View style={styles.decisionRow}>
+            <Pressable
+              onPress={() => decide('accepted')}
+              disabled={updateStatus.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Accept this applicant"
+              style={({ pressed }) => [
+                styles.decisionButton,
+                styles.acceptButton,
+                pressed && styles.decisionPressed,
+                updateStatus.isPending && styles.decisionDisabled,
+              ]}
+            >
+              <Text style={styles.acceptLabel}>Accept</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => decide('waitlisted')}
+              disabled={updateStatus.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Waitlist this applicant"
+              style={({ pressed }) => [
+                styles.decisionButton,
+                styles.neutralButton,
+                pressed && styles.decisionPressed,
+                updateStatus.isPending && styles.decisionDisabled,
+              ]}
+            >
+              <Text style={styles.neutralLabel}>Waitlist</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => decide('rejected')}
+              disabled={updateStatus.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Reject this applicant"
+              style={({ pressed }) => [
+                styles.decisionButton,
+                styles.neutralButton,
+                pressed && styles.decisionPressed,
+                updateStatus.isPending && styles.decisionDisabled,
+              ]}
+            >
+              <Text style={styles.rejectLabel}>Reject</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -198,6 +279,60 @@ function Section({
 }
 
 const styles = StyleSheet.create({
+  decisionBar: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.base,
+    backgroundColor: colors.background,
+  },
+  decisionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  decisionButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+  },
+  acceptButton: {
+    backgroundColor: colors.primary,
+  },
+  neutralButton: {
+    backgroundColor: colors.surface,
+  },
+  acceptLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.white,
+  },
+  neutralLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  rejectLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.danger,
+  },
+  decisionPressed: {
+    opacity: 0.8,
+  },
+  decisionDisabled: {
+    opacity: 0.5,
+  },
+  decisionError: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

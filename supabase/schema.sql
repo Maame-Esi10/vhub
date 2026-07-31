@@ -483,6 +483,53 @@ create policy "applications_update_own_cancel"
     )
   );
 
+-- Trigger backstop for the policy above. A WITH CHECK only sees the NEW row,
+-- so the policy cannot say "pending is allowed only if the row WAS cancelled"
+-- -- which would otherwise let a volunteer move their own REJECTED application
+-- back to pending and re-enter an org's queue. A BEFORE UPDATE trigger sees
+-- OLD and NEW and can compare them. RLS still decides who may write what;
+-- this only constrains the transition. Orgs are exempt: they legitimately move
+-- an application rejected -> pending when reconsidering someone.
+-- See supabase/migrations/20260731_block_rejected_to_pending.sql.
+create or replace function public.enforce_volunteer_status_transition()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.volunteer_id is distinct from auth.uid() then
+    return new;
+  end if;
+
+  if exists (
+    select 1 from public.outreaches o
+    where o.id = new.outreach_id
+      and o.organisation_id = auth.uid()
+  ) then
+    return new;
+  end if;
+
+  if new.status = 'pending' and old.status is distinct from 'cancelled' then
+    raise exception
+      'A volunteer may only return an application to pending after withdrawing it (was: %).',
+      old.status
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.enforce_volunteer_status_transition() from public;
+
+drop trigger if exists trg_applications_volunteer_status_transition on applications;
+create trigger trg_applications_volunteer_status_transition
+  before update of status on applications
+  for each row
+  when (old.status is distinct from new.status)
+  execute function public.enforce_volunteer_status_transition();
+
 drop policy if exists "applications_update_org_status" on applications;
 create policy "applications_update_org_status"
   on applications for update

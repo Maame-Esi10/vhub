@@ -158,8 +158,14 @@ export default function Applicants() {
               requiredSkills={selectedOutreach?.required_skills ?? []}
               onDecide={(status) => handleDecide(item, status)}
               onViewProfile={
-                item.volunteer
-                  ? () => router.push(`/profile/volunteer/${item.volunteer!.id}`)
+                item.volunteer && selectedOutreachId
+                  ? () =>
+                      router.push(
+                        // applicationId + outreachId turn the profile screen
+                        // into a decision screen, so the org can act on what
+                        // it just read without navigating back here.
+                        `/profile/volunteer/${item.volunteer!.id}?applicationId=${item.id}&outreachId=${selectedOutreachId}`
+                      )
                   : undefined
               }
               isPending={updateStatus.isPending && activeApplicationId === item.id}

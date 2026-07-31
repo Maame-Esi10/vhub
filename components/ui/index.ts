@@ -20,6 +20,8 @@ export {
 } from './InfoSection';
 export type { InfoSectionProps } from './InfoSection';
 export { SettingsRow, SettingsGroupLabel } from './SettingsRow';
+export { DateTimeField } from './DateTimeField';
+export type { DateTimeFieldProps, DateTimeFieldMode } from './DateTimeField';
 export type { SettingsRowProps } from './SettingsRow';
 export { AvailabilityGrid } from './AvailabilityGrid';
 export type { AvailabilityGridProps } from './AvailabilityGrid';
