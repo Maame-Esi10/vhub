@@ -20,8 +20,14 @@ export {
 } from './InfoSection';
 export type { InfoSectionProps } from './InfoSection';
 export { SettingsRow, SettingsGroupLabel } from './SettingsRow';
-export { DateTimeField } from './DateTimeField';
-export type { DateTimeFieldProps, DateTimeFieldMode } from './DateTimeField';
+// DateTimeField is deliberately NOT exported here. It imports
+// @react-native-community/datetimepicker, a NATIVE module, and this barrel is
+// imported by essentially every screen -- so when a dev client hasn't been
+// rebuilt with that module, re-exporting it throws at import time on every
+// screen and takes the whole app down instead of just the one screen that
+// uses it. Import it directly: `import { DateTimeField } from
+// '@/components/ui/DateTimeField';`. Same rule applies to any future native
+// dependency (e.g. expo-image-picker for the flyer upload).
 export type { SettingsRowProps } from './SettingsRow';
 export { AvailabilityGrid } from './AvailabilityGrid';
 export type { AvailabilityGridProps } from './AvailabilityGrid';

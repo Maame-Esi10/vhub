@@ -18,8 +18,11 @@ import {
   NumberStepper,
   SelectField,
   StepProgressBar,
-  DateTimeField,
 } from '@/components/ui';
+// Imported directly, not via the barrel: this pulls in a native module, and
+// routing it through '@/components/ui' would crash every screen on a dev
+// client that hasn't been rebuilt. See the note in components/ui/index.ts.
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import type { SelectOption } from '@/components/ui';
 import {
   INITIAL_WIZARD_STATE,
