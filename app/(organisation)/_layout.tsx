@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
+import { tabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
 
 /**
  * Defense-in-depth guard: useAuthGuard (app/_layout.tsx) redirects on role
@@ -22,12 +23,42 @@ export default function OrganisationTabsLayout() {
   }
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
-      <Tabs.Screen name="create-outreach" options={{ title: 'Create' }} />
-      <Tabs.Screen name="applicants" options={{ title: 'Applicants' }} />
-      <Tabs.Screen name="reviews" options={{ title: 'Reviews' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+    <Tabs screenOptions={tabBarScreenOptions}>
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Dashboard',
+          tabBarIcon: tabBarIcon('view-dashboard', 'view-dashboard-outline'),
+        }}
+      />
+      <Tabs.Screen
+        name="create-outreach"
+        options={{ title: 'Create', tabBarIcon: tabBarIcon('plus-circle', 'plus-circle-outline') }}
+      />
+      <Tabs.Screen
+        name="applicants"
+        options={{
+          title: 'Applicants',
+          tabBarIcon: tabBarIcon('account-group', 'account-group-outline'),
+        }}
+      />
+      <Tabs.Screen
+        name="reviews"
+        options={{ title: 'Reviews', tabBarIcon: tabBarIcon('star', 'star-outline') }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: tabBarIcon('account-circle', 'account-circle-outline'),
+        }}
+      />
+
+      {/*
+        Pushed from the profile tab rather than selected from the bar — every
+        route file in this group becomes a tab unless it opts out.
+      */}
+      <Tabs.Screen name="edit-profile" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -5,6 +5,13 @@ export type { InputProps } from './Input';
 export { OnboardingStepHeader, OnboardingStepFooter } from './OnboardingStepHeader';
 export type { OnboardingStepHeaderProps, OnboardingStepFooterProps } from './OnboardingStepHeader';
 export { SignOutButton } from './SignOutButton';
+export { ConfirmDialog } from './ConfirmDialog';
+export type { ConfirmDialogProps, ConfirmDialogTone } from './ConfirmDialog';
+export { tabBarScreenOptions, tabBarIcon } from './tabBarOptions';
+export { AvailabilityGrid } from './AvailabilityGrid';
+export type { AvailabilityGridProps } from './AvailabilityGrid';
+export { EditSectionCard } from './EditSectionCard';
+export type { EditSectionCardProps } from './EditSectionCard';
 
 export { Badge } from './Badge';
 export type { BadgeProps, BadgeTone } from './Badge';

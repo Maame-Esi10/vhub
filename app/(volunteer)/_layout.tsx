@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
+import { tabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
 
 /**
  * Defense-in-depth guard: useAuthGuard (app/_layout.tsx) redirects on role
@@ -22,11 +23,36 @@ export default function VolunteerTabsLayout() {
   }
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="feed" options={{ title: 'Feed' }} />
-      <Tabs.Screen name="applications" options={{ title: 'Applications' }} />
-      <Tabs.Screen name="schedule" options={{ title: 'Schedule' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+    <Tabs screenOptions={tabBarScreenOptions}>
+      <Tabs.Screen
+        name="feed"
+        // Label is "Home", not "Feed": more relatable, and it matches the
+        // HOME label on this tab in design-refs/Volunteer Home Feed.png. The
+        // route stays feed.tsx — renaming the file would change the URL and
+        // every router.push('/(volunteer)/feed') call site for no gain.
+        options={{ title: 'Home', tabBarIcon: tabBarIcon('home-variant', 'home-variant-outline') }}
+      />
+      <Tabs.Screen
+        name="applications"
+        options={{
+          title: 'Applications',
+          tabBarIcon: tabBarIcon('file-document', 'file-document-outline'),
+        }}
+      />
+      <Tabs.Screen
+        name="schedule"
+        options={{
+          title: 'Schedule',
+          tabBarIcon: tabBarIcon('calendar-check', 'calendar-check-outline'),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: tabBarIcon('account-circle', 'account-circle-outline'),
+        }}
+      />
 
       {/*
         Every route file in this group becomes a tab unless it opts out, so
@@ -34,6 +60,7 @@ export default function VolunteerTabsLayout() {
         tabs, not selected from the bar. outreach/[id] in particular would
         otherwise show up as a tab with no id to render.
       */}
+      <Tabs.Screen name="edit-profile" options={{ href: null }} />
       <Tabs.Screen name="outreach/[id]" options={{ href: null }} />
       <Tabs.Screen name="info-hub" options={{ href: null }} />
       <Tabs.Screen name="map" options={{ href: null }} />

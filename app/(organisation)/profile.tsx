@@ -1,10 +1,13 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SignOutButton } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function OrganisationProfile() {
+  const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
 
   return (
@@ -20,6 +23,22 @@ export default function OrganisationProfile() {
           </View>
         </View>
       </View>
+
+      <Pressable
+        style={({ pressed }) => [styles.rowCard, pressed && styles.rowCardPressed]}
+        onPress={() => router.push('/(organisation)/edit-profile')}
+        accessibilityRole="button"
+        accessibilityLabel="Edit your organisation profile"
+      >
+        <MaterialCommunityIcons name="account-edit-outline" size={22} color={colors.primary} />
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Edit Profile</Text>
+          <Text style={styles.rowBody}>
+            Update your organisation details, location and description.
+          </Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
+      </Pressable>
 
       <View style={styles.spacer} />
 
@@ -72,6 +91,34 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.medium,
     fontSize: 12,
     color: colors.primary,
+  },
+  rowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.base,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.base,
+    marginTop: spacing.base,
+  },
+  rowCardPressed: {
+    opacity: 0.8,
+  },
+  rowText: {
+    flex: 1,
+  },
+  rowTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  rowBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   spacer: {
     flex: 1,

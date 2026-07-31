@@ -56,6 +56,22 @@ export default function VolunteerProfile() {
         </Pressable>
       ) : null}
 
+      <Pressable
+        style={({ pressed }) => [styles.rowCard, pressed && styles.rowCardPressed]}
+        onPress={() => router.push('/(volunteer)/edit-profile')}
+        accessibilityRole="button"
+        accessibilityLabel="Edit your professional profile"
+      >
+        <MaterialCommunityIcons name="account-edit-outline" size={22} color={colors.primary} />
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Edit Profile</Text>
+          <Text style={styles.rowBody}>
+            Update your details, expertise and weekly availability.
+          </Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
+      </Pressable>
+
       <View style={styles.spacer} />
 
       <SignOutButton />
@@ -130,6 +146,34 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   vScoreBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  rowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.base,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.base,
+    marginTop: spacing.base,
+  },
+  rowCardPressed: {
+    opacity: 0.8,
+  },
+  rowText: {
+    flex: 1,
+  },
+  rowTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  rowBody: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
     lineHeight: 17,

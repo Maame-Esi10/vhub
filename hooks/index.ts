@@ -51,3 +51,13 @@ export {
   usePublicVolunteerProfile,
   usePublicOrganisationProfile,
 } from './usePublicProfiles';
+export {
+  profileEditorKeys,
+  useMyOrganisationProfile,
+  useUpdateVolunteerProfile,
+  useUpdateOrganisationProfile,
+} from './useProfileEditor';
+export type {
+  UpdateVolunteerProfileParams,
+  UpdateOrganisationProfileParams,
+} from './useProfileEditor';

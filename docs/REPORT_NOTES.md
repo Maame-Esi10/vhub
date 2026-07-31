@@ -198,6 +198,34 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   CLAUDE.md: the fix for such a failure is to move the write to the serverless
   API, never to widen the grant.
 
+- **Tab bar labels: "Home" adopted from Figma, "PLAN" wording rejected.** The
+  volunteer bar in `design-refs/Volunteer Home Feed.png` is labelled HOME /
+  PLAN / SCHEDULE / PROFILE. The first was adopted — the tab was called "Feed",
+  and "Home" is both more relatable to a volunteer and what the design says, so
+  the two now agree. The rest were deliberately kept as **Applications /
+  Schedule / Profile** over the Figma wording: "Plan" is ambiguous about
+  whether it means the volunteer's own schedule or something they are planning,
+  whereas "Applications" names exactly what the tab holds — the outreaches this
+  volunteer has applied to and their pending/accepted/rejected state. Clarity
+  for a first-time user beat literal design fidelity here. The underlying route
+  file stays `feed.tsx`; only the display label changed, so no `router.push`
+  call site or URL moved. Icons were then matched to the *current* labels
+  rather than the Figma glyphs — Applications shows a document, not Figma's
+  calendar, because a calendar next to a "Schedule" tab that also shows a
+  calendar would read as duplicated.
+
+- **`experience_level` collected on the profile-edit screen, not onboarding.**
+  Resolves the gap logged under Known issues below. It was left out of the
+  onboarding wizard deliberately: it is the one matching input that genuinely
+  changes over a volunteer's career, so a one-off signup wizard is the wrong
+  place to capture it. It now lives in the PROFESSIONAL IDENTITY card on
+  `app/(volunteer)/edit-profile.tsx` as a beginner/intermediate/experienced
+  select, with helper copy saying it feeds match quality. Safe as a
+  client-writable field — it is already in the `volunteer_profiles` UPDATE
+  grant list, and unlike `v_score` it is a self-declaration rather than an
+  earned score, so there is nothing for a volunteer to gain by editing it that
+  they could not also have claimed at signup.
+
 ## Known issues (open, not blocking)
 
 - **`/api/vscore` `action: "penalty"` is not idempotent.** There is no ledger of
@@ -296,11 +324,18 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   `lib/vscore.ts` and `skillsScore`/`availabilityScore` in
   `lib/matching/layer1.ts` for the full rationale.
 
-- **`experience_level` has no onboarding UI.** CLAUDE.md's onboarding step
-  list (skills, category, specialties, region+district+availability,
-  declaration) and the matched Figma screens never cover
-  `volunteer_profiles.experience_level`, so it's left `null` after
-  onboarding for every volunteer. This silently zeroes/undermines the
-  Experience×10 component of the matching formula until it's set somewhere
-  (a future profile-edit screen, most likely). Decide where this gets
-  collected before Phase 3 matching goes live.
+- **~~`experience_level` has no onboarding UI.~~ RESOLVED 2026-07-31.**
+  CLAUDE.md's onboarding step list (skills, category, specialties,
+  region+district+availability, declaration) and the matched Figma screens
+  never covered `volunteer_profiles.experience_level`, so it was left `null`
+  after onboarding for every volunteer, silently undermining the
+  Experience×10 component of the matching formula. It is now collected on the
+  volunteer profile-edit screen — the "future profile-edit screen" this note
+  anticipated — rather than being added to the wizard; see the Design
+  decisions entry above for why that placement was chosen. Volunteers who
+  onboarded before this screen existed still have `experience_level = null`
+  until they visit it once. That degrades gracefully rather than crashing —
+  `experienceScore()` in `lib/matching/layer1.ts` returns 0 for null — but note
+  0 is *below* beginner's 0.3, so an un-edited volunteer is scored slightly
+  worse on that component than one who declares themselves a beginner. Setting
+  it once on this screen is what closes the gap.
