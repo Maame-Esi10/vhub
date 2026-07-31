@@ -19,6 +19,7 @@ import {
   EditSectionCard,
   ErrorState,
   Input,
+  ScreenHeader,
   SelectField,
 } from '@/components/ui';
 import { GHANA_REGION_NAMES, getDistrictsForRegion } from '@/constants/ghana-locations';
@@ -123,18 +124,9 @@ export default function EditOrganisationProfile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={handleCancel}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-          style={styles.backButton}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={20} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Edit Organisation Profile</Text>
-      </View>
+      {/* onBack routes through handleCancel so backing out of a dirty form
+          warns instead of silently discarding. */}
+      <ScreenHeader title="Edit Organisation Profile" onBack={handleCancel} />
 
       {orgQuery.isLoading ? (
         <View style={styles.centred}>
@@ -339,28 +331,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    fontFamily: fontFamily.bold,
-    fontSize: 18,
-    color: colors.textPrimary,
   },
   content: {
     paddingHorizontal: spacing.xl,

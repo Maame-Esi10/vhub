@@ -7,7 +7,20 @@ export type { OnboardingStepHeaderProps, OnboardingStepFooterProps } from './Onb
 export { SignOutButton } from './SignOutButton';
 export { ConfirmDialog } from './ConfirmDialog';
 export type { ConfirmDialogProps, ConfirmDialogTone } from './ConfirmDialog';
-export { tabBarScreenOptions, tabBarIcon } from './tabBarOptions';
+export { useTabBarScreenOptions, tabBarIcon } from './tabBarOptions';
+export { ScreenHeader } from './ScreenHeader';
+export type { ScreenHeaderProps } from './ScreenHeader';
+export {
+  InfoSection,
+  InfoBody,
+  InfoSubheading,
+  InfoWeightRow,
+  InfoBandRow,
+  InfoCallout,
+} from './InfoSection';
+export type { InfoSectionProps } from './InfoSection';
+export { SettingsRow, SettingsGroupLabel } from './SettingsRow';
+export type { SettingsRowProps } from './SettingsRow';
 export { AvailabilityGrid } from './AvailabilityGrid';
 export type { AvailabilityGridProps } from './AvailabilityGrid';
 export { EditSectionCard } from './EditSectionCard';

@@ -18,7 +18,18 @@ export default function VolunteerProfile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={styles.header}>Profile</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Profile</Text>
+        <Pressable
+          onPress={() => router.push('/(volunteer)/settings')}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          hitSlop={12}
+          style={({ pressed }) => [styles.gearButton, pressed && styles.gearPressed]}
+        >
+          <MaterialCommunityIcons name="cog-outline" size={22} color={colors.textPrimary} />
+        </Pressable>
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.name}>{profile?.full_name ?? 'Volunteer'}</Text>
@@ -84,13 +95,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: spacing.xl,
+    // Sign Out is the last thing in this column and was sitting flush against
+    // the bottom of the content area, leaving it visually pinched against the
+    // tab bar / gesture area. The tab bar itself now carries the device inset
+    // (see useTabBarScreenOptions); this is the breathing room above it.
+    paddingBottom: spacing.base,
   },
   header: {
     fontFamily: fontFamily.bold,
     fontSize: 24,
     color: colors.textPrimary,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: spacing.base,
     marginBottom: spacing.xl,
+  },
+  gearButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gearPressed: {
+    opacity: 0.7,
   },
   card: {
     backgroundColor: colors.surface,

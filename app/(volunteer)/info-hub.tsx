@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Text, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { ScreenHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { LAYER1_WEIGHTS } from '@/lib/matching/layer1';
 import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS, V_SCORE_PENALTIES } from '@/lib/vscore';
@@ -26,6 +27,11 @@ export default function InfoHub() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/*
+        This screen is pushed from the profile tab and covers the tab bar, so
+        without a back control there is no way off it at all.
+      */}
+      <ScreenHeader title="Info Hub" />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>How V-HUB works</Text>
         <Text style={styles.intro}>

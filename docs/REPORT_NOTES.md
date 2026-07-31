@@ -339,3 +339,38 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   0 is *below* beginner's 0.3, so an un-edited volunteer is scored slightly
   worse on that component than one who declares themselves a beginner. Setting
   it once on this screen is what closes the gap.
+
+- **Settings rows deliberately not built (2026-07-31).**
+  `design-refs/Settings.png` shows five rows; three were not built because the
+  underlying feature does not exist, and a settings row that does nothing is
+  worse than no row. Decisions, so they aren't re-argued:
+
+  - **Account Security — BUILD THIS, it is a real gap.** There is currently no
+    way for a signed-in user to change their password in-app. For a platform
+    holding health volunteers' PII that is a genuine security shortcoming, not
+    a nice-to-have. `design-refs/Forgot Password.png` already covers the
+    signed-out reset half; what is missing is the signed-in change-password
+    flow. Supabase supports it directly via `supabase.auth.updateUser({
+    password })`, so this is a screen plus a hook, not a schema change. Do it
+    when the Phase 4 polish pass happens, and wire it to this row.
+  - **Linked Accounts — will not build.** Implies OAuth / social sign-in.
+    V-HUB's auth is Supabase email+password only; adding a provider is a whole
+    separate flow with no benefit to the project's aims.
+  - **Language — will not build.** The app is not internationalised and English
+    is Ghana's official language. Real translation (Twi, Ga, Ewe) is a
+    substantial i18n project and is outside the spec; a toggle with one option
+    would be theatre.
+
+  Also dropped from that PNG: the "Premium Member" subtitle (V-HUB has no paid
+  tier) — replaced with the volunteer's actual V-Score band, which is a real
+  status they hold.
+
+- **The Identity Verification row in Settings is deliberately read-only.**
+  The only identity-verification screen is `app/(auth)/verify-identity.tsx`,
+  which is a *step of the onboarding wizard*: it reads `useOnboardingStore`
+  (empty outside that flow) and submits `useCompleteOnboarding`. Linking a
+  settings row to it would let an already-onboarded volunteer overwrite their
+  saved category, skill_tags, specialties and availability_slots with blanks —
+  silent data loss. The row shows status only. A standalone re-verification
+  screen must exist before it can become tappable; that is the same Phase 4
+  pass as the change-password flow above.

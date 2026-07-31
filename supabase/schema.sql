@@ -105,24 +105,55 @@ alter table profiles enable row level security;
 -- `public` flag column or a dedicated view exposing only non-sensitive
 -- columns (name, avatar, bio, skills, v_score) -- never phone/email --
 -- rather than loosening this policy back to using (true).
+-- is_related_via_application(): "does an application link me and this person?"
+--
+-- This lookup MUST go through a security definer function rather than an
+-- inline `exists (select 1 from applications ...)` subquery. Inline, it forms
+-- a policy cycle -- applications_insert_own subqueries volunteer_profiles,
+-- and volunteer_profiles/profiles subquery applications right back -- and
+-- Postgres aborts with SQLSTATE 42P17, "infinite recursion detected in policy
+-- for relation applications". That broke Quick Join, Full Application, and
+-- the organisation Applicants list. Postgres never inlines a security definer
+-- body, which is what severs the cycle. See
+-- supabase/migrations/20260731_fix_applications_rls_recursion.sql.
+--
+-- DO NOT "simplify" the two policies below back into inline subqueries.
+--
+-- Not a widening of access: exists(P) or exists(Q) == exists(P or Q) over the
+-- same join, so this computes exactly what the inline branches did. Table
+-- names are schema-qualified because Postgres resolves relation names against
+-- pg_temp before an explicitly set search_path.
+create or replace function public.is_related_via_application(target_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.applications a
+    join public.outreaches o on o.id = a.outreach_id
+    where (a.volunteer_id = target_id and o.organisation_id = auth.uid())
+       or (o.organisation_id = target_id and a.volunteer_id = auth.uid())
+  );
+$$;
+
+-- Reviewed and accepted: the grant also exposes this as PostgREST
+-- rpc/is_related_via_application with an arbitrary target_id. It returns only
+-- a boolean that is already derivable from ordinary row visibility, so it is
+-- not a new disclosure. Noted so a future audit doesn't read it as an
+-- oversight.
+revoke all on function public.is_related_via_application(uuid) from public;
+grant execute on function public.is_related_via_application(uuid) to authenticated;
+
 drop policy if exists "profiles_select_authenticated" on profiles;
 create policy "profiles_select_authenticated"
   on profiles for select
   to authenticated
   using (
     auth.uid() = id
-    or exists (
-      select 1 from applications a
-      join outreaches o on o.id = a.outreach_id
-      where a.volunteer_id = profiles.id
-        and o.organisation_id = auth.uid()
-    )
-    or exists (
-      select 1 from applications a
-      join outreaches o on o.id = a.outreach_id
-      where o.organisation_id = profiles.id
-        and a.volunteer_id = auth.uid()
-    )
+    or public.is_related_via_application(profiles.id)
   );
 
 drop policy if exists "profiles_insert_own" on profiles;
@@ -193,24 +224,16 @@ alter table volunteer_profiles enable row level security;
 -- authenticated users). See the FOLLOW-UP note on profiles_select_authenticated
 -- for the future public discovery view this will need once the public
 -- profile screens are built.
+-- Uses is_related_via_application() (defined above the profiles policies) and
+-- not an inline applications subquery -- that is what caused SQLSTATE 42P17.
+-- Do not revert it.
 drop policy if exists "volunteer_profiles_select_authenticated" on volunteer_profiles;
 create policy "volunteer_profiles_select_authenticated"
   on volunteer_profiles for select
   to authenticated
   using (
     auth.uid() = id
-    or exists (
-      select 1 from applications a
-      join outreaches o on o.id = a.outreach_id
-      where a.volunteer_id = volunteer_profiles.id
-        and o.organisation_id = auth.uid()
-    )
-    or exists (
-      select 1 from applications a
-      join outreaches o on o.id = a.outreach_id
-      where o.organisation_id = volunteer_profiles.id
-        and a.volunteer_id = auth.uid()
-    )
+    or public.is_related_via_application(volunteer_profiles.id)
   );
 
 drop policy if exists "volunteer_profiles_insert_own" on volunteer_profiles;

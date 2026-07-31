@@ -1,6 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
-import { tabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
+import { useTabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
 
 /**
  * Defense-in-depth guard: useAuthGuard (app/_layout.tsx) redirects on role
@@ -13,6 +13,9 @@ import { tabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
  */
 export default function VolunteerTabsLayout() {
   const { user, profile } = useAuthStore();
+  // Called before the guards below: hooks must run unconditionally, and both
+  // branches below can return early.
+  const screenOptions = useTabBarScreenOptions();
 
   if (!user) {
     return <Redirect href="/(auth)/welcome" />;
@@ -23,7 +26,7 @@ export default function VolunteerTabsLayout() {
   }
 
   return (
-    <Tabs screenOptions={tabBarScreenOptions}>
+    <Tabs screenOptions={screenOptions}>
       <Tabs.Screen
         name="feed"
         // Label is "Home", not "Feed": more relatable, and it matches the
@@ -61,6 +64,7 @@ export default function VolunteerTabsLayout() {
         otherwise show up as a tab with no id to render.
       */}
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="outreach/[id]" options={{ href: null }} />
       <Tabs.Screen name="info-hub" options={{ href: null }} />
       <Tabs.Screen name="map" options={{ href: null }} />

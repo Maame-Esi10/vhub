@@ -12,7 +12,18 @@ export default function OrganisationProfile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={styles.header}>Profile</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Profile</Text>
+        <Pressable
+          onPress={() => router.push('/(organisation)/settings')}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          hitSlop={12}
+          style={({ pressed }) => [styles.gearButton, pressed && styles.gearPressed]}
+        >
+          <MaterialCommunityIcons name="cog-outline" size={22} color={colors.textPrimary} />
+        </Pressable>
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.name}>{profile?.full_name ?? 'Organisation'}</Text>
@@ -52,13 +63,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: spacing.xl,
+    // See the volunteer profile screen: keeps Sign Out clear of the tab bar.
+    paddingBottom: spacing.base,
   },
   header: {
     fontFamily: fontFamily.bold,
     fontSize: 24,
     color: colors.textPrimary,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: spacing.base,
     marginBottom: spacing.xl,
+  },
+  gearButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gearPressed: {
+    opacity: 0.7,
   },
   card: {
     backgroundColor: colors.surface,

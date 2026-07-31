@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily } from '@/constants/theme';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
@@ -10,6 +11,13 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
  * in design-refs/ (Volunteer Home Feed.png, Organization Dashboard.png):
  * coral active, mid-gray inactive, small uppercase Inter labels.
  *
+ * A HOOK, not a constant, because the bar has to clear the device's bottom
+ * inset. A fixed `height` overrides react-navigation's own safe-area
+ * handling, so the previous flat `height: 64` pushed the labels down into
+ * the gesture bar on devices with one. Height is now 56 + inset and the
+ * bottom padding is the inset itself, so the bar grows on inset devices and
+ * stays compact on those without.
+ *
  * Deliberately un-annotated: `BottomTabNavigationOptions` isn't importable
  * here (expo-router vendors @react-navigation/bottom-tabs rather than
  * exposing it as a resolvable dependency), so the type is inferred and
@@ -17,25 +25,38 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
  * `as const` on textTransform is what keeps it a string literal rather than
  * widening to `string`, which would fail that check.
  */
-export const tabBarScreenOptions = {
-  headerShown: false,
-  tabBarActiveTintColor: colors.primary,
-  tabBarInactiveTintColor: colors.textSecondary,
-  tabBarStyle: {
-    backgroundColor: colors.background,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    height: 64,
-    paddingTop: 6,
-    paddingBottom: 8,
-  },
-  tabBarLabelStyle: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 10,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
-  },
-};
+export function useTabBarScreenOptions() {
+  const insets = useSafeAreaInsets();
+
+  return {
+    headerShown: false,
+    tabBarActiveTintColor: colors.primary,
+    tabBarInactiveTintColor: colors.textSecondary,
+    tabBarStyle: {
+      backgroundColor: colors.background,
+      borderTopColor: colors.border,
+      borderTopWidth: 1,
+      height: 56 + insets.bottom,
+      paddingTop: 6,
+      paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
+    },
+    tabBarLabelStyle: {
+      fontFamily: fontFamily.semiBold,
+      // 9.5/0.2 rather than 10/0.5: the organisation bar carries five tabs,
+      // and at the wider tracking "DASHBOARD" and "APPLICANTS" were being
+      // truncated on narrow devices. Both bars share the value so they stay
+      // visually identical.
+      fontSize: 9.5,
+      letterSpacing: 0.2,
+      textTransform: 'uppercase' as const,
+    },
+    // Without this a long label silently ellipsises instead of shrinking.
+    tabBarAllowFontScaling: false,
+    tabBarItemStyle: {
+      paddingHorizontal: 2,
+    },
+  };
+}
 
 /**
  * Builds a tabBarIcon renderer that swaps a filled glyph in on focus and an
