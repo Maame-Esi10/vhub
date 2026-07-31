@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { SignOutButton, VScoreBadge } from '@/components/ui';
+import { VScoreBadge } from '@/components/ui';
 import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
@@ -83,9 +83,14 @@ export default function VolunteerProfile() {
         <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
       </Pressable>
 
+      {/*
+        Sign Out lives in Settings (the gear above), not here — it is account
+        state, and having it on both screens made neither look canonical.
+        Info Hub is reached from the V-Score card above, which is the natural
+        question ("how was this worked out?") rather than a second row to the
+        same place.
+      */}
       <View style={styles.spacer} />
-
-      <SignOutButton />
     </SafeAreaView>
   );
 }

@@ -226,6 +226,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
+    // `flex: 1` is load-bearing, not decoration. With only maxHeight the
+    // sheet's height was `auto`, so it sized to its content — but its content
+    // is a ScrollView, which measures as zero height when its parent is
+    // unconstrained. The sheet collapsed and Apply Now showed nothing but the
+    // dark backdrop. flex gives it a definite height for the ScrollView to
+    // fill; maxHeight then caps it so the outreach behind stays partly
+    // visible.
+    flex: 1,
     maxHeight: '94%',
   },
   header: {

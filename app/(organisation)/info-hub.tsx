@@ -31,7 +31,7 @@ import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS } from '@/lib/vscore';
 export default function OrganisationInfoHub() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Info Hub" />
+      <ScreenHeader title="Info Hub" fallback="/(organisation)/profile" />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>How V-HUB works</Text>
         <Text style={styles.intro}>

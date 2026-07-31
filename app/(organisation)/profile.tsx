@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { SignOutButton } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -51,9 +50,24 @@ export default function OrganisationProfile() {
         <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
       </Pressable>
 
-      <View style={styles.spacer} />
+      <Pressable
+        style={({ pressed }) => [styles.rowCard, pressed && styles.rowCardPressed]}
+        onPress={() => router.push('/(organisation)/info-hub')}
+        accessibilityRole="button"
+        accessibilityLabel="How V-HUB works"
+      >
+        <MaterialCommunityIcons name="help-circle-outline" size={22} color={colors.primary} />
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>How V-HUB works</Text>
+          <Text style={styles.rowBody}>
+            Matching, applications, V-Score and post-event reviews explained.
+          </Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
+      </Pressable>
 
-      <SignOutButton />
+      {/* Sign Out lives in Settings (the gear above), not here. */}
+      <View style={styles.spacer} />
     </SafeAreaView>
   );
 }

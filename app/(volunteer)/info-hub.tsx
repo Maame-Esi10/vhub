@@ -31,7 +31,7 @@ export default function InfoHub() {
         This screen is pushed from the profile tab and covers the tab bar, so
         without a back control there is no way off it at all.
       */}
-      <ScreenHeader title="Info Hub" />
+      <ScreenHeader title="Info Hub" fallback="/(volunteer)/profile" />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>How V-HUB works</Text>
         <Text style={styles.intro}>

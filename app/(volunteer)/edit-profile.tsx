@@ -136,7 +136,7 @@ export default function EditVolunteerProfile() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* onBack routes through handleCancel so backing out of a dirty form
           warns instead of silently discarding. */}
-      <ScreenHeader title="Edit Professional Profile" onBack={handleCancel} />
+      <ScreenHeader title="Edit Professional Profile" onBack={handleCancel} fallback="/(volunteer)/profile" />
 
       <KeyboardAvoidingView
         style={styles.flex}

@@ -1,6 +1,5 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import {
   Avatar,
   ScreenHeader,
@@ -19,7 +18,6 @@ import { useAuthStore } from '@/stores/authStore';
  * in that PNG were deliberately not built and why.
  */
 export default function OrganisationSettings() {
-  const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
   const orgQuery = useMyOrganisationProfile(user?.id);
@@ -27,7 +25,7 @@ export default function OrganisationSettings() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Settings" />
+      <ScreenHeader title="Settings" fallback="/(organisation)/profile" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.identity}>
           <Avatar name={org?.org_name ?? 'Organisation'} uri={profile?.avatar_url} size={88} />
@@ -38,18 +36,22 @@ export default function OrganisationSettings() {
           </Text>
         </View>
 
+        {/*
+          Deliberately NOT here: "Edit Profile" and "How V-HUB works". Both
+          live on the Profile tab. Settings holds app and account state only —
+          duplicating them in two places made it unclear which was canonical.
+        */}
         <SettingsGroupLabel>ACCOUNT</SettingsGroupLabel>
+        {/*
+          Read-only: `verified` is the trust badge volunteers judge outreaches
+          by, so it is excluded from the organisation_profiles UPDATE grant and
+          set only by a service-role review. Shown here so the state is
+          visible without implying it is self-settable.
+        */}
         <SettingsRow
-          icon="account-edit-outline"
-          label="Edit Profile"
-          onPress={() => router.push('/(organisation)/edit-profile')}
-        />
-
-        <SettingsGroupLabel>SUPPORT</SettingsGroupLabel>
-        <SettingsRow
-          icon="help-circle-outline"
-          label="How V-HUB works"
-          onPress={() => router.push('/(organisation)/info-hub')}
+          icon="shield-check-outline"
+          label="Organisation Verification"
+          value={org ? (org.verified ? 'Verified' : 'Awaiting review') : '—'}
         />
 
         <View style={styles.signOutBlock}>

@@ -44,7 +44,7 @@ export default function VolunteerSettings() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Settings" />
+      <ScreenHeader title="Settings" fallback="/(volunteer)/profile" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.identity}>
           <Avatar name={profile?.full_name ?? 'Volunteer'} uri={profile?.avatar_url} size={88} />
@@ -55,12 +55,12 @@ export default function VolunteerSettings() {
           </Text>
         </View>
 
+        {/*
+          Deliberately NOT here: "Edit Profile" and "How V-HUB works". Both
+          live on the Profile tab. Settings holds app and account state only —
+          duplicating them in two places made it unclear which was canonical.
+        */}
         <SettingsGroupLabel>ACCOUNT</SettingsGroupLabel>
-        <SettingsRow
-          icon="account-edit-outline"
-          label="Edit Profile"
-          onPress={() => router.push('/(volunteer)/edit-profile')}
-        />
         {/*
           Read-only on purpose. The only identity-verification screen that
           exists is app/(auth)/verify-identity.tsx, which is a step of the
@@ -81,13 +81,6 @@ export default function VolunteerSettings() {
           icon="bell-outline"
           label="Notifications"
           onPress={() => router.push('/(volunteer)/notifications')}
-        />
-
-        <SettingsGroupLabel>SUPPORT</SettingsGroupLabel>
-        <SettingsRow
-          icon="help-circle-outline"
-          label="How V-HUB works"
-          onPress={() => router.push('/(volunteer)/info-hub')}
         />
 
         <View style={styles.signOutBlock}>

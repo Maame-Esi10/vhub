@@ -126,7 +126,7 @@ export default function EditOrganisationProfile() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* onBack routes through handleCancel so backing out of a dirty form
           warns instead of silently discarding. */}
-      <ScreenHeader title="Edit Organisation Profile" onBack={handleCancel} />
+      <ScreenHeader title="Edit Organisation Profile" onBack={handleCancel} fallback="/(organisation)/profile" />
 
       {orgQuery.isLoading ? (
         <View style={styles.centred}>

@@ -8,6 +8,13 @@ export interface ScreenHeaderProps {
   title: string;
   /** Overrides the default `router.back()`. */
   onBack?: () => void;
+  /**
+   * Where to go when there is no history to pop. REQUIRED for any screen
+   * inside a tab group: navigating to a tab screen is a tab switch, not a
+   * push, so `canGoBack()` is false and `back()` would drop the user on the
+   * group's first tab. Point this at the screen the user actually came from.
+   */
+  fallback: Parameters<ReturnType<typeof useRouter>['replace']>[0];
   /** Optional control rendered at the trailing edge, e.g. a settings gear. */
   trailing?: ReactNode;
 }
@@ -19,11 +26,14 @@ export interface ScreenHeaderProps {
  * the only way out — the Info Hub shipped without it and stranded users on
  * the screen.
  *
- * Falls back to a hard `replace` when there is nothing to pop: a screen
- * reached by deep link or by a `replace` has an empty history, and calling
- * `back()` there does nothing at all, which is the same dead end.
+ * Falls back to `replace(fallback)` when there is nothing to pop. Every
+ * screen in this app that uses this header lives inside a tab group, where
+ * navigating to a hidden (`href: null`) screen is a tab switch rather than a
+ * push — so `canGoBack()` is false and there is no history to return to.
+ * `fallback` is what makes back land on the screen the user came from
+ * instead of the group's first tab.
  */
-export function ScreenHeader({ title, onBack, trailing }: ScreenHeaderProps) {
+export function ScreenHeader({ title, onBack, fallback, trailing }: ScreenHeaderProps) {
   const router = useRouter();
 
   function handleBack() {
@@ -34,7 +44,7 @@ export function ScreenHeader({ title, onBack, trailing }: ScreenHeaderProps) {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace('/');
+      router.replace(fallback);
     }
   }
 
