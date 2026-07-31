@@ -404,3 +404,59 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   cannot touch another volunteer's row, and the organisation sees the
   resulting status. Constraining it precisely needs a `BEFORE UPDATE` trigger
   comparing `old.status` to `new.status`; deferred, not built.
+
+## Planned, not built (decided 2026-07-31)
+
+Both of these were raised, scoped, and deliberately deferred — they are not
+oversights. Build them in the Phase 4 pass, alongside the change-password flow
+and the standalone re-verification screen already noted above.
+
+- **Outreach flyer / photo upload — full Cloudinary path (Option A, owner-approved).**
+  An organisation currently cannot attach a picture or flyer when creating an
+  outreach. Owner chose the complete implementation over a UI-only placeholder,
+  on the reasoning that Cloudinary has to be stood up anyway for profile photos
+  and credential documents, so the upload path should be built once and shared.
+  Deferred until that Cloudinary work happens rather than done in isolation.
+  What it needs, in order:
+  1. `outreaches.image_url text` column, plus adding `image_url` to the
+     outreaches INSERT **and** UPDATE grant lists at the bottom of
+     `supabase/schema.sql` — it is organisation-authored, not server-computed.
+     Mirror it in `types/database.ts` (`Outreach`).
+  2. `expo-image-picker` for selection. Not currently a dependency.
+  3. A signed-upload endpoint in the serverless API (`api/`). The Cloudinary
+     API secret is a secret and must live ONLY in Vercel env vars per CLAUDE.md
+     hard rule 4 — the mobile app must never hold it. The app requests a
+     signature, then uploads directly to Cloudinary and sends back the
+     resulting URL.
+  4. UI: a picker in the create-outreach wizard (step 1 or the preview step),
+     and rendering on `OutreachPreviewCard`, the feed cards, and the outreach
+     detail header. Note the volunteer feed design
+     (`design-refs/Volunteer Home Feed.png`) already shows outreach cards with
+     a full-bleed photo behind the title, so the display side has a design to
+     match — this is the missing half of that card.
+  5. Reuse the same signed-upload endpoint to finish the "coming soon" photo
+     buttons already present on both Edit Profile screens.
+
+- **OpenStreetMap for outreach location (owner request, deferred).**
+  Outreaches currently capture region + district + a free-text
+  `location_name`. Volunteers get no map and no precise point, which matters
+  for an outreach at a named clinic or a field site with no street address.
+  Plan: let the organisation drop/adjust a pin on an OpenStreetMap view when
+  creating an outreach, store the coordinates, and show the pin (plus a
+  "directions" hand-off) on the outreach detail screen. Notes for whoever
+  builds it:
+  - OpenStreetMap specifically, not Google Maps — no API key, no billing
+    account, and no quota to exhaust, which suits a free-tier student project.
+    `react-native-maps` can be pointed at an OSM raster tile source, or use a
+    WebView with Leaflet; decide once, and check the OSM tile usage policy
+    before shipping anything that would hammer the public tile servers.
+  - Needs `outreaches.latitude numeric` + `outreaches.longitude numeric`
+    (nullable — existing outreaches have none), added to the same INSERT and
+    UPDATE grant lists as `image_url` above.
+  - `app/(volunteer)/map.tsx` already exists as a route; this is the data it
+    has been missing.
+  - Does NOT affect matching. Layer 1's Location component scores on
+    district/region equality (`lib/matching/layer1.ts`), and coordinates must
+    not quietly become a distance calculation — that would be a change to a
+    spec CLAUDE.md marks final. Coordinates are for display and directions
+    only unless the owner decides otherwise.
