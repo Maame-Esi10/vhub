@@ -328,6 +328,12 @@ export interface CreateOutreachParams {
   slotsTotal: number;
   /** A new outreach is either saved as a `draft` or published `open` immediately. */
   status: Extract<OutreachStatus, 'draft' | 'open'>;
+  /**
+   * Cloudinary URL of the flyer image, or null. Client-writable (it is in
+   * outreaches' INSERT and UPDATE grant lists) because an organisation sets
+   * it on its own listing — see supabase/schema.sql.
+   */
+  flyerUrl?: string | null;
 }
 
 /**
@@ -359,6 +365,7 @@ export function useCreateOutreach() {
           role_type: params.roleType,
           slots_total: params.slotsTotal,
           status: params.status,
+          flyer_url: params.flyerUrl ?? null,
         })
         .select()
         .single();

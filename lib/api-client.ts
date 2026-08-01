@@ -37,6 +37,8 @@ export const API_ROUTES = {
   vscore: '/api/vscore',
   applicationStatus: '/api/application-status',
   notifications: '/api/notifications',
+  uploadSignature: '/api/upload-signature',
+  verificationDocument: '/api/verification-document',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -439,6 +441,51 @@ export function sendTestPush(
   return apiPost<{ dispatched: number }>(
     API_ROUTES.notifications,
     { action: 'test-dispatch', title, body },
+    options
+  );
+}
+
+// ---------------------------------------------------------------------------
+// /api/upload-signature + /api/verification-document
+// ---------------------------------------------------------------------------
+
+export type UploadKind = 'avatar' | 'flyer' | 'credential';
+
+export interface UploadSignature {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+  resourceType: 'image' | 'raw';
+}
+
+/**
+ * Requests a short-lived signature for one upload into the caller's own
+ * Cloudinary folder. The folder comes back from the server rather than being
+ * chosen here — it is derived from the authenticated user id, so a device
+ * cannot aim an upload at someone else's assets.
+ */
+export function getUploadSignature(
+  kind: UploadKind,
+  options?: RequestOptions
+): Promise<UploadSignature> {
+  return apiPost<UploadSignature>(API_ROUTES.uploadSignature, { kind }, options);
+}
+
+/**
+ * Records an uploaded credential and moves the volunteer to
+ * `documents_pending`. Both columns are server-only; this is the sole path to
+ * either, which is what makes "in review" mean a document actually exists.
+ */
+export function recordVerificationDocument(
+  publicId: string,
+  secureUrl: string,
+  options?: RequestOptions
+): Promise<{ verificationStatus: 'documents_pending' }> {
+  return apiPost<{ verificationStatus: 'documents_pending' }>(
+    API_ROUTES.verificationDocument,
+    { publicId, secureUrl },
     options
   );
 }

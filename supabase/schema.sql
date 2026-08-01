@@ -212,6 +212,19 @@ alter table volunteer_profiles drop column if exists license_number;
 alter table volunteer_profiles drop column if exists license_verified;
 alter table volunteer_profiles add column if not exists verification_status verification_status not null default 'unverified';
 
+-- The Cloudinary URL of the credential document backing verification.
+-- Absent from volunteer_profiles' UPDATE grant list on purpose, alongside
+-- verification_status itself: /api/verification-document writes BOTH together
+-- on the service-role key, which is what makes 'documents_pending' mean a
+-- document was really uploaded rather than a state a client simply asserted.
+alter table volunteer_profiles add column if not exists credential_document_url text;
+
+-- The Cloudinary URL of an outreach's flyer image. Unlike the column above
+-- this IS client-writable (see the grant lists at the foot of this file): an
+-- organisation sets it on its own outreach, and a bad value harms only that
+-- organisation's own listing.
+alter table outreaches add column if not exists flyer_url text;
+
 drop trigger if exists trg_volunteer_profiles_updated_at on volunteer_profiles;
 create trigger trg_volunteer_profiles_updated_at
   before update on volunteer_profiles
@@ -1059,7 +1072,8 @@ grant update (
   required_category,
   role_type,
   slots_total,
-  status
+  status,
+  flyer_url
 ) on outreaches to authenticated;
 
 -- ============================================================
@@ -1129,7 +1143,8 @@ grant insert (
   required_category,
   role_type,
   slots_total,
-  status
+  status,
+  flyer_url
 ) on outreaches to authenticated;
 
 -- status omitted deliberately: it must default to 'pending' so a client can

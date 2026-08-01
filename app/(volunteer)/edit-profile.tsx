@@ -28,6 +28,9 @@ import { SKILL_CATEGORIES } from '@/constants/skills';
 import { MEDICAL_SPECIALTIES } from '@/constants/specialties';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useUpdateVolunteerProfile } from '@/hooks/useProfileEditor';
+// Direct import, not the hooks barrel: this hook reaches the native picker
+// modules. See the note in lib/cloudinary.ts.
+import { useAvatarUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import type { ExperienceLevel, VolunteerCategory } from '@/types/database';
 
@@ -73,7 +76,19 @@ export default function EditVolunteerProfile() {
     volunteerProfile?.availability_slots ?? []
   );
   const [discarding, setDiscarding] = useState(false);
+  // Repurposed from a "coming soon" notice into the upload's error dialog —
+  // the happy path needs no confirmation, since the new photo appears in the
+  // Avatar above the moment the store updates.
   const [photoNotice, setPhotoNotice] = useState(false);
+  const avatarUpload = useAvatarUpload();
+
+  function handlePickAvatar() {
+    if (!user) return;
+    avatarUpload.mutate(user.id, {
+      // A cancelled picker resolves with null and is not an error.
+      onError: () => setPhotoNotice(true),
+    });
+  }
   const [nameError, setNameError] = useState<string | null>(null);
 
   const districtOptions = useMemo(
@@ -149,17 +164,25 @@ export default function EditVolunteerProfile() {
         >
           <View style={styles.avatarBlock}>
             <Pressable
-              onPress={() => setPhotoNotice(true)}
+              onPress={handlePickAvatar}
+              disabled={avatarUpload.isPending}
               accessibilityRole="button"
               accessibilityLabel="Update profile photo"
+              accessibilityState={{ disabled: avatarUpload.isPending }}
               style={styles.avatarPress}
             >
               <Avatar name={profile?.full_name ?? 'Volunteer'} uri={profile?.avatar_url} size={96} />
               <View style={styles.avatarBadge}>
-                <MaterialCommunityIcons name="pencil" size={14} color={colors.white} />
+                <MaterialCommunityIcons
+                  name={avatarUpload.isPending ? 'progress-upload' : 'pencil'}
+                  size={14}
+                  color={colors.white}
+                />
               </View>
             </Pressable>
-            <Text style={styles.avatarCaption}>Update Profile Photo</Text>
+            <Text style={styles.avatarCaption}>
+              {avatarUpload.isPending ? 'Uploading...' : 'Update Profile Photo'}
+            </Text>
           </View>
 
           <EditSectionCard icon="account-outline" title="BASIC DETAILS">
@@ -307,9 +330,9 @@ export default function EditVolunteerProfile() {
 
       <ConfirmDialog
         visible={photoNotice}
-        icon="camera-outline"
-        title="Photo upload coming soon"
-        message="Profile photo uploads aren't switched on yet. Everything else on this screen saves normally."
+        icon="alert-circle-outline"
+        title="Photo not updated"
+        message={avatarUpload.error?.message ?? 'Please try again.'}
         confirmLabel="Got It"
         cancelLabel="Close"
         onConfirm={() => setPhotoNotice(false)}

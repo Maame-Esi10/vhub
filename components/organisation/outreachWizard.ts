@@ -19,6 +19,14 @@ export interface OutreachWizardState {
   requiredCategory: string | null;
   roleType: OutreachRoleType | null;
   slotsTotal: number;
+  /**
+   * Cloudinary URL of the flyer, or null. Uploaded as soon as it is picked
+   * rather than held as a local file and sent on submit: the wizard has four
+   * steps and an abandoned draft would otherwise leave the org waiting on an
+   * upload at the very end. An orphaned Cloudinary asset from an abandoned
+   * wizard is the accepted cost, and is cheap on the free tier.
+   */
+  flyerUrl: string | null;
 }
 
 export const INITIAL_WIZARD_STATE: OutreachWizardState = {
@@ -34,6 +42,7 @@ export const INITIAL_WIZARD_STATE: OutreachWizardState = {
   requiredCategory: null,
   roleType: null,
   slotsTotal: 5,
+  flyerUrl: null,
 };
 
 export type WizardFieldError = Partial<

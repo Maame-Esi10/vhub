@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -36,6 +37,9 @@ import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { SKILL_CATEGORIES } from '@/constants/skills';
 import { ROLE_TYPES, VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { useCreateOutreach } from '@/hooks';
+// Direct import, not the hooks barrel: this reaches the native picker
+// modules. See the note in lib/cloudinary.ts.
+import { useFlyerUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 
 const TOTAL_STEPS = 4;
@@ -48,6 +52,7 @@ export default function CreateOutreach() {
   const router = useRouter();
   const organisationId = useAuthStore((s) => s.user)?.id;
   const createOutreach = useCreateOutreach();
+  const flyerUpload = useFlyerUpload();
 
   const [step, setStep] = useState(1);
   const [state, setState] = useState<OutreachWizardState>(INITIAL_WIZARD_STATE);
@@ -55,6 +60,15 @@ export default function CreateOutreach() {
 
   function update<K extends keyof OutreachWizardState>(key: K, value: OutreachWizardState[K]) {
     setState((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handlePickFlyer() {
+    flyerUpload.mutate(undefined, {
+      onSuccess: (result) => {
+        // null means the picker was dismissed — leave any existing flyer alone.
+        if (result) update('flyerUrl', result.secureUrl);
+      },
+    });
   }
 
   const districtOptions: SelectOption[] =
@@ -114,6 +128,7 @@ export default function CreateOutreach() {
         roleType: state.roleType,
         slotsTotal: state.slotsTotal,
         status,
+        flyerUrl: state.flyerUrl,
       },
       {
         onSuccess: () => {
@@ -197,6 +212,45 @@ export default function CreateOutreach() {
                 multiline
                 accessibilityLabel="Program description"
               />
+
+              <View>
+                <Text style={styles.flyerLabel}>Flyer (optional)</Text>
+                <Pressable
+                  onPress={handlePickFlyer}
+                  disabled={flyerUpload.isPending}
+                  accessibilityRole="button"
+                  accessibilityLabel={state.flyerUrl ? 'Replace flyer image' : 'Add a flyer image'}
+                  accessibilityState={{ disabled: flyerUpload.isPending }}
+                  style={styles.flyerPicker}
+                >
+                  {state.flyerUrl ? (
+                    <Image
+                      source={{ uri: state.flyerUrl }}
+                      style={styles.flyerPreview}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.flyerEmpty}>
+                      <MaterialCommunityIcons
+                        name={flyerUpload.isPending ? 'progress-upload' : 'image-plus'}
+                        size={22}
+                        color={colors.textSecondary}
+                      />
+                      <Text style={styles.flyerEmptyText}>
+                        {flyerUpload.isPending ? 'Uploading...' : 'Add a flyer image'}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+                {state.flyerUrl ? (
+                  <Pressable onPress={() => update('flyerUrl', null)} hitSlop={8}>
+                    <Text style={styles.flyerRemove}>Remove flyer</Text>
+                  </Pressable>
+                ) : null}
+                {flyerUpload.error ? (
+                  <Text style={styles.flyerError}>{flyerUpload.error.message}</Text>
+                ) : null}
+              </View>
             </View>
           ) : null}
 
@@ -422,6 +476,50 @@ const styles = StyleSheet.create({
   },
   fieldGroup: {
     gap: spacing.lg,
+  },
+  flyerLabel: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  flyerPicker: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+  },
+  /** 16:9, matching the aspect the picker crops to. */
+  flyerPreview: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+  },
+  flyerEmpty: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: 12,
+  },
+  flyerEmptyText: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  flyerRemove: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.primary,
+    marginTop: spacing.sm,
+  },
+  flyerError: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.danger,
+    marginTop: spacing.sm,
   },
   timeRow: {
     flexDirection: 'row',

@@ -73,6 +73,12 @@ export interface VolunteerProfile {
   events_attended: number;
   declaration_signed: boolean;
   verification_status: VerificationStatus;
+  /**
+   * Cloudinary URL of the credential document. Written only by
+   * /api/verification-document on the service-role key, together with
+   * verification_status — neither is in the client's UPDATE grant list.
+   */
+  credential_document_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -107,6 +113,8 @@ export interface Outreach {
   slots_total: number;
   slots_filled: number;
   status: OutreachStatus;
+  /** Cloudinary URL of the flyer image. Client-writable by the owning org. */
+  flyer_url: string | null;
   created_at: string;
   updated_at: string;
 }

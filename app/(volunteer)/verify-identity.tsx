@@ -4,6 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, ScreenHeader } from '@/components/ui';
 import { useSignDeclaration } from '@/hooks/useSignDeclaration';
+// Imported from its own module, never the hooks barrel: useMediaUpload pulls in
+// the native picker modules, and a barrel import would drag them into every
+// screen that imports any hook. See the note in lib/cloudinary.ts.
+import { useCredentialUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
@@ -60,6 +64,7 @@ export default function VolunteerVerifyIdentity() {
   const user = useAuthStore((state) => state.user);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const signDeclaration = useSignDeclaration();
+  const credentialUpload = useCredentialUpload();
   const [confirmed, setConfirmed] = useState(false);
 
   const status = volunteerProfile?.verification_status ?? 'unverified';
@@ -131,15 +136,45 @@ export default function VolunteerVerifyIdentity() {
           </>
         )}
 
-        <Text style={styles.sectionHeading}>Credential documents</Text>
-        <View style={styles.pendingCard}>
-          <MaterialCommunityIcons name="tray-arrow-up" size={20} color={colors.textSecondary} />
-          <Text style={styles.pendingText}>
-            Document upload is not available yet. When it opens you will be able to submit a
-            credential here, and the V-HUB team reviews it manually — Ghana has no public
-            licensing-registry API, so a self-entered licence number would prove nothing.
-          </Text>
-        </View>
+        <Text style={styles.sectionHeading}>Credential document</Text>
+        {status === 'unverified' ? (
+          <>
+            <Text style={styles.body}>
+              Upload your licence, degree certificate or council registration as a PDF or photo.
+              A person on the V-HUB team reviews it — Ghana has no public licensing-registry API,
+              so a self-entered licence number would prove nothing.
+            </Text>
+
+            {!declarationSigned ? (
+              <Text style={styles.gateNote}>Sign the declaration above first.</Text>
+            ) : null}
+
+            {credentialUpload.error ? (
+              <Text style={styles.errorText}>{credentialUpload.error.message}</Text>
+            ) : null}
+
+            <Button
+              title={credentialUpload.isPending ? 'Uploading...' : 'Choose a document'}
+              variant="solid"
+              disabled={!declarationSigned || credentialUpload.isPending}
+              onPress={() => user && credentialUpload.mutate(user.id)}
+              style={styles.signButton}
+            />
+          </>
+        ) : (
+          <View style={styles.signedRow}>
+            <MaterialCommunityIcons
+              name={status === 'verified' ? 'check-circle' : 'file-check-outline'}
+              size={18}
+              color={status === 'verified' ? colors.success : colors.warning}
+            />
+            <Text style={styles.signedText}>
+              {status === 'verified'
+                ? 'Your credential has been reviewed and accepted.'
+                : 'Your document has been received and is waiting on review.'}
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -237,21 +272,10 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: spacing.base,
   },
-  pendingCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.base,
-  },
-  pendingText: {
-    flex: 1,
+  gateNote: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
-    lineHeight: 18,
-    color: colors.textSecondary,
+    color: colors.warning,
+    marginTop: spacing.sm,
   },
 });

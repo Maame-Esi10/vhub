@@ -44,6 +44,21 @@ export const env = {
   get cronSecret(): string | null {
     return process.env.CRON_SECRET?.trim() || null;
   },
+  get cloudinaryCloudName(): string {
+    return requireEnv("CLOUDINARY_CLOUD_NAME");
+  },
+  get cloudinaryApiKey(): string {
+    return requireEnv("CLOUDINARY_API_KEY");
+  },
+  /**
+   * Required, and never sent to the client. The mobile app receives only a
+   * per-upload SIGNATURE derived from it, which is scoped to one folder and
+   * one timestamp and expires -- so a leaked signature cannot be replayed
+   * into arbitrary uploads the way the raw secret could.
+   */
+  get cloudinaryApiSecret(): string {
+    return requireEnv("CLOUDINARY_API_SECRET");
+  },
   get notifyMatchThreshold(): number {
     const raw = Number(process.env.NOTIFY_MATCH_THRESHOLD);
     return Number.isFinite(raw) && raw > 0 ? raw : 75;
