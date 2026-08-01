@@ -43,6 +43,13 @@
           "color": "#FF6B6B",
           "defaultChannel": "default"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "V-HUB needs access to your photos so you can set a profile picture and add a flyer to an outreach.",
+          "cameraPermission": "V-HUB needs camera access so you can photograph a credential document for verification."
+        }
       ]
     ],
     "extra": {
