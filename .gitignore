@@ -46,3 +46,15 @@ yarn-error.*
 
 # Figma design reference exports (temporary build reference; originals live in Figma)
 design-refs/
+
+# FCM service-account private keys. Android push is relayed through Firebase
+# Cloud Messaging (Google allows no other transport), and Expo needs a service
+# account key to talk to it -- but that key is a SECRET and belongs only in
+# EAS credentials, never in the repo. Same rule as the Gemini/Resend/Supabase
+# service-role keys.
+#
+# NOTE: google-services.json is deliberately NOT ignored. It carries no secret
+# (it is embedded in every APK), and EAS builds from a git archive -- ignoring
+# it would silently drop it from the build and Android push would fail again.
+*-firebase-adminsdk-*.json
+firebase-service-account*.json
