@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "462393574938",
+    "project_id": "vhub-ef816",
+    "storage_bucket": "vhub-ef816.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:462393574938:android:1f40189eb10537e530f3a3",
+        "android_client_info": {
+          "package_name": "com.melissaotoo.vhub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAG6jfDgVDUuvtbjBYVWsl5ML0e-PDMJdA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
