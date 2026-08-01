@@ -160,7 +160,7 @@ export default function PublicOrganisationProfile() {
                 outreach={outreach}
                 onPress={
                   canOpenOutreach
-                    ? () => router.push(`/(volunteer)/outreach/${outreach.id}`)
+                    ? () => router.push(`/(volunteer)/outreach/${outreach.id}?from=/(volunteer)/feed`)
                     : undefined
                 }
               />

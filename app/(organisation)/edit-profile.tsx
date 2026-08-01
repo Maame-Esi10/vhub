@@ -107,7 +107,7 @@ export default function EditOrganisationProfile() {
         description: description.trim() || null,
         website: website.trim() || null,
       });
-      router.back();
+      router.replace('/(organisation)/profile');
     } catch {
       // Surfaced inline from `error` below; the screen stays open so edits
       // aren't thrown away by a failed save.
@@ -118,7 +118,7 @@ export default function EditOrganisationProfile() {
     if (dirty) {
       setDiscarding(true);
     } else {
-      router.back();
+      router.replace('/(organisation)/profile');
     }
   }
 
@@ -300,7 +300,7 @@ export default function EditOrganisationProfile() {
         cancelLabel="Keep Editing"
         onConfirm={() => {
           setDiscarding(false);
-          router.back();
+          router.replace('/(organisation)/profile');
         }}
         onCancel={() => setDiscarding(false)}
       />

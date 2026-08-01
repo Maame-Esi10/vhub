@@ -154,7 +154,7 @@ export default function Applications() {
           ) : (
             <VolunteerApplicationCard
               application={item.application}
-              onPress={() => router.push(`/(volunteer)/outreach/${item.application.outreach_id}`)}
+              onPress={() => router.push(`/(volunteer)/outreach/${item.application.outreach_id}?from=/(volunteer)/applications`)}
               onWithdraw={() => setWithdrawing(item.application)}
             />
           )

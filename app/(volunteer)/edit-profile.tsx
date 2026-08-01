@@ -132,7 +132,7 @@ export default function EditVolunteerProfile() {
         availabilitySlots: availability,
         bio: bio.trim() || null,
       });
-      router.back();
+      router.replace('/(volunteer)/profile');
     } catch {
       // Surfaced inline from `error` below; the screen stays open so the
       // volunteer's edits aren't thrown away by a failed save.
@@ -143,7 +143,7 @@ export default function EditVolunteerProfile() {
     if (dirty) {
       setDiscarding(true);
     } else {
-      router.back();
+      router.replace('/(volunteer)/profile');
     }
   }
 
@@ -323,7 +323,7 @@ export default function EditVolunteerProfile() {
         cancelLabel="Keep Editing"
         onConfirm={() => {
           setDiscarding(false);
-          router.back();
+          router.replace('/(volunteer)/profile');
         }}
         onCancel={() => setDiscarding(false)}
       />

@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { File } from 'expo-file-system';
+import { File, UploadType } from 'expo-file-system';
 import { getUploadSignature, type UploadKind } from '@/lib/api-client';
 
 /**
@@ -102,46 +102,56 @@ export async function uploadToCloudinary(
 ): Promise<UploadResult> {
   const signature = await getUploadSignature(kind);
 
-  const form = new FormData();
-
-  // expo-file-system's File, NOT the classic React Native `{ uri, name, type }`
-  // part. Expo SDK 54+ replaces the global fetch with its WinterCG
-  // implementation, whose multipart encoder accepts only a string, a Blob, or
-  // an object exposing bytes() -- the uri form falls through to its `else` and
-  // throws "Unsupported FormDataPart implementation". Expo's own source says
-  // so outright: "`uri` is not supported for React Native's FormData."
-  // (node_modules/expo/src/winter/fetch/convertFormData.ts).
+  // Uploaded by expo-file-system's NATIVE multipart task -- deliberately not
+  // JS FormData + fetch.
   //
-  // File `implements Blob` and provides bytes(); the encoder additionally
-  // reads `name` and `type` for the content-disposition filename and the
-  // content-type header. Those two are supplied from the PICKER rather than
-  // taken off File, whose `name` is only the basename of the cache path
-  // ("a1b2c3.jpeg") -- the real filename is worth keeping for a credential
-  // document, since a human reads it during review.
+  // Two earlier attempts failed here, and the reason is worth recording. The
+  // classic React Native file part, `{ uri, name, type }`, is valid for React
+  // Native's own FormData polyfill, but Expo SDK 54+ replaces the global fetch
+  // with its WinterCG implementation whose multipart encoder accepts only a
+  // string, a Blob, or an object exposing bytes(); the uri form falls through
+  // to its final `else` and throws "Unsupported FormDataPart implementation".
+  // Expo's source says so outright -- "`uri` is not supported for React
+  // Native's FormData" -- and its own tests assert that exact message.
+  // Swapping in a bytes()-bearing object then depends on WHICH FormData is
+  // installed as the global, since the encoder takes a different path for
+  // React Native's polyfill than for Expo's own.
+  //
+  // File.upload() sidesteps the entire question: the multipart body is built
+  // in Kotlin/Swift (see FileSystemUploadTask.kt), so no JS FormData and no
+  // fetch is involved and there is no global to guess at. It also streams from
+  // disk rather than reading the file into the JS heap, which matters for a
+  // multi-megabyte credential PDF.
+  //
+  // `parameters` must carry exactly the fields the server signed (folder and
+  // timestamp) plus the unsigned api_key. Adding a signed-eligible field here
+  // without adding it to signUpload() in api/src/server/cloudinary.ts changes
+  // the hash Cloudinary recomputes, and every upload starts failing with 401.
   const source = new File(file.uri);
-  form.append('file', {
-    bytes: () => source.bytes(),
-    name: file.name,
-    type: file.mimeType,
-  } as unknown as Blob);
-  form.append('api_key', signature.apiKey);
-  form.append('timestamp', String(signature.timestamp));
-  form.append('signature', signature.signature);
-  form.append('folder', signature.folder);
-
-  const response = await fetch(
+  const result = await source.upload(
     `https://api.cloudinary.com/v1_1/${signature.cloudName}/${signature.resourceType}/upload`,
-    { method: 'POST', body: form }
+    {
+      httpMethod: 'POST',
+      uploadType: UploadType.MULTIPART,
+      fieldName: 'file',
+      mimeType: file.mimeType,
+      parameters: {
+        api_key: signature.apiKey,
+        timestamp: String(signature.timestamp),
+        signature: signature.signature,
+        folder: signature.folder,
+      },
+    }
   );
 
-  if (!response.ok) {
+  if (result.status < 200 || result.status >= 300) {
     // Cloudinary's own error text is developer-facing ("Invalid signature ..."),
     // so it is logged rather than shown.
-    console.warn('[cloudinary] upload failed:', response.status, await response.text());
+    console.warn('[cloudinary] upload failed:', result.status, result.body);
     throw new Error('That upload did not go through. Please try again.');
   }
 
-  const json = (await response.json()) as { secure_url?: string; public_id?: string };
+  const json = JSON.parse(result.body) as { secure_url?: string; public_id?: string };
   if (!json.secure_url || !json.public_id) {
     throw new Error('Storage returned an unexpected response. Please try again.');
   }

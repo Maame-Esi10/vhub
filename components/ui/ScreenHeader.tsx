@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
@@ -9,10 +9,14 @@ export interface ScreenHeaderProps {
   /** Overrides the default `router.back()`. */
   onBack?: () => void;
   /**
-   * Where to go when there is no history to pop. REQUIRED for any screen
-   * inside a tab group: navigating to a tab screen is a tab switch, not a
-   * push, so `canGoBack()` is false and `back()` would drop the user on the
-   * group's first tab. Point this at the screen the user actually came from.
+   * Where back goes. REQUIRED for any screen inside a tab group: reaching one
+   * is a tab switch rather than a push, so `back()` unwinds the tab history
+   * and lands on the group's FIRST tab (Home) instead of the screen the user
+   * came from. Point this at that screen.
+   *
+   * A screen with several entry points should instead be navigated to with a
+   * `from` query param (`router.push('/x?from=/(volunteer)/search')`), which
+   * takes precedence over this.
    */
   fallback: Parameters<ReturnType<typeof useRouter>['replace']>[0];
   /** Optional control rendered at the trailing edge, e.g. a settings gear. */
@@ -26,26 +30,36 @@ export interface ScreenHeaderProps {
  * the only way out — the Info Hub shipped without it and stranded users on
  * the screen.
  *
- * Falls back to `replace(fallback)` when there is nothing to pop. Every
- * screen in this app that uses this header lives inside a tab group, where
- * navigating to a hidden (`href: null`) screen is a tab switch rather than a
- * push — so `canGoBack()` is false and there is no history to return to.
- * `fallback` is what makes back land on the screen the user came from
- * instead of the group's first tab.
+ * Navigates with `replace`, never `back()`. Every screen using this header
+ * lives inside a tab group, where reaching a hidden (`href: null`) screen is a
+ * tab switch rather than a push. `back()` therefore unwinds the TAB history
+ * and lands on the group's first tab — Home — regardless of where the user
+ * actually came from. That produced the reported "back goes Home" on Identity
+ * Verification, the Info Hub and Edit Profile alike.
+ *
+ * Destination is `from` (a query param, for screens with several entry points)
+ * falling back to the `fallback` prop.
  */
 export function ScreenHeader({ title, onBack, fallback, trailing }: ScreenHeaderProps) {
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
 
   function handleBack() {
     if (onBack) {
       onBack();
       return;
     }
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace(fallback);
-    }
+    // `router.back()` is deliberately NOT used, despite there being history to
+    // pop. Every screen using this header lives inside a tab group, where
+    // reaching it is a tab switch rather than a push -- so back() unwinds the
+    // TAB history and lands on the group's first tab (Home), not on the screen
+    // the user actually came from. That was reported on Identity
+    // Verification, the Info Hub and Edit Profile alike, and the shared cause
+    // is this one line.
+    //
+    // `from` wins when supplied, for screens with more than one entry point;
+    // `fallback` is the single sensible origin otherwise.
+    router.replace((from as ScreenHeaderProps['fallback']) ?? fallback);
   }
 
   return (

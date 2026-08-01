@@ -91,7 +91,7 @@ export default function Notifications() {
     // outreach_id is a real column, so it stays correct even for a payload
     // shape that predates a later change to `data`.
     if (notification.outreach_id) {
-      router.push(`/(volunteer)/outreach/${notification.outreach_id}`);
+      router.push(`/(volunteer)/outreach/${notification.outreach_id}?from=/(volunteer)/notifications`);
       return;
     }
     if (notification.type === 'application_status') {

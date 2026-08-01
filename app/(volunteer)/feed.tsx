@@ -162,7 +162,7 @@ export default function Feed() {
             outreach={item.outreach}
             matchScore={item.matchScore}
             onPressScore={item.breakdown ? () => setBreakdownFor(item) : undefined}
-            onPress={() => router.push(`/(volunteer)/outreach/${item.outreach.id}`)}
+            onPress={() => router.push(`/(volunteer)/outreach/${item.outreach.id}?from=/(volunteer)/feed`)}
           />
         )}
         ListEmptyComponent={

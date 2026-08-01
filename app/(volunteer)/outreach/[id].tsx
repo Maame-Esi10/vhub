@@ -33,7 +33,7 @@ const STATUS_MESSAGE: Record<ApplicationStatus, string> = {
 
 export default function OutreachDetail() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const outreachId = typeof id === 'string' ? id : undefined;
 
   const user = useAuthStore((state) => state.user);
@@ -129,7 +129,16 @@ export default function OutreachDetail() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back" hitSlop={12}>
+        {/* replace(from), not back(): this screen sits in a tab group, where
+            back() unwinds the TAB history onto the first tab (Home) rather
+            than the screen the user came from. It has five entry points, so
+            the origin is passed in as `from`. */}
+        <Pressable
+          onPress={() => router.replace((from ?? '/(volunteer)/feed') as never)}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={12}
+        >
           <MaterialCommunityIcons name="arrow-left" size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Outreach Detail</Text>

@@ -133,7 +133,7 @@ export default function Schedule() {
 
           return (
             <Pressable
-              onPress={() => router.push(`/(volunteer)/outreach/${outreach.id}`)}
+              onPress={() => router.push(`/(volunteer)/outreach/${outreach.id}?from=/(volunteer)/schedule`)}
               accessibilityRole="button"
               accessibilityLabel={`${outreach.title} at ${startLabel}`}
               style={({ pressed }) => [styles.eventRow, pressed && styles.pressed]}

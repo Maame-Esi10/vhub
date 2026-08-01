@@ -154,7 +154,8 @@ export default function ChangePassword() {
           style={styles.submit}
         />
 
-        <Pressable onPress={() => router.back()} style={styles.cancel}>
+        {/* replace, not back(): inside a tab group back() lands on Home. */}
+        <Pressable onPress={() => router.replace('/(volunteer)/settings')} style={styles.cancel}>
           <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
       </ScrollView>
