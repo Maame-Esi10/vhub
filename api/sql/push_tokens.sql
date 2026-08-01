@@ -8,6 +8,17 @@
 -- Only the owning user (or the service-role API, which bypasses RLS
 -- entirely) may read/write their own tokens -- nobody should be able to list
 -- or guess another user's push token.
+--
+-- MIRRORED IN supabase/schema.sql (same arrangement as skill_match_cache).
+-- The two must stay identical -- edit one, edit the other. Running either is
+-- enough; running both is harmless.
+--
+-- The FK to profiles(id) is load-bearing beyond referential integrity:
+-- PostgREST can only embed across a declared FK. It does NOT make
+-- `volunteer_profiles -> push_tokens` a one-hop embed -- those two are
+-- siblings pointing at profiles, not related to each other -- which is why
+-- notifyCandidates in src/app/api/match/route.ts nests push_tokens INSIDE
+-- its profiles embed rather than selecting it alongside.
 
 create table if not exists push_tokens (
   id uuid primary key default gen_random_uuid(),

@@ -16,13 +16,14 @@ import { useAuthStore } from '@/stores/authStore';
  * Volunteer Settings, per design-refs/Settings.png: avatar + identity block,
  * grouped rows, destructive sign-out at the bottom.
  *
- * Three rows in that PNG were deliberately NOT built, because V-HUB has no
+ * Two rows in that PNG remain deliberately NOT built, because V-HUB has no
  * such features and a row that goes nowhere is worse than no row:
  *   - "Linked Accounts" — there is no OAuth/social linking; auth is
  *     email+password through Supabase only.
  *   - "Language" (showing "English") — the app is not internationalised, so
  *     the control would have exactly one option.
- *   - "Account Security" — there is no password-change or 2FA flow yet.
+ * "Account Security" now exists and opens the change-password screen; 2FA is
+ * still not offered.
  * The PNG's "Premium Member" subtitle was likewise dropped: V-HUB has no
  * paid tier. The V-Score band shown in its place is a real status this
  * volunteer actually has.
@@ -62,18 +63,24 @@ export default function VolunteerSettings() {
         */}
         <SettingsGroupLabel>ACCOUNT</SettingsGroupLabel>
         {/*
-          Read-only on purpose. The only identity-verification screen that
-          exists is app/(auth)/verify-identity.tsx, which is a step of the
-          onboarding wizard: it reads useOnboardingStore (empty outside that
-          flow) and submits useCompleteOnboarding, so linking here would let
-          a volunteer overwrite their saved category, skills, specialties and
-          availability with blanks. A standalone re-verification flow needs
-          to exist before this row can become tappable.
+          Points at app/(volunteer)/verify-identity.tsx, NOT the (auth) screen
+          of the same name. The (auth) one is a step of the onboarding wizard
+          and submits useOnboardingStore, which is empty outside that flow —
+          linking there would blank a volunteer's saved category, skills,
+          specialties and availability. The volunteer-group screen shares no
+          submit path with the wizard and writes only declaration_signed.
         */}
         <SettingsRow
           icon="shield-check-outline"
           label="Identity Verification"
           value={verificationLabel}
+          onPress={() => router.push('/(volunteer)/verify-identity')}
+        />
+        <SettingsRow
+          icon="lock-outline"
+          label="Account Security"
+          value="Change password"
+          onPress={() => router.push('/(volunteer)/change-password')}
         />
 
         <SettingsGroupLabel>PREFERENCES</SettingsGroupLabel>

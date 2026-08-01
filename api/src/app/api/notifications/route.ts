@@ -2,7 +2,7 @@ import { z } from "zod";
 import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
-import { dispatchExpoPush } from "../../../server/expoPush";
+import { notifyUsers } from "../../../server/notify";
 import { assertCronSecret, sendEventReminders } from "../../../server/eventReminders";
 
 export const runtime = "nodejs";
@@ -103,8 +103,17 @@ async function testDispatch(userId: string, title: string, message: string) {
     throw Errors.badRequest("No push token registered for this account yet -- call action: 'register' first.");
   }
 
-  await dispatchExpoPush(
-    tokens.map((t) => ({ to: t.expo_push_token as string, title, body: message, data: { type: "test" } }))
-  );
+  // Keeps the "no token registered" guard above -- this action exists to prove
+  // the PUSH path works, so having nothing to push to is a real failure here,
+  // unlike the four production sites where the in-app row stands on its own.
+  await notifyUsers([
+    {
+      userId,
+      type: "test",
+      title,
+      body: message,
+      tokens: tokens.map((t) => t.expo_push_token as string),
+    },
+  ]);
   return { dispatched: tokens.length };
 }

@@ -17,7 +17,7 @@ import {
   upsertSkillCacheResults,
   type OrderedSkillPair,
 } from "../../../server/skillCache";
-import { dispatchExpoPush } from "../../../server/expoPush";
+import { notifyUsers, type UserNotification } from "../../../server/notify";
 import { env } from "../../../server/env";
 
 export const runtime = "nodejs";
@@ -582,8 +582,11 @@ interface CandidateRow {
   skill_tags: string[] | null;
   experience_level: Layer1VolunteerInput["experience_level"];
   availability_slots: string[] | null;
-  profile: { region: string | null; district: string | null } | null;
-  push_tokens: Array<{ expo_push_token: string }> | null;
+  profile: {
+    region: string | null;
+    district: string | null;
+    push_tokens: Array<{ expo_push_token: string }> | null;
+  } | null;
 }
 
 async function notifyCandidates(outreach: Record<string, unknown>) {
@@ -609,8 +612,7 @@ async function notifyCandidates(outreach: Record<string, unknown>) {
     .select(
       `
       id, category, skill_tags, experience_level, availability_slots,
-      profile:profiles!inner ( region, district ),
-      push_tokens ( expo_push_token )
+      profile:profiles!inner ( region, district, push_tokens ( expo_push_token ) )
     `
     )
     .eq("verification_status", "verified");
@@ -628,13 +630,20 @@ async function notifyCandidates(outreach: Record<string, unknown>) {
   const outreachInput = toOutreachInput(outreach);
   const threshold = env.notifyMatchThreshold;
 
-  const messages: Array<{ to: string; title: string; body: string; data: Record<string, unknown> }> = [];
+  const pending: UserNotification[] = [];
   const notifiedVolunteerIds: string[] = [];
 
   for (const candidate of candidates) {
     if (alreadyApplied.has(candidate.id)) continue;
-    const tokens = candidate.push_tokens ?? [];
-    if (tokens.length === 0) continue;
+    // Nested under `profile`, not a sibling embed: push_tokens.user_id points
+    // at profiles(id), and volunteer_profiles does too, so the two are
+    // siblings rather than directly related -- PostgREST cannot hop straight
+    // from volunteer_profiles to push_tokens. See supabase/schema.sql.
+    //
+    // No longer skipped when empty: a tokenless volunteer still gets the
+    // in-app notification row, which is the durable record. `notified` in the
+    // response therefore now means "recorded for", not "pushed to".
+    const tokens = candidate.profile?.push_tokens ?? [];
 
     const volunteerInput: Layer1VolunteerInput = {
       category: candidate.category,
@@ -652,16 +661,17 @@ async function notifyCandidates(outreach: Record<string, unknown>) {
     if (total < threshold) continue;
 
     notifiedVolunteerIds.push(candidate.id);
-    for (const token of tokens) {
-      messages.push({
-        to: token.expo_push_token,
-        title: "New high-match outreach",
-        body: `${outreach.title as string} - ${Math.round(total)}% match for your profile.`,
-        data: { type: "new_match", outreachId },
-      });
-    }
+    pending.push({
+      userId: candidate.id,
+      type: "new_match",
+      title: "New high-match outreach",
+      body: `${outreach.title as string} - ${Math.round(total)}% match for your profile.`,
+      outreachId,
+      data: { outreachId, matchScore: Math.round(total) },
+      tokens: tokens.map((t) => t.expo_push_token),
+    });
   }
 
-  await dispatchExpoPush(messages);
+  await notifyUsers(pending);
   return { outreachId, notified: notifiedVolunteerIds };
 }

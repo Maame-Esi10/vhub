@@ -4,6 +4,22 @@ export { useSignUp } from './useSignUp';
 export type { SignUpParams, SignUpResult } from './useSignUp';
 export { useCompleteOnboarding } from './useCompleteOnboarding';
 export { useSignOut } from './useSignOut';
+export { usePushRegistration } from './usePushRegistration';
+export { useChangePassword, MIN_PASSWORD_LENGTH } from './useChangePassword';
+export type { ChangePasswordParams } from './useChangePassword';
+export { useSignDeclaration } from './useSignDeclaration';
+export {
+  notificationKeys,
+  useNotifications,
+  useMarkNotificationsRead,
+  filterNotifications,
+  unreadCount,
+} from './useNotifications';
+export type {
+  AppNotification,
+  NotificationFilter,
+  NotificationType,
+} from './useNotifications';
 export {
   outreachKeys,
   useOrganisationOutreaches,

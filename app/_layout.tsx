@@ -4,7 +4,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import {
   useFonts,
   Inter_400Regular,
@@ -12,7 +13,16 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
-import { useAuthGuard } from '@/hooks';
+import { useAuthGuard, usePushRegistration } from '@/hooks';
+import { configureNotificationHandler } from '@/lib/push';
+import {
+  configureOnlineManager,
+  queryPersister,
+  shouldPersistQuery,
+  QUERY_CACHE_BUSTER,
+  QUERY_CACHE_MAX_AGE_MS,
+} from '@/lib/offline';
+import { OfflineBanner } from '@/components/ui';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { getSplashWordmarkFontSize } from '@/constants/logoSizes';
 
@@ -20,7 +30,22 @@ SplashScreen.preventAutoHideAsync().catch(() => {
   // no-op: splash screen may already be hidden (e.g. web)
 });
 
-const queryClient = new QueryClient();
+// Module scope, not an effect: Expo requires the handler to be registered
+// before any notification can be delivered, which includes one that arrives
+// during the first render pass.
+configureNotificationHandler();
+
+// gcTime must be at least the persisted cache's max age. React Query's 5-minute
+// default would evict a query from memory long before the on-disk copy expired,
+// and the persister writes whatever is in memory -- so the cache would quietly
+// empty itself and offline would show nothing.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { gcTime: QUERY_CACHE_MAX_AGE_MS },
+  },
+});
+
+configureOnlineManager();
 
 /** Minimum time the JS splash stays up, even if fonts/session resolve sooner. */
 const MIN_SPLASH_DISPLAY_MS = 1500;
@@ -65,6 +90,8 @@ function SplashScreenView() {
 
 function RootNavigator() {
   const { loading: authLoading } = useAuthGuard();
+  // No-op until a signed-in user with a profile row exists; see the hook.
+  usePushRegistration();
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -94,6 +121,9 @@ function RootNavigator() {
   return (
     <>
       <Stack screenOptions={{ headerShown: false }} />
+      {/* Above the Stack so it overlays every screen rather than being
+          re-implemented per screen and forgotten on half of them. */}
+      <OfflineBanner />
       <StatusBar style="auto" />
     </>
   );
@@ -101,11 +131,19 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister: queryPersister,
+        maxAge: QUERY_CACHE_MAX_AGE_MS,
+        buster: QUERY_CACHE_BUSTER,
+        dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
+      }}
+    >
       <SafeAreaProvider>
         <RootNavigator />
       </SafeAreaProvider>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   );
 }
 

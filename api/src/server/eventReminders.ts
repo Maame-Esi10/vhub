@@ -1,6 +1,6 @@
 import { Errors } from "./httpErrors";
 import { getSupabaseAdmin } from "./supabaseAdmin";
-import { dispatchExpoPush } from "./expoPush";
+import { notifyUsers } from "./notify";
 import { env } from "./env";
 
 /**
@@ -80,16 +80,21 @@ export async function sendEventReminders(): Promise<{ remindersSent: number }> {
         .from("push_tokens")
         .select("expo_push_token")
         .eq("user_id", application.volunteer_id);
-      if (tokens?.length) {
-        await dispatchExpoPush(
-          tokens.map((t) => ({
-            to: t.expo_push_token as string,
-            title: "Event reminder",
-            body: `${outreach.title} starts in about 24 hours${outreach.location_name ? ` at ${outreach.location_name}` : ""}.`,
-            data: { type: "event_reminder", outreachId: outreach.id },
-          }))
-        );
-      }
+      // Not gated on having a token -- notifyUsers records the in-app row
+      // either way, and reminder_sent_at is stamped below regardless, so a
+      // tokenless volunteer would otherwise be marked reminded with nothing
+      // to show for it.
+      await notifyUsers([
+        {
+          userId: application.volunteer_id as string,
+          type: "event_reminder",
+          title: "Event reminder",
+          body: `${outreach.title} starts in about 24 hours${outreach.location_name ? ` at ${outreach.location_name}` : ""}.`,
+          outreachId: outreach.id as string,
+          data: { outreachId: outreach.id },
+          tokens: (tokens ?? []).map((t) => t.expo_push_token as string),
+        },
+      ]);
       await admin
         .from("applications")
         .update({ reminder_sent_at: new Date().toISOString() })

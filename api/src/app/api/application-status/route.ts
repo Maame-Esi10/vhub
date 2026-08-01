@@ -4,7 +4,7 @@ import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { sendApplicationStatusEmail, type ApplicationStatusEmailKind } from "../../../server/resend";
-import { dispatchExpoPush } from "../../../server/expoPush";
+import { notifyUsers } from "../../../server/notify";
 
 export const runtime = "nodejs";
 
@@ -218,13 +218,18 @@ async function pushApplicant(
   kind: ApplicationStatusEmailKind
 ): Promise<void> {
   const { data: tokens } = await admin.from("push_tokens").select("expo_push_token").eq("user_id", volunteerId);
-  if (!tokens?.length) return;
-  await dispatchExpoPush(
-    tokens.map((t) => ({
-      to: t.expo_push_token as string,
+  // NOT gated on having a token: notifyUsers records the in-app notification
+  // row regardless, so a volunteer who declined the OS permission prompt (or
+  // is between devices) still sees the decision on the Notifications screen.
+  await notifyUsers([
+    {
+      userId: volunteerId,
+      type: "application_status",
       title: kind === "accepted" ? "You're confirmed!" : "Application update",
       body: `${outreach.title}: your application is now ${kind}.`,
-      data: { type: "application_status", outreachId: outreach.id, status: kind },
-    }))
-  );
+      outreachId: outreach.id,
+      data: { outreachId: outreach.id, status: kind },
+      tokens: (tokens ?? []).map((t) => t.expo_push_token as string),
+    },
+  ]);
 }

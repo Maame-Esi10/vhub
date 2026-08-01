@@ -10,3 +10,5 @@ export { FullApplicationSheet, MOTIVATION_LIMIT } from './FullApplicationSheet';
 export type { FullApplicationSheetProps } from './FullApplicationSheet';
 export { WithdrawSheet } from './WithdrawSheet';
 export type { WithdrawSheetProps } from './WithdrawSheet';
+export { NotificationRow, formatRelativeTime } from './NotificationRow';
+export type { NotificationRowProps } from './NotificationRow';

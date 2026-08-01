@@ -10,6 +10,7 @@ export type { ConfirmDialogProps, ConfirmDialogTone } from './ConfirmDialog';
 export { useTabBarScreenOptions, tabBarIcon } from './tabBarOptions';
 export { ScreenHeader } from './ScreenHeader';
 export type { ScreenHeaderProps } from './ScreenHeader';
+export { OfflineBanner } from './OfflineBanner';
 export {
   InfoSection,
   InfoBody,

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ import type { FilterChipOption, SelectOption } from '@/components/ui';
 import { MatchBreakdownSheet, OutreachFeedCard } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { GHANA_REGIONS } from '@/constants/ghana-locations';
-import { useRankedFeed } from '@/hooks';
+import { unreadCount, useNotifications, useRankedFeed } from '@/hooks';
 import type { RankedFeedItem } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachRoleType } from '@/types/database';
@@ -48,6 +48,10 @@ export default function Feed() {
   const feed = feedQuery.data;
   const items = feed?.items ?? [];
 
+  // Shares the cached notifications list with the Notifications screen, so
+  // opening it and marking things read clears this dot without a refetch.
+  const unread = unreadCount(useNotifications().data ?? []);
+
   /** The card whose match pill was tapped, or null when the sheet is closed. */
   const [breakdownFor, setBreakdownFor] = useState<RankedFeedItem | null>(null);
 
@@ -68,6 +72,20 @@ export default function Feed() {
               : 'Find outreaches that need you'}
           </Text>
         </View>
+        <Pressable
+          onPress={() => router.push('/(volunteer)/notifications')}
+          accessibilityRole="button"
+          accessibilityLabel={
+            unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'
+          }
+          hitSlop={8}
+          style={({ pressed }) => [styles.bellButton, pressed && styles.pressed]}
+        >
+          <MaterialCommunityIcons name="bell-outline" size={20} color={colors.textPrimary} />
+          {/* Dot rather than a count: the exact number does not change what
+              the user does next, and a two-digit badge overflows this circle. */}
+          {unread > 0 && <View style={styles.bellDot} />}
+        </Pressable>
       </View>
 
       <View style={styles.filters}>
@@ -204,6 +222,31 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+  },
+  bellButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellDot: {
+    position: 'absolute',
+    top: 8,
+    right: 9,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    // Matches the button fill so the dot reads as sitting on top of the bell
+    // rather than merging with the icon's outline.
+    borderWidth: 1.5,
+    borderColor: colors.background,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   greeting: {
     fontFamily: fontFamily.bold,

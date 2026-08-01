@@ -729,6 +729,135 @@ alter table skill_match_cache enable row level security;
 -- Intentionally no policies: only service_role (which bypasses RLS) may access this table.
 
 -- ============================================================
+-- push_tokens — Expo push tokens, one row per (user, device).
+--
+-- MIRRORS api/sql/push_tokens.sql, which is the api/ project's self-contained
+-- copy (same arrangement as skill_match_cache above). Both are idempotent and
+-- must stay identical -- edit one, edit the other.
+--
+-- One row per device rather than a single column on profiles: Expo issues a
+-- token per app install, so one account on a phone and a tablet has two and
+-- both should receive a push. The unique pair is what makes the API's
+-- `.upsert(..., { onConflict: "user_id,expo_push_token" })` idempotent -- the
+-- app re-registers on every launch, since Expo may rotate a token silently.
+--
+-- FK to profiles(id), not auth.users(id): PostgREST can only embed across a
+-- declared FK, and /api/match reaches tokens from a volunteer_profiles scan.
+-- profiles is the table both sides join to. This does NOT make
+-- volunteer_profiles -> push_tokens a one-hop embed (they are siblings
+-- pointing at profiles, not related to each other), which is why that query
+-- nests push_tokens INSIDE its profiles embed -- see notifyCandidates in
+-- api/src/app/api/match/route.ts.
+--
+-- Own-row RLS rather than the service-role-only posture skill_match_cache
+-- uses: the mobile app registers and (at sign-out) deletes its OWN token, and
+-- `with check (user_id = auth.uid())` is what stops a client registering its
+-- token against someone else's id to mirror their notification stream.
+-- No column-level GRANT block is needed here (unlike profiles/applications
+-- etc. below): every column is either the client's own to write or DB-managed,
+-- and forging created_at/updated_at achieves nothing.
+--
+-- The serverless routes read OTHER users' tokens (pushing an acceptance to a
+-- promoted volunteer) on the service-role key, which bypasses RLS entirely.
+-- That is expected, and is why no cross-user policy exists or should be added.
+-- ============================================================
+create table if not exists push_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  expo_push_token text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, expo_push_token)
+);
+
+drop trigger if exists trg_push_tokens_updated_at on push_tokens;
+create trigger trg_push_tokens_updated_at
+  before update on push_tokens
+  for each row execute function set_updated_at();
+
+create index if not exists idx_push_tokens_user_id on push_tokens (user_id);
+
+alter table push_tokens enable row level security;
+
+drop policy if exists "push_tokens_select_own" on push_tokens;
+create policy "push_tokens_select_own"
+  on push_tokens for select
+  to authenticated
+  using (user_id = auth.uid());
+
+drop policy if exists "push_tokens_insert_own" on push_tokens;
+create policy "push_tokens_insert_own"
+  on push_tokens for insert
+  to authenticated
+  with check (user_id = auth.uid());
+
+drop policy if exists "push_tokens_update_own" on push_tokens;
+create policy "push_tokens_update_own"
+  on push_tokens for update
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+drop policy if exists "push_tokens_delete_own" on push_tokens;
+create policy "push_tokens_delete_own"
+  on push_tokens for delete
+  to authenticated
+  using (user_id = auth.uid());
+
+-- ============================================================
+-- notifications — the in-app notification feed (design-refs/Notifications.png).
+--
+-- An Expo push is fire-and-forget; once the OS banner is dismissed it is gone.
+-- The screen needs day-grouped history and a per-row read state, so every
+-- server dispatch site also writes a row here and the screen reads THIS table
+-- rather than the OS notification tray.
+--
+-- No insert policy, deliberately: rows are written only by the serverless API
+-- on the service-role key. A user able to insert could fabricate a "Documents
+-- Verified" or "accepted" entry for themselves, and this screen is precisely
+-- where someone goes to confirm such a claim.
+--
+-- Update is narrowed to read_at by the COLUMN GRANT below, not by the policy:
+-- RLS restricts rows, never columns, so without it "mark as read" would also
+-- permit rewriting title/body/type on one's own notifications -- reintroducing
+-- the forgery the missing insert policy exists to prevent.
+--
+-- No delete policy: the design offers mark-all-read, not deletion.
+-- ============================================================
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  type text not null check (type in ('new_match', 'application_status', 'event_reminder', 'test')),
+  title text not null,
+  body text not null,
+  outreach_id uuid references outreaches(id) on delete cascade,
+  data jsonb not null default '{}'::jsonb,
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_notifications_user_created
+  on notifications (user_id, created_at desc);
+
+alter table notifications enable row level security;
+
+drop policy if exists "notifications_select_own" on notifications;
+create policy "notifications_select_own"
+  on notifications for select
+  to authenticated
+  using (user_id = auth.uid());
+
+drop policy if exists "notifications_update_own" on notifications;
+create policy "notifications_update_own"
+  on notifications for update
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+revoke update on notifications from authenticated;
+grant update (read_at) on notifications to authenticated;
+
+-- ============================================================
 -- Public discovery views.
 --
 -- This is the FOLLOW-UP promised on profiles_select_authenticated: the

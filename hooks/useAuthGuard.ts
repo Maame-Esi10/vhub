@@ -321,8 +321,15 @@ export function useAuthGuard() {
     const inAuthGroup = groupSegment === '(auth)';
     const authScreen = segmentList[1];
 
+    // app/offline.tsx sits outside every route group on purpose: the offline
+    // banner is rendered by the root layout and can be tapped from anywhere,
+    // including the auth screens. Treated like (auth) by every rule below --
+    // otherwise a signed-out user tapping it is thrown straight back to
+    // welcome, and a half-onboarded volunteer can never see it at all.
+    const atOffline = groupSegment === 'offline';
+
     if (!user) {
-      if (!inAuthGroup) {
+      if (!inAuthGroup && !atOffline) {
         router.replace('/(auth)/welcome');
       }
       return;
@@ -360,7 +367,7 @@ export function useAuthGuard() {
     if (onboardingIncomplete) {
       // Anywhere inside (auth) is fine — welcome, login, register, and every
       // wizard step. Only pull them out of the root or a tab group.
-      if (!inAuthGroup) {
+      if (!inAuthGroup && !atOffline) {
         router.replace('/(auth)/welcome');
       }
       return;
