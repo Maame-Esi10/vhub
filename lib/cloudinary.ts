@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { getUploadSignature, type UploadKind } from '@/lib/api-client';
 
 /**
@@ -102,11 +103,24 @@ export async function uploadToCloudinary(
   const signature = await getUploadSignature(kind);
 
   const form = new FormData();
-  // React Native's FormData accepts this {uri, name, type} shape for files;
-  // it is not the web File object and does not read the file into JS memory,
-  // which is what keeps a large PDF from blowing the JS heap.
+
+  // expo-file-system's File, NOT the classic React Native `{ uri, name, type }`
+  // part. Expo SDK 54+ replaces the global fetch with its WinterCG
+  // implementation, whose multipart encoder accepts only a string, a Blob, or
+  // an object exposing bytes() -- the uri form falls through to its `else` and
+  // throws "Unsupported FormDataPart implementation". Expo's own source says
+  // so outright: "`uri` is not supported for React Native's FormData."
+  // (node_modules/expo/src/winter/fetch/convertFormData.ts).
+  //
+  // File `implements Blob` and provides bytes(); the encoder additionally
+  // reads `name` and `type` for the content-disposition filename and the
+  // content-type header. Those two are supplied from the PICKER rather than
+  // taken off File, whose `name` is only the basename of the cache path
+  // ("a1b2c3.jpeg") -- the real filename is worth keeping for a credential
+  // document, since a human reads it during review.
+  const source = new File(file.uri);
   form.append('file', {
-    uri: file.uri,
+    bytes: () => source.bytes(),
     name: file.name,
     type: file.mimeType,
   } as unknown as Blob);
