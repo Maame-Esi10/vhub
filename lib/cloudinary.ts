@@ -147,7 +147,20 @@ export async function uploadToCloudinary(
   if (result.status < 200 || result.status >= 300) {
     // Cloudinary's own error text is developer-facing ("Invalid signature ..."),
     // so it is logged rather than shown.
+    //
+    // cloudName and apiKey are logged alongside it because a 401 here is almost
+    // always a credential-pairing problem, and neither value is secret -- the
+    // api_key travels in the upload request in plain sight. Seeing WHICH key
+    // the server signed with is the difference between diagnosing this in one
+    // upload and guessing at a dashboard. The secret is never logged, not even
+    // its length.
     console.warn('[cloudinary] upload failed:', result.status, result.body);
+    console.warn(
+      '[cloudinary] signed by cloud=%s api_key=%s folder=%s',
+      signature.cloudName,
+      signature.apiKey,
+      signature.folder
+    );
     throw new Error('That upload did not go through. Please try again.');
   }
 

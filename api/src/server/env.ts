@@ -8,8 +8,14 @@
  * it never leaks the variable's value, only its name.
  */
 
+/**
+ * Trims because these values are pasted into a dashboard by hand. A trailing
+ * newline is invisible there but not to a consumer: the Cloudinary secret is
+ * fed straight into a SHA-1, so one stray space makes every signed upload fail
+ * with a 401 whose string-to-sign looks perfectly correct.
+ */
 function requireEnv(name: string): string {
-  const value = process.env[name];
+  const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
