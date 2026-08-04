@@ -27,6 +27,10 @@ export const colors = {
   surface: '#F3F4F6',
   inputBg: '#F3F4F6',
 
+  // One step lighter than `surface`, from the same neutral ramp. For card
+  // fills that want a tint without reading as an input field.
+  surfaceSubtle: '#F9FAFB',
+
   // Text.
   textPrimary: '#111827', // headings, near-black
   textSecondary: '#6B7280', // body / placeholder text, mid gray

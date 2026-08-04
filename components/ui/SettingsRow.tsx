@@ -79,21 +79,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // The title gets a guaranteed FLOOR, not the leftovers.
+  //
+  // `flex: 1` here was the bug: it sets flexBasis to 0, so the title
+  // contributed nothing to the initial layout and only grew into whatever the
+  // value had not already claimed at its full content width. With a short
+  // value ("Verified") that was plenty; with a long one ("Login email &
+  // password") almost nothing remained and the title broke mid-word into a
+  // vertical column of letters. Capping the value with maxWidth did not help,
+  // because capping what the value MAY take still reserves nothing for the
+  // title.
+  //
+  // flexBasis gives the title a real starting share, flexShrink: 0 stops it
+  // being squeezed below that, and flexGrow lets it reclaim the space when
+  // the value is short -- so rows like "Identity Verification" lay out
+  // exactly as they do today.
   label: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 0,
+    flexBasis: '55%',
     fontFamily: fontFamily.medium,
     fontSize: 15,
     color: colors.textPrimary,
   },
-  // `flex: 1` on the label means its flex BASIS is 0, so it only claims what
-  // is left after the value has taken its intrinsic width. Without a shrink
-  // rule here, a long value (an email address) took the full row and squeezed
-  // the label to roughly one character per line -- a tall vertical column of
-  // letters. flexShrink lets the value give way instead, and maxWidth
-  // guarantees the label keeps half the row no matter what it is passed.
   value: {
     flexShrink: 1,
-    maxWidth: '50%',
     textAlign: 'right',
     fontFamily: fontFamily.regular,
     fontSize: 13,

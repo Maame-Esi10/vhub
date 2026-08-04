@@ -415,16 +415,15 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     color: colors.white,
   },
-  // Exactly the EditSectionCard treatment (components/ui/EditSectionCard.tsx):
-  // background fill, radius.lg, hairline border, padding base. That is this
-  // app's card language and it carries NO shadow -- nothing else in the
-  // codebase does. A grey `surface` fill was the odd one out here, because
-  // `surface` is the disabled-input/inset colour, not a card colour.
+  // Tinted card: a lighter grey than `surface` so it reads as a grouped panel
+  // rather than as an input field, with EditSectionCard's radius, padding and
+  // hairline border so it sits with the rest of the app. No shadow -- nothing
+  // else in the codebase is raised.
   card: {
     marginTop: spacing.base,
     padding: spacing.base,
     borderRadius: radius.lg,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
     gap: spacing.md,
