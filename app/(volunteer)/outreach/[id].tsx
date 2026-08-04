@@ -154,23 +154,57 @@ export default function OutreachDetail() {
           <Text style={styles.heroTitle}>{outreach.title}</Text>
         </View>
 
+        {/*
+          Built from a list rather than four hand-placed rows so first/last
+          spacing and the hairline dividers stay correct when the optional
+          role row is absent -- otherwise the divider under "slots" would be
+          the card's last visible line whenever role_type is null.
+        */}
         <View style={styles.card}>
-          <DetailRow icon="map-marker-outline">
-            {[outreach.location_name, outreach.district, outreach.region].filter(Boolean).join(', ') ||
-              'Location to be confirmed'}
-          </DetailRow>
-          <DetailRow icon="calendar-outline">
-            {formatEventDate(outreach.date)}
-            {timeRange ? ` · ${timeRange}` : ''}
-          </DetailRow>
-          <DetailRow icon="account-multiple-outline">
-            {isFull ? 'All slots filled' : `${slotsLeft} of ${outreach.slots_total} slots open`}
-          </DetailRow>
-          {outreach.role_type ? (
-            <DetailRow icon="stethoscope">
-              {outreach.role_type === 'clinical' ? 'Clinical role' : 'Support role'}
+          {(
+            [
+              {
+                icon: 'map-marker-outline',
+                label: 'LOCATION',
+                value:
+                  [outreach.location_name, outreach.district, outreach.region]
+                    .filter(Boolean)
+                    .join(', ') || 'Location to be confirmed',
+              },
+              {
+                icon: 'calendar-outline',
+                label: 'DATE & TIME',
+                value: `${formatEventDate(outreach.date)}${timeRange ? ` · ${timeRange}` : ''}`,
+              },
+              {
+                icon: 'account-multiple-outline',
+                label: 'SLOTS',
+                value: isFull
+                  ? 'All slots filled'
+                  : `${slotsLeft} of ${outreach.slots_total} slots open`,
+              },
+              ...(outreach.role_type
+                ? [
+                    {
+                      icon: 'stethoscope' as const,
+                      label: 'ROLE',
+                      value:
+                        outreach.role_type === 'clinical' ? 'Clinical role' : 'Support role',
+                    },
+                  ]
+                : []),
+            ] as const
+          ).map((row, index, rows) => (
+            <DetailRow
+              key={row.label}
+              icon={row.icon}
+              label={row.label}
+              first={index === 0}
+              last={index === rows.length - 1}
+            >
+              {row.value}
             </DetailRow>
-          ) : null}
+          ))}
 
           {organisation ? (
             <Pressable
@@ -354,17 +388,37 @@ export default function OutreachDetail() {
   );
 }
 
+/**
+ * One labelled fact in the outreach card.
+ *
+ * The icon sits in a fixed-size tile rather than being placed directly in the
+ * row. Glyphs differ in intrinsic width -- a pin is narrow, a stethoscope
+ * wide -- so laid out bare they never share a left edge and the text after
+ * them starts at a different x on every row. A fixed tile makes both columns
+ * exact regardless of glyph.
+ */
 function DetailRow({
   icon,
+  label,
   children,
+  first,
+  last,
 }: {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  label: string;
   children: React.ReactNode;
+  first?: boolean;
+  last?: boolean;
 }) {
   return (
-    <View style={styles.detailRow}>
-      <MaterialCommunityIcons name={icon} size={17} color={colors.primary} />
-      <Text style={styles.detailText}>{children}</Text>
+    <View style={[styles.detailRow, first && styles.detailRowFirst, last && styles.detailRowLast]}>
+      <View style={styles.detailIconTile}>
+        <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
+      </View>
+      <View style={styles.detailTextBlock}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailText}>{children}</Text>
+      </View>
     </View>
   );
 }
@@ -416,25 +470,65 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   // Tinted card: a lighter grey than `surface` so it reads as a grouped panel
-  // rather than as an input field, with EditSectionCard's radius, padding and
-  // hairline border so it sits with the rest of the app. No shadow -- nothing
-  // else in the codebase is raised.
+  // rather than as an input field, with EditSectionCard's radius and hairline
+  // border so it sits with the rest of the app. Depth comes from the internal
+  // structure -- white icon tiles lifting off the tint, hairline dividers,
+  // a label/value hierarchy -- not from a shadow; nothing else in this
+  // codebase is raised.
+  //
+  // gap is 0 because the rows carry their own vertical padding; a gap on top
+  // of that would double the space either side of every divider.
   card: {
     marginTop: spacing.base,
-    padding: spacing.base,
+    paddingHorizontal: spacing.base,
+    // Bottom padding lives on the card, not the last row, so the org link
+    // (when present) is spaced from the rows above AND from the card edge.
+    paddingBottom: spacing.base,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: spacing.md,
+    gap: 0,
   },
   detailRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
+    // Centred so the icon tile sits level with the middle of its text block,
+    // including the two-line rows (location, date) where flex-start left it
+    // stranded at the top.
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  detailRowFirst: {
+    paddingTop: spacing.base,
+  },
+  detailRowLast: {
+    borderBottomWidth: 0,
+  },
+  // Fixed size, so every icon shares one left edge and one text start column
+  // whatever the glyph's natural width. White on the tinted card gives the
+  // separation that makes the rows read as distinct facts.
+  detailIconTile: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
+  detailTextBlock: {
+    flex: 1,
+  },
+  detailLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: colors.textSecondary,
+    marginBottom: 2,
   },
   detailText: {
-    flex: 1,
     fontFamily: fontFamily.medium,
     fontSize: 14,
     lineHeight: 20,
