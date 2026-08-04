@@ -53,11 +53,18 @@ export default function EditOrganisationProfile() {
   const [orgType, setOrgType] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [website, setWebsite] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
   const [region, setRegion] = useState<string | null>(profile?.region ?? null);
   const [district, setDistrict] = useState<string | null>(profile?.district ?? null);
   const [discarding, setDiscarding] = useState(false);
   const [photoNotice, setPhotoNotice] = useState(false);
-  const [errors, setErrors] = useState<{ fullName?: string; orgName?: string }>({});
+  const [errors, setErrors] = useState<{
+    fullName?: string;
+    orgName?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+  }>({});
 
   // Unlike the volunteer screen (whose data is already in authStore), the
   // organisation row is fetched, so the form seeds once the query resolves.
@@ -68,12 +75,28 @@ export default function EditOrganisationProfile() {
       setOrgType(org.org_type ?? null);
       setDescription(org.description ?? '');
       setWebsite(org.website ?? '');
+      setContactEmail(org.contact_email ?? '');
+      setContactPhone(org.contact_phone ?? '');
     }
   }, [org]);
 
   const districtOptions = useMemo(
     () => (region ? getDistrictsForRegion(region).map((d) => ({ value: d, label: d })) : []),
     [region]
+  );
+
+  // Memoised because every keystroke in any Input re-renders this whole
+  // component. Rebuilt inline, these arrays were a fresh identity on each
+  // render, so both SelectFields saw "new options" and re-rendered their
+  // lists on every character typed -- the source of the typing lag on this
+  // screen. districtOptions above was already memoised; these two were not.
+  const regionOptions = useMemo(
+    () => GHANA_REGION_NAMES.map((name) => ({ value: name, label: name })),
+    []
+  );
+  const orgTypeOptions = useMemo(
+    () => ORG_TYPES.map((t) => ({ value: t.value, label: t.label })),
+    []
   );
 
   const dirty =
@@ -83,14 +106,26 @@ export default function EditOrganisationProfile() {
     orgName !== (org?.org_name ?? '') ||
     orgType !== (org?.org_type ?? null) ||
     description !== (org?.description ?? '') ||
-    website !== (org?.website ?? '');
+    website !== (org?.website ?? '') ||
+    contactEmail !== (org?.contact_email ?? '') ||
+    contactPhone !== (org?.contact_phone ?? '');
 
   async function handleSave() {
     const trimmedName = fullName.trim();
     const trimmedOrg = orgName.trim();
-    const nextErrors: { fullName?: string; orgName?: string } = {};
+    const trimmedEmail = contactEmail.trim();
+    const trimmedPhone = contactPhone.trim();
+    const nextErrors: typeof errors = {};
     if (!trimmedName) nextErrors.fullName = 'A contact name is required.';
     if (!trimmedOrg) nextErrors.orgName = 'Your organisation name is required.';
+    // Both are optional — an organisation may prefer to be contacted only
+    // through the app — so these validate shape only when something was typed.
+    if (trimmedEmail && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+      nextErrors.contactEmail = 'Enter a valid email address.';
+    }
+    if (trimmedPhone && !/^\+?[\d\s-]{9,}$/.test(trimmedPhone)) {
+      nextErrors.contactPhone = 'Enter a valid phone number, e.g. +233 24 123 4567.';
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -106,6 +141,8 @@ export default function EditOrganisationProfile() {
         orgType,
         description: description.trim() || null,
         website: website.trim() || null,
+        contactEmail: trimmedEmail || null,
+        contactPhone: trimmedPhone || null,
       });
       router.replace('/(organisation)/profile');
     } catch {
@@ -176,11 +213,24 @@ export default function EditOrganisationProfile() {
                 label="Organisation Type"
                 placeholder="Select a type"
                 value={orgType}
-                options={ORG_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+                options={orgTypeOptions}
                 onSelect={setOrgType}
               />
             </EditSectionCard>
 
+            {/*
+              PUBLIC contact details: they go to organisation_profiles, which
+              volunteers can read before applying, and are shown on the
+              Organisation Public Profile. They are deliberately NOT
+              profiles.email/profiles.phone — those are the account holder's
+              private PII, kept row-scoped by policy, and the schema carries a
+              standing instruction never to expose them through the discovery
+              views. See supabase/migrations/20260804_org_public_contact_details.sql.
+
+              Neither field is the login. That lives on auth.users and is
+              changed only from Account & Security, which is why the helper
+              below points there rather than offering an edit here.
+            */}
             <EditSectionCard icon="account-outline" title="PRIMARY CONTACT">
               <Input
                 label="Contact Name"
@@ -190,9 +240,31 @@ export default function EditOrganisationProfile() {
                 autoCapitalize="words"
                 error={errors.fullName}
               />
-              {profile?.email ? (
-                <Text style={styles.helper}>Signed in as {profile.email}.</Text>
-              ) : null}
+              <View style={styles.fieldGap} />
+              <Input
+                label="Contact Email"
+                value={contactEmail}
+                onChangeText={setContactEmail}
+                placeholder="enquiries@yourorganisation.org"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                error={errors.contactEmail}
+              />
+              <View style={styles.fieldGap} />
+              <Input
+                label="Contact Phone"
+                value={contactPhone}
+                onChangeText={setContactPhone}
+                placeholder="+233 24 123 4567"
+                keyboardType="phone-pad"
+                error={errors.contactPhone}
+              />
+              <Text style={styles.helper}>
+                Shown to volunteers so they can reach you. Both are optional.
+                {profile?.email
+                  ? ` You sign in as ${profile.email} — change that under Settings › Account & Security.`
+                  : ''}
+              </Text>
             </EditSectionCard>
 
             <EditSectionCard icon="map-marker-outline" title="BASE LOCATION">
@@ -200,7 +272,7 @@ export default function EditOrganisationProfile() {
                 label="Region"
                 placeholder="Select your region"
                 value={region}
-                options={GHANA_REGION_NAMES.map((name) => ({ value: name, label: name }))}
+                options={regionOptions}
                 onSelect={(value) => {
                   setRegion(value);
                   // Districts are region-scoped, so a region change

@@ -22,8 +22,8 @@ import { useAuthStore } from '@/stores/authStore';
  *     email+password through Supabase only.
  *   - "Language" (showing "English") — the app is not internationalised, so
  *     the control would have exactly one option.
- * "Account Security" now exists and opens the change-password screen; 2FA is
- * still not offered.
+ * "Account & Security" now exists and opens the shared screen that changes
+ * both the login email and the password; 2FA is still not offered.
  * The PNG's "Premium Member" subtitle was likewise dropped: V-HUB has no
  * paid tier. The V-Score band shown in its place is a real status this
  * volunteer actually has.
@@ -76,11 +76,21 @@ export default function VolunteerSettings() {
           value={verificationLabel}
           onPress={() => router.push('/(volunteer)/verify-identity')}
         />
+        {/*
+          Credentials only — the sign-in email and password. Contact details
+          stay on Edit Profile; they answer a different question, for a
+          different audience.
+        */}
+        {/*
+          A fixed short label, not the email address: the row's value column
+          is sized to its content, so a real address crowded the title out.
+          The address is shown on the screen this opens, where it has room.
+        */}
         <SettingsRow
           icon="lock-outline"
-          label="Account Security"
-          value="Change password"
-          onPress={() => router.push('/(volunteer)/change-password')}
+          label="Account & Security"
+          value="Login email & password"
+          onPress={() => router.push('/(volunteer)/account-security')}
         />
 
         <SettingsGroupLabel>PREFERENCES</SettingsGroupLabel>

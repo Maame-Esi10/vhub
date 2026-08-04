@@ -39,6 +39,7 @@ export const API_ROUTES = {
   notifications: '/api/notifications',
   uploadSignature: '/api/upload-signature',
   verificationDocument: '/api/verification-document',
+  cancelEmailChange: '/api/cancel-email-change',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -488,6 +489,23 @@ export function recordVerificationDocument(
     { publicId, secureUrl },
     options
   );
+}
+
+export interface CancelEmailChangeResponse {
+  cancelled: boolean;
+  /** Present when a change really was withdrawn; the address that remains in force. */
+  email?: string;
+  /** `no_pending_change` when there was nothing to cancel. */
+  reason?: string;
+}
+
+/**
+ * Withdraws a pending login-email change. Server-side because clearing
+ * `new_email` needs the Admin API and therefore the service-role key — the
+ * client SDK can only ever start a change, never take one back.
+ */
+export function cancelEmailChange(options?: RequestOptions): Promise<CancelEmailChangeResponse> {
+  return apiPost<CancelEmailChangeResponse>(API_ROUTES.cancelEmailChange, {}, options);
 }
 
 // ---------------------------------------------------------------------------

@@ -271,6 +271,13 @@ create table if not exists organisation_profiles (
   org_type text,
   description text,
   website text,
+  -- Public enquiry details the organisation chooses to publish. These are NOT
+  -- the same as profiles.contact/email: those are the individual account
+  -- holder's private PII and stay row-scoped. An org's published address is
+  -- information it is deliberately advertising, which is why it can live on a
+  -- `using (true)` table without contradicting the PII rule above.
+  contact_email text,
+  contact_phone text,
   verified boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -931,7 +938,12 @@ with (security_invoker = false) as
     op.org_type,
     op.description,
     op.website,
-    op.verified
+    op.verified,
+    -- Safe to publish here, unlike profiles.phone/email: these are the org's
+    -- own advertised enquiry details, not a person's private contact info.
+    -- The prohibition above still stands for p.phone and p.email.
+    op.contact_email,
+    op.contact_phone
   from profiles p
   join organisation_profiles op on op.id = p.id
   where p.role = 'organisation';
@@ -1033,7 +1045,9 @@ grant update (
   org_name,
   org_type,
   description,
-  website
+  website,
+  contact_email,
+  contact_phone
 ) on organisation_profiles to authenticated;
 
 revoke update on volunteer_profiles from authenticated;
@@ -1125,7 +1139,9 @@ grant insert (
   org_name,
   org_type,
   description,
-  website
+  website,
+  contact_email,
+  contact_phone
 ) on organisation_profiles to authenticated;
 
 revoke insert on outreaches from authenticated;

@@ -126,6 +126,9 @@ export interface UpdateOrganisationProfileParams {
   orgType: string | null;
   description: string | null;
   website: string | null;
+  /** Public enquiry details — organisation_profiles, NOT the private profiles.email/phone. */
+  contactEmail: string | null;
+  contactPhone: string | null;
 }
 
 /**
@@ -135,6 +138,18 @@ export interface UpdateOrganisationProfileParams {
  * trust badge volunteers use to judge whether an outreach is legitimate, so
  * it is absent from the organisation_profiles UPDATE grant list and settable
  * only by a service-role review. See supabase/schema.sql.
+ *
+ * contact_email/contact_phone are the organisation's PUBLIC enquiry details
+ * and live here, on the `using (true)` table. The private profiles.email and
+ * profiles.phone are untouched by this screen: those are the account holder's
+ * own PII, kept row-scoped, and the login address is changed only through
+ * Supabase Auth (see hooks/useAccountSecurity.ts).
+ *
+ * The two writes run concurrently rather than in sequence. They target
+ * different tables with no ordering dependency, and on a Ghanaian mobile
+ * connection the second round trip was pure added latency on every save.
+ * Failure semantics are unchanged: either rejecting still surfaces as a
+ * thrown error and the screen stays open with the edits intact.
  */
 export function useUpdateOrganisationProfile() {
   const queryClient = useQueryClient();
@@ -142,39 +157,41 @@ export function useUpdateOrganisationProfile() {
 
   return useMutation({
     mutationFn: async (params: UpdateOrganisationProfileParams) => {
-      const { data: updatedProfile, error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: params.fullName,
-          region: params.region,
-          district: params.district,
-        })
-        .eq('id', params.userId)
-        .select()
-        .single();
+      const [profileResult, orgResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .update({
+            full_name: params.fullName,
+            region: params.region,
+            district: params.district,
+          })
+          .eq('id', params.userId)
+          .select()
+          .single(),
+        supabase
+          .from('organisation_profiles')
+          .update({
+            org_name: params.orgName,
+            org_type: params.orgType,
+            description: params.description,
+            website: params.website,
+            contact_email: params.contactEmail,
+            contact_phone: params.contactPhone,
+          })
+          .eq('id', params.userId)
+          .select()
+          .single(),
+      ]);
 
-      if (profileError || !updatedProfile) {
-        throw profileError ?? new Error('Could not save your profile. Please try again.');
+      if (profileResult.error || !profileResult.data) {
+        throw profileResult.error ?? new Error('Could not save your profile. Please try again.');
+      }
+      if (orgResult.error || !orgResult.data) {
+        throw orgResult.error ?? new Error('Could not save your organisation profile. Please try again.');
       }
 
-      const { data: updatedOrg, error: orgError } = await supabase
-        .from('organisation_profiles')
-        .update({
-          org_name: params.orgName,
-          org_type: params.orgType,
-          description: params.description,
-          website: params.website,
-        })
-        .eq('id', params.userId)
-        .select()
-        .single();
-
-      if (orgError || !updatedOrg) {
-        throw orgError ?? new Error('Could not save your organisation profile. Please try again.');
-      }
-
-      setProfile(updatedProfile);
-      return updatedOrg as OrganisationProfile;
+      setProfile(profileResult.data);
+      return orgResult.data as OrganisationProfile;
     },
     onSuccess: (updatedOrg, params) => {
       queryClient.setQueryData(profileEditorKeys.myOrganisation(params.userId), updatedOrg);

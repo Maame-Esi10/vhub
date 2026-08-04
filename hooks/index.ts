@@ -5,8 +5,19 @@ export type { SignUpParams, SignUpResult } from './useSignUp';
 export { useCompleteOnboarding } from './useCompleteOnboarding';
 export { useSignOut } from './useSignOut';
 export { usePushRegistration } from './usePushRegistration';
-export { useChangePassword, MIN_PASSWORD_LENGTH } from './useChangePassword';
-export type { ChangePasswordParams } from './useChangePassword';
+export {
+  useChangePassword,
+  useChangeLoginEmail,
+  useCancelEmailChange,
+  syncProfileEmail,
+  passwordStrength,
+  MIN_PASSWORD_LENGTH,
+} from './useAccountSecurity';
+export type {
+  ChangePasswordParams,
+  ChangeLoginEmailParams,
+  PasswordStrength,
+} from './useAccountSecurity';
 export { useSignDeclaration } from './useSignDeclaration';
 export {
   notificationKeys,

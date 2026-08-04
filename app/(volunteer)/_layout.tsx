@@ -70,7 +70,7 @@ export default function VolunteerTabsLayout() {
       <Tabs.Screen name="map" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="search" options={{ href: null }} />
-      <Tabs.Screen name="change-password" options={{ href: null }} />
+      <Tabs.Screen name="account-security" options={{ href: null }} />
       <Tabs.Screen name="verify-identity" options={{ href: null }} />
     </Tabs>
   );

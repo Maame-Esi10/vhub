@@ -67,6 +67,7 @@ export default function OrganisationTabsLayout() {
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="info-hub" options={{ href: null }} />
+      <Tabs.Screen name="account-security" options={{ href: null }} />
     </Tabs>
   );
 }

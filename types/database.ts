@@ -90,6 +90,14 @@ export interface OrganisationProfile {
   org_type: string | null;
   description: string | null;
   website: string | null;
+  /**
+   * Public enquiries address volunteers can write to. Deliberately NOT the
+   * login email (that lives on auth.users) and not the same thing as
+   * profiles.email, which is private PII the schema keeps row-scoped.
+   */
+  contact_email: string | null;
+  /** Public enquiries phone, Ghana format. Distinct from the private profiles.phone. */
+  contact_phone: string | null;
   verified: boolean;
   created_at: string;
   updated_at: string;
@@ -194,6 +202,8 @@ export interface PublicOrganisationProfile {
   description: string | null;
   website: string | null;
   verified: boolean;
+  contact_email: string | null;
+  contact_phone: string | null;
 }
 
 /**

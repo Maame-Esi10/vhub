@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import {
   Avatar,
   ScreenHeader,
@@ -18,6 +19,7 @@ import { useAuthStore } from '@/stores/authStore';
  * in that PNG were deliberately not built and why.
  */
 export default function OrganisationSettings() {
+  const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
   const orgQuery = useMyOrganisationProfile(user?.id);
@@ -42,6 +44,18 @@ export default function OrganisationSettings() {
           duplicating them in two places made it unclear which was canonical.
         */}
         <SettingsGroupLabel>ACCOUNT</SettingsGroupLabel>
+        {/*
+          Credentials only — the sign-in email and password. Public contact
+          details stay on Edit Profile: they answer "how do volunteers reach
+          us", which is a different question with a different audience.
+        */}
+        {/* Short fixed label — see the volunteer twin for why not the email. */}
+        <SettingsRow
+          icon="lock-outline"
+          label="Account & Security"
+          value="Login email & password"
+          onPress={() => router.push('/(organisation)/account-security')}
+        />
         {/*
           Read-only: `verified` is the trust badge volunteers judge outreaches
           by, so it is excluded from the organisation_profiles UPDATE grant and
