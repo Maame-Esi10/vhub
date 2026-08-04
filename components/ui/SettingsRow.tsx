@@ -85,7 +85,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.textPrimary,
   },
+  // `flex: 1` on the label means its flex BASIS is 0, so it only claims what
+  // is left after the value has taken its intrinsic width. Without a shrink
+  // rule here, a long value (an email address) took the full row and squeezed
+  // the label to roughly one character per line -- a tall vertical column of
+  // letters. flexShrink lets the value give way instead, and maxWidth
+  // guarantees the label keeps half the row no matter what it is passed.
   value: {
+    flexShrink: 1,
+    maxWidth: '50%',
+    textAlign: 'right',
     fontFamily: fontFamily.regular,
     fontSize: 13,
     color: colors.textSecondary,

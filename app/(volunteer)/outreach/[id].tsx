@@ -415,23 +415,42 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     color: colors.white,
   },
+  // Elevated rather than a flat grey fill. A `surface` block on a `background`
+  // page reads as inset -- the same treatment as a disabled input -- which is
+  // wrong for the screen's primary information. White + hairline border + a
+  // soft shadow is the standard raised-card treatment and uses only existing
+  // tokens; the shadow is the one non-token value, kept low enough to suggest
+  // a single step of elevation rather than a floating dialog.
   card: {
     marginTop: spacing.base,
-    padding: spacing.base,
+    padding: spacing.lg,
     borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    gap: spacing.md,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.base,
+    shadowColor: colors.navy,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    // Android ignores shadow*; elevation is its equivalent.
+    elevation: 2,
   },
   detailRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
+    // Centred, not flex-start: every row is a single line at these sizes, and
+    // top-alignment left the icon sitting visibly high against the text.
+    alignItems: 'center',
+    gap: spacing.md,
   },
+  // colors.textPrimary was already the darkest token in the palette, so the
+  // legibility fix is weight and size, not colour -- there is nothing darker
+  // to move to without inventing a value.
   detailText: {
     flex: 1,
-    fontFamily: fontFamily.medium,
-    fontSize: 14,
-    lineHeight: 20,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 15,
+    lineHeight: 21,
     color: colors.textPrimary,
   },
   orgLink: {
