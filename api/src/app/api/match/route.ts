@@ -5,6 +5,9 @@ import {
   type Layer1OutreachInput,
   type Layer1VolunteerInput,
 } from "@/lib/matching/layer1";
+import { shouldWidenFeedSearch } from "@/lib/matching/feedFilter";
+import { computeRankingScore } from "@/lib/vscore";
+import { getReachableRegions } from "@/constants/ghana-locations";
 import { authenticate, assertOwnsOutreach, type AuthedCaller } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
@@ -103,6 +106,8 @@ interface ApplicantRow {
     skill_tags: string[] | null;
     experience_level: Layer1VolunteerInput["experience_level"];
     availability_slots: string[] | null;
+    /** Drives the reliability multiplier; NOT part of Layer1VolunteerInput. */
+    v_score: number | null;
     profile: { region: string | null; district: string | null } | null;
   } | null;
 }
@@ -170,7 +175,7 @@ export async function POST(req: Request): Promise<Response> {
 const APPLICANT_SELECT = `
   id, volunteer_id, status,
   volunteer:volunteer_profiles (
-    id, category, skill_tags, experience_level, availability_slots,
+    id, category, skill_tags, experience_level, availability_slots, v_score,
     profile:profiles ( region, district )
   )
 `;
@@ -227,28 +232,50 @@ async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?:
         })
       : layer1Results.get(application.id)!;
 
+    const vScore = application.volunteer?.v_score ?? null;
+
     return {
       applicationId: application.id,
       volunteerId: application.volunteer_id,
       matchScore: final.total,
       breakdown: final,
+      vScore,
+      rankingScore: computeRankingScore(final.total, vScore),
     };
   });
 
-  // Persist match_score -- service-role write-only column (see supabase/schema.sql).
+  // Persist match_score -- service-role write-only column (see
+  // supabase/schema.sql). The RAW score is what gets stored: match_score is a
+  // record of FIT at apply time, and reliability is already recorded, and
+  // changes independently, on volunteer_profiles.v_score. Writing the
+  // multiplied value would conflate the two and silently rewrite history every
+  // time a volunteer's V-Score moved.
   await Promise.all(
     results.map((r) => admin.from("applications").update({ match_score: r.matchScore }).eq("id", r.applicationId))
   );
 
-  results.sort((a, b) => b.matchScore - a.matchScore);
+  // Ordered by rankingScore (fit x reliability), so a chronic no-show sinks
+  // below a reliable candidate of moderately lower fit. Ties fall back to raw
+  // fit. Both numbers travel to the client: the organisation still sees the
+  // true match percentage and the V-Score separately, and the multiplier is
+  // never presented as the volunteer's match.
+  results.sort((a, b) => {
+    if (b.rankingScore !== a.rankingScore) return b.rankingScore - a.rankingScore;
+    return b.matchScore - a.matchScore;
+  });
   return { outreachId: outreach.id, layer2Applied: layer2.applied, results };
 }
 
 interface ScoredApplicant {
   applicationId: string;
   volunteerId: string;
+  /** Raw fit, 0-100. This is what the organisation sees as "match". */
   matchScore: number;
   breakdown: Layer1MatchResult;
+  /** The volunteer's reliability score, shown alongside -- never folded in. */
+  vScore: number | null;
+  /** matchScore x reliability multiplier. Ordering only; never displayed. */
+  rankingScore: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -360,6 +387,50 @@ interface RankedOutreach {
 }
 
 /**
+ * Drops outreaches with no remaining slots.
+ *
+ * Done here rather than in the query because PostgREST cannot express a
+ * column-to-column comparison (`slots_filled < slots_total`) -- it filters
+ * columns against literals only. It still runs BEFORE any scoring, so the
+ * scoring cost is over relevant N either way; only the transferred row count
+ * is unaffected. Moving it into the database would mean a generated
+ * `has_open_slots` column, which is a schema change and not worth one for a
+ * predicate this cheap.
+ */
+function withOpenSlots(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return rows.filter((row) => {
+    const filled = Number(row.slots_filled ?? 0);
+    const total = Number(row.slots_total ?? 0);
+    if (!Number.isFinite(filled) || !Number.isFinite(total)) return true;
+    return filled < total;
+  });
+}
+
+/**
+ * One page of open, non-full outreaches, optionally restricted to `regions`.
+ *
+ * `body.region` is the volunteer's OWN explicit filter and always wins: if
+ * they asked for one region, they get that region and no widening.
+ */
+async function fetchFeedCandidates(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  body: z.infer<typeof RankFeedBody>,
+  regions: readonly string[] | null
+) {
+  let query = admin.from("outreaches").select(FEED_OUTREACH_SELECT).eq("status", "open");
+  if (body.region) query = query.eq("region", body.region);
+  else if (regions && regions.length > 0) query = query.in("region", regions as string[]);
+  if (body.roleType) query = query.eq("role_type", body.roleType);
+
+  const { data, error } = await query
+    .order("date", { ascending: true })
+    .limit(body.limit ?? FEED_DEFAULT_LIMIT);
+  if (error) throw Errors.internal("Could not load open outreaches.");
+
+  return withOpenSlots((data ?? []) as Array<Record<string, unknown>>);
+}
+
+/**
  * Ranks every open outreach for the signed-in volunteer.
  *
  * Reads only: unlike score_applicants this writes nothing back, because a
@@ -403,16 +474,37 @@ async function rankFeed(caller: AuthedCaller, body: z.infer<typeof RankFeedBody>
 
   const volunteer = toVolunteerInput(volunteerRow as unknown as ApplicantRow["volunteer"]);
 
-  let query = admin.from("outreaches").select(FEED_OUTREACH_SELECT).eq("status", "open");
-  if (body.region) query = query.eq("region", body.region);
-  if (body.roleType) query = query.eq("role_type", body.roleType);
+  // Pre-filter, THEN score. Scoring is O(N x S) and sorting O(N log N) over
+  // RELEVANT N -- open, still-recruiting, and in a region the volunteer could
+  // actually travel to -- not over every outreach on the platform. At 10,000
+  // outreaches, scoring the ~200 relevant ones is a ~50x saving, and it is
+  // also what keeps the Gemini call in computeLayer2Equivalences small.
+  //
+  // Only the genuinely impossible is excluded. Deliberately NOT pre-filtered:
+  //   - category: a related category still scores 0.5, and support roles match
+  //     everyone, so an exact-category filter would drop valid matches.
+  //   - skills: a partial overlap is a legitimate match.
+  //   - availability: an event spanning slots, or a storage quirk, could hide
+  //     a valid outreach. Let it score 0 instead of vanishing.
+  // Anything that could plausibly score above zero still gets scored. The
+  // pre-filter changes what is CHEAP to rank, never what is DISCOVERABLE.
+  const reachableRegions = getReachableRegions(volunteer.region);
+  let outreaches = await fetchFeedCandidates(admin, body, reachableRegions);
 
-  const { data, error } = await query
-    .order("date", { ascending: true })
-    .limit(body.limit ?? FEED_DEFAULT_LIMIT);
-  if (error) throw Errors.internal("Could not load open outreaches.");
+  // Widen to the whole platform when the neighbourhood is thin. Without this,
+  // a strict filter and a quiet region combine into an empty feed -- the one
+  // outcome this optimisation must never cause. An unrecognised or missing
+  // region yields no reachable set at all, and lands here too.
+  if (
+    shouldWidenFeedSearch({
+      hasExplicitRegionFilter: Boolean(body.region),
+      reachableRegionCount: reachableRegions.length,
+      candidateCount: outreaches.length,
+    })
+  ) {
+    outreaches = await fetchFeedCandidates(admin, body, null);
+  }
 
-  const outreaches = (data ?? []) as Array<Record<string, unknown>>;
   if (outreaches.length === 0) {
     return { volunteerId: caller.userId, layer2Applied: true, results: [] as RankedOutreach[] };
   }
@@ -454,6 +546,13 @@ async function rankFeed(caller: AuthedCaller, body: z.infer<typeof RankFeedBody>
     return { outreachId: id, matchScore: final.total, breakdown: final, outreach };
   });
 
+  // No reliability multiplier here, deliberately. In this direction the
+  // volunteer is ranking OUTREACHES, so the multiplier would be their own
+  // single V-Score applied identically to every row -- a positive constant,
+  // which leaves the order untouched. It belongs in scoreApplicants, where it
+  // varies BETWEEN the things being compared. Applying it here would only risk
+  // a deflated number leaking into the feed's displayed match percentage.
+  //
   // Best match first; ties broken by the soonest event, so an equally-good
   // pair of outreaches surfaces the one the volunteer must decide about first.
   results.sort((a, b) => {

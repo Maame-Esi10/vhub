@@ -15,27 +15,41 @@ describe('skillsScore', () => {
     expect(skillsScore(['wound care', 'triage'], ['wound care', 'triage'])).toBe(1);
   });
 
-  it('is 0 when required_skills is empty (ASSUMPTION: not a free pass)', () => {
-    expect(skillsScore(['wound care'], [])).toBe(0);
+  it('is 1.0 when required_skills is empty (nothing required, nothing missing)', () => {
+    expect(skillsScore(['wound care'], [])).toBe(1);
   });
 
   it('is 0 when volunteer skill_tags is empty', () => {
     expect(skillsScore([], ['wound care'])).toBe(0);
   });
 
-  it('is 0 when both arrays are empty', () => {
-    expect(skillsScore([], [])).toBe(0);
+  it('is 1.0 when both arrays are empty (the empty requirement still governs)', () => {
+    expect(skillsScore([], [])).toBe(1);
   });
 
   it('is 0 when there is no overlap at all', () => {
     expect(skillsScore(['pharmacy'], ['surgery'])).toBe(0);
   });
 
-  it('divides by the size of the LARGER set for a partial overlap', () => {
-    // volunteer has 3 tags, required has 2, 1 overlaps -> 1/3
-    expect(skillsScore(['wound care', 'triage', 'cpr'], ['wound care', 'immunisation'])).toBeCloseTo(
-      1 / 3
-    );
+  it('divides by the REQUIRED set, not the larger one', () => {
+    // volunteer has 3 tags, required has 2, 1 overlaps -> 1/2, not 1/3
+    expect(skillsScore(['wound care', 'triage', 'cpr'], ['wound care', 'immunisation'])).toBe(0.5);
+  });
+
+  // The regression this denominator change exists to prevent: a volunteer who
+  // covers every requirement must score 1.0 however many extra skills she also
+  // holds. Under the old "divide by the larger set" rule the second case here
+  // scored 5/20 = 0.25 -- a well-rounded volunteer marked down for breadth.
+  it('does not penalise skills beyond the requirement', () => {
+    const required = ['wound care', 'triage', 'cpr', 'immunisation', 'health education'];
+    const exactly = [...required];
+    const plusFifteen = [
+      ...required,
+      ...Array.from({ length: 15 }, (_, i) => `extra skill ${i}`),
+    ];
+
+    expect(skillsScore(exactly, required)).toBe(1);
+    expect(skillsScore(plusFifteen, required)).toBe(1);
   });
 
   it('divides by the required set size when it is larger', () => {
@@ -55,9 +69,11 @@ describe('skillsScore', () => {
   });
 
   it('handles null/undefined arrays without throwing', () => {
+    // No skills against a real requirement is still 0 -- nothing matches.
     expect(skillsScore(null, ['cpr'])).toBe(0);
-    expect(skillsScore(['cpr'], undefined)).toBe(0);
-    expect(skillsScore(null, null)).toBe(0);
+    // No requirement is 1.0 whichever way it arrives.
+    expect(skillsScore(['cpr'], undefined)).toBe(1);
+    expect(skillsScore(null, null)).toBe(1);
   });
 
   it('accepts an injected equivalence map for Layer 2 semantic matches', () => {
@@ -491,9 +507,11 @@ const goldenCases: GoldenCase[] = [
       start_time: '18:00',
       end_time: '21:00',
     },
-    // skills: 1/2 * 35 = 17.5; category: null required -> 0 * 20 = 0; location: different region -> 0;
+    // skills: the one required skill is held -> 1 * 35 = 35 (the volunteer's
+    // second, unrequired tag no longer dilutes it); category: null required -> 0 * 20 = 0;
+    // location: different region -> 0;
     // availability: fri_evening matches, event 18:00-21:00 is evening -> 15; experience: 0.3*10=3
-    expectedTotal: 35.5,
+    expectedTotal: 53,
   },
   {
     name: 'midwife related to required nurse, same region diff district, multi-window event, intermediate exp',

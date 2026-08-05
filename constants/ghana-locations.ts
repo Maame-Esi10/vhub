@@ -374,3 +374,60 @@ export const GHANA_REGION_NAMES = GHANA_REGIONS.map((region) => region.name);
 export function getDistrictsForRegion(regionName: string): string[] {
   return GHANA_REGIONS.find((region) => region.name === regionName)?.districts ?? [];
 }
+
+// ---------------------------------------------------------------------------
+// Region adjacency (feed pre-filter, owner decision 2026-08-05)
+// ---------------------------------------------------------------------------
+
+/**
+ * Which of the 16 regions share a land border with which, used by
+ * /api/match's rank_feed pre-filter to fetch only outreaches a volunteer
+ * could realistically travel to before scoring anything.
+ *
+ * Two deliberate properties:
+ *
+ *   1. It is SYMMETRIC. If A lists B, B lists A -- enforced by a unit test
+ *      rather than by trust, because a one-way edge would make the feed
+ *      asymmetric in a way nobody would notice until a volunteer in one
+ *      region silently stopped seeing a neighbour's events.
+ *
+ *   2. It errs toward INCLUSION. Where two regions meet only at a corner or
+ *      along a short or disputed stretch (Bono/Ashanti, Northern/Upper East),
+ *      the edge is included. The pre-filter's job is to drop the genuinely
+ *      unreachable, and a wrongly-included region merely gets scored and then
+ *      ranked low on location -- whereas a wrongly-EXCLUDED one is invisible.
+ *      Over-inclusion costs a little compute; under-inclusion costs a
+ *      volunteer an opportunity.
+ */
+export const GHANA_REGION_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
+  Ahafo: ['Bono', 'Bono East', 'Ashanti', 'Western North'],
+  Ashanti: ['Ahafo', 'Bono', 'Bono East', 'Eastern', 'Central', 'Western', 'Western North'],
+  Bono: ['Ahafo', 'Ashanti', 'Bono East', 'Savannah'],
+  'Bono East': ['Ahafo', 'Ashanti', 'Bono', 'Eastern', 'Oti', 'Savannah'],
+  Central: ['Ashanti', 'Eastern', 'Greater Accra', 'Western'],
+  Eastern: ['Ashanti', 'Bono East', 'Central', 'Greater Accra', 'Oti', 'Volta'],
+  'Greater Accra': ['Central', 'Eastern', 'Volta'],
+  'North East': ['Northern', 'Savannah', 'Upper East', 'Upper West'],
+  Northern: ['North East', 'Oti', 'Savannah', 'Upper East'],
+  Oti: ['Bono East', 'Eastern', 'Northern', 'Savannah', 'Volta'],
+  Savannah: ['Bono', 'Bono East', 'North East', 'Northern', 'Oti', 'Upper West'],
+  'Upper East': ['North East', 'Northern', 'Upper West'],
+  'Upper West': ['North East', 'Savannah', 'Upper East'],
+  Volta: ['Eastern', 'Greater Accra', 'Oti'],
+  Western: ['Ashanti', 'Central', 'Western North'],
+  'Western North': ['Ahafo', 'Ashanti', 'Western'],
+};
+
+/**
+ * The regions a volunteer in `region` can plausibly reach: their own plus
+ * every neighbour. Returns an EMPTY array for a null/blank/unrecognised
+ * region, which callers must read as "no filter possible" and fall back to
+ * searching everywhere -- never as "nothing is reachable".
+ */
+export function getReachableRegions(region: string | null | undefined): string[] {
+  const name = (region ?? '').trim();
+  if (!name) return [];
+  const neighbours = GHANA_REGION_ADJACENCY[name];
+  if (!neighbours) return [];
+  return [name, ...neighbours];
+}

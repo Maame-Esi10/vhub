@@ -522,3 +522,160 @@ row in Settings is read-only until it exists); the Gemini-key fallback proof
 (remove `GEMINI_API_KEY` from Vercel, confirm the feed still ranks with
 `layer2Applied: false`, restore it); then the deferred Cloudinary flyer upload
 and OpenStreetMap location work described above.
+
+---
+
+## Design decisions — planning discussion, 2026-08-05
+
+The following were decided in a full design discussion with the project owner
+and are final. Each records the problem, the decision, and the reasoning,
+because the reasoning is the defensible part.
+
+### 1a. Skills score: divide by the requirement, not the larger set
+
+**Problem.** The original spec scored skills as `matched / max(|volunteer
+skills|, |required skills|)`. This penalised breadth. For an outreach
+requiring 5 skills, a volunteer holding exactly those 5 scored 5/5 = 1.0,
+while a broad, experienced volunteer holding the same 5 plus 15 others scored
+5/20 = 0.25 — marked down for being well-rounded despite meeting every
+requirement. Since skills carry the largest weight (35 of 100), this was the
+single most distorting flaw in the scorer.
+
+**Decision.** `skillsScore = matched required skills / required skills`. Both
+volunteers above now score 1.0. Skills beyond the requirement neither help nor
+hurt.
+
+**Edge cases.** An outreach with no required skills scores 1.0 — nothing is
+required, so nothing can be missing. (This reverses an earlier assumption that
+an empty requirement scored 0 to avoid a "free pass"; an empty requirement is
+a statement by the organisation, not a data gap.) A volunteer with no skills
+against a real requirement still scores 0 and needs no special case: nothing
+matches, so the numerator is zero.
+
+**Defence.** "The skills component measures coverage of what the event
+requires, not similarity between two skill sets. Dividing by the requirement
+means a volunteer is scored on whether she can do the job, and is never
+penalised for capabilities the event happens not to need."
+
+### 1b. Reliability multiplier: reputation as a bounded penalty
+
+**Problem.** The match score measured FIT only (skills, category, location,
+availability, experience); V-Score measured RELIABILITY and had no effect on
+ordering whatsoever. Two candidates with identical 95% fit therefore ranked
+equally even when one had never missed an event and the other repeatedly
+no-showed. A volunteer who keeps flunking should not be given the same
+priority as a reliable one — nor as someone who simply has not been tested.
+
+**Decision.** Final ranking score = `matchScore × reliabilityMultiplier`,
+derived from the volunteer's V-Score band:
+
+| Band | Range | Multiplier |
+|---|---|---|
+| Elite | 90+ | 1.00 |
+| Trusted | 75–89 | 1.00 |
+| Active | 60–74 | 1.00 |
+| New volunteer | 70 (Active) | 1.00 |
+| Developing | 40–59 | 0.90 |
+| At Risk | <40 | 0.70 |
+
+**Reasoning, which must be preserved.**
+
+- The multiplier is **bounded in (0,1]** — it can only ever REDUCE a ranking,
+  never inflate one. This gives a provable invariant: fit defines the ceiling,
+  and reliability can only pull a candidate down from it. A boost above 1.0
+  was deliberately rejected. It would let reputation override fit (an Elite
+  volunteer leapfrogging a better-fitting Trusted one) and would structurally
+  disadvantage new volunteers, who start at 70 and have done nothing wrong.
+- New and untested volunteers sit at 1.00 — neutral. Not having a track record
+  is NOT the same as having a bad one, and must never be penalised.
+- **At Risk = 0.70 is calibrated, not arbitrary.** A 90%-fit chronic no-show
+  drops to 63, so a reliable volunteer needs roughly 63%+ fit to overtake
+  them. That is a meaningful demotion — proven unreliability costs roughly one
+  band of fit — without burying them so deep that redemption becomes
+  impossible. 0.65 was considered and judged too aggressive (it would let a
+  barely-qualified reliable volunteer beat a highly skilled one); 0.75 too
+  forgiving.
+- **Developing = 0.90** is a mild nudge for volunteers with minor dings or who
+  are recovering.
+
+**Presentation rule.** Both the RAW match score AND the V-Score remain visible
+to organisations. The multiplier affects ORDERING only; it is never presented
+as the volunteer's match percentage, and the match breakdown continues to
+explain fit transparently. `applications.match_score` stores the raw score —
+writing the multiplied value would conflate fit with reliability and silently
+rewrite the historical record every time a V-Score moved.
+
+**Where it applies.** `/api/match` mode `score_applicants`, where the
+multiplier varies between the candidates being compared. It is deliberately
+NOT applied in `rank_feed`: there the volunteer is ranking outreaches, so the
+multiplier would be their own single V-Score applied identically to every row
+— a positive constant, which cannot change the order — and applying it would
+only risk a deflated number leaking into a displayed match percentage.
+
+**Defence.** "The reliability modifier is a bounded penalty in (0,1] —
+reputation can only reduce a candidate's ranking, never inflate it, so
+match-fit always dominates and new volunteers are never structurally
+disadvantaged. Proven unreliability costs roughly one band of fit, which
+demotes chronic no-shows below reliable candidates of moderately lower fit,
+while still allowing redemption."
+
+### 2. Feed pre-filter: scalability of the ranking loop
+
+**Problem.** The feed scored EVERY open outreach for every volunteer on every
+load, then sorted. At small scale this is fine, but compute was being spent
+scoring outreaches the volunteer could never realistically attend. At 10,000
+outreaches, scoring the ~200 relevant ones instead is roughly a 50× saving —
+and it is also what keeps the Gemini batch in Layer 2 small.
+
+**Decision.** `rank_feed` pre-filters candidates before scoring:
+
+1. `status = 'open'`
+2. slots still available (`slots_filled < slots_total`)
+3. region ∈ the volunteer's own region **or an adjacent region**
+
+**Deliberately NOT pre-filtered**, and this is the important half of the
+decision:
+
+- **Category** — a related category still scores 0.5, and support roles match
+  everyone, so an exact-category filter would wrongly drop valid matches.
+- **Skills** — a partial overlap is a legitimate match.
+- **Availability** — an event spanning slots, or a storage quirk, could
+  wrongly hide a valid outreach. Let these score 0 rather than be filtered
+  out.
+
+The governing principle: **only exclude the genuinely impossible.** Anything
+that could plausibly score above zero must still be scored and ranked. The
+pre-filter changes what is CHEAP TO RANK, never what is DISCOVERABLE.
+
+**Region adjacency.** `GHANA_REGION_ADJACENCY` in
+`constants/ghana-locations.ts` maps which of the 16 regions share a land
+border. Two properties are enforced by unit test rather than trusted: it is
+**symmetric** (a one-way edge would make the feed asymmetric in a way nothing
+in the UI would reveal), and it errs toward **inclusion** where two regions
+meet only at a corner — a wrongly-included region merely scores low on
+location, whereas a wrongly-excluded one is invisible.
+
+**Empty-feed guard.** If fewer than 5 candidates survive the region filter,
+the search widens to the whole platform (`shouldWidenFeedSearch` in
+`lib/matching/feedFilter.ts`, unit-tested at the boundary). Five is a floor on
+a USEFUL feed, not merely a non-empty one. The rule does not fire when the
+volunteer applied their own explicit region filter (their choice wins) or when
+no region restriction was applied in the first place (the query was already
+unrestricted, so repeating it would waste a round trip).
+
+**Complexity.** Scoring is O(N × S) and sorting O(N log N) over RELEVANT N —
+open, still-recruiting, reachable — not over every outreach on the platform.
+
+**Implementation note.** The slots predicate runs in application code
+immediately after the fetch rather than in the query, because PostgREST cannot
+express a column-to-column comparison (it filters columns against literals
+only). It still runs BEFORE any scoring, so the scoring cost is over relevant
+N either way; only the transferred row count is unaffected. Moving it into the
+database would require a generated `has_open_slots` column — a schema change
+not worth making for a predicate this cheap.
+
+**Defence.** "The feed pre-filters to open, non-full outreaches within a
+reachable region before scoring, so ranking cost grows with the number of
+relevant outreaches rather than the total on the platform — with a fallback
+that widens the search in low-activity regions so no volunteer sees an empty
+feed."

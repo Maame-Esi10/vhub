@@ -1,9 +1,12 @@
 import {
   NEW_VOLUNTEER_V_SCORE,
+  RELIABILITY_MULTIPLIERS,
   V_SCORE_PENALTIES,
   applyVScorePenalties,
   applyVScorePenalty,
   computeEventOutcome,
+  computeRankingScore,
+  getReliabilityMultiplier,
   getVScoreBand,
   recomputeVScoreAfterReview,
   type EventOutcomeInput,
@@ -250,5 +253,74 @@ const penaltyGoldenCases: PenaltyGoldenCase[] = [
 describe('applyVScorePenalty golden cases', () => {
   test.each(penaltyGoldenCases)('$name -> $expectedNewScore', ({ oldScore, penalty, expectedNewScore }) => {
     expect(applyVScorePenalty(oldScore, penalty)).toBe(expectedNewScore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reliability multiplier (owner decision, 2026-08-05)
+// ---------------------------------------------------------------------------
+
+describe('getReliabilityMultiplier — every band edge', () => {
+  const cases: { score: number; expected: number; why: string }[] = [
+    { score: 100, expected: 1, why: 'top of Elite' },
+    { score: 90, expected: 1, why: 'Elite lower edge' },
+    { score: 89, expected: 1, why: 'Trusted upper edge' },
+    { score: 75, expected: 1, why: 'Trusted lower edge' },
+    { score: 74, expected: 1, why: 'Active upper edge' },
+    { score: NEW_VOLUNTEER_V_SCORE, expected: 1, why: 'a brand-new volunteer is never penalised' },
+    { score: 60, expected: 1, why: 'Active lower edge — last score with no penalty' },
+    { score: 59, expected: 0.9, why: 'Developing upper edge — penalty begins here' },
+    { score: 40, expected: 0.9, why: 'Developing lower edge' },
+    { score: 39, expected: 0.7, why: 'At Risk upper edge' },
+    { score: 0, expected: 0.7, why: 'floor' },
+  ];
+
+  test.each(cases)('$score ($why) -> $expected', ({ score, expected }) => {
+    expect(getReliabilityMultiplier(score)).toBe(expected);
+  });
+
+  it('is neutral for an unknown score rather than penalising it', () => {
+    expect(getReliabilityMultiplier(null)).toBe(1);
+    expect(getReliabilityMultiplier(undefined)).toBe(1);
+    expect(getReliabilityMultiplier(Number.NaN)).toBe(1);
+  });
+
+  // The invariant the whole design rests on: reputation can only ever pull a
+  // candidate DOWN from the ceiling their fit earns them. If any multiplier
+  // were ever raised above 1.0, reputation could override fit and new
+  // volunteers would be structurally disadvantaged.
+  it('is bounded in (0, 1] for every band', () => {
+    for (const multiplier of Object.values(RELIABILITY_MULTIPLIERS)) {
+      expect(multiplier).toBeGreaterThan(0);
+      expect(multiplier).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe('computeRankingScore', () => {
+  it('leaves a reliable volunteer at their raw match score', () => {
+    expect(computeRankingScore(95, 90)).toBe(95);
+    expect(computeRankingScore(95, NEW_VOLUNTEER_V_SCORE)).toBe(95);
+  });
+
+  // The calibration behind At Risk = 0.70, asserted so it cannot drift: a
+  // chronic no-show's 90% fit demotes to 63, so a reliable candidate overtakes
+  // them from roughly 63% fit upward — about one band of fit — while a
+  // substantially better-fitting unreliable candidate still wins.
+  it('costs a chronic no-show roughly one band of fit', () => {
+    const atRisk = computeRankingScore(90, 30);
+    expect(atRisk).toBeCloseTo(63);
+    expect(computeRankingScore(64, 85)).toBeGreaterThan(atRisk);
+    expect(computeRankingScore(62, 85)).toBeLessThan(atRisk);
+  });
+
+  it('never lets reliability overtake a clearly better fit', () => {
+    // An Elite volunteer with mediocre fit stays behind an At Risk volunteer
+    // whose fit is far higher — fit dominates, which is the point.
+    expect(computeRankingScore(50, 95)).toBeLessThan(computeRankingScore(90, 20));
+  });
+
+  it('applies the mild Developing nudge', () => {
+    expect(computeRankingScore(80, 50)).toBeCloseTo(72);
   });
 });

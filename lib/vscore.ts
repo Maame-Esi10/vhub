@@ -34,6 +34,71 @@ export function getVScoreBand(score: number): VScoreBand {
 }
 
 // ---------------------------------------------------------------------------
+// Reliability multiplier (owner decision, 2026-08-05).
+//
+// The match score measures FIT only. V-Score measures RELIABILITY and, until
+// this was added, had no effect on ordering at all -- so two candidates with
+// identical 95% fit ranked equally even when one had never missed an event and
+// the other repeatedly no-showed. This multiplier is how reputation reaches
+// the ranking.
+//
+// THE INVARIANT, which is the whole point of the design: the multiplier is
+// bounded in (0, 1]. It can only ever REDUCE a ranking, never inflate one. Fit
+// therefore defines the ceiling and reliability can only pull a candidate down
+// from it. A boost above 1.0 was deliberately rejected: it would let reputation
+// override fit (an Elite volunteer leapfrogging a better-fitting Trusted one)
+// and would structurally disadvantage new volunteers, who start at 70 and have
+// done nothing wrong.
+// ---------------------------------------------------------------------------
+
+/**
+ * Ranking multiplier by band. Elite/Trusted/Active are all 1.00 -- the penalty
+ * begins only at Developing, because the top three bands describe volunteers
+ * who are meeting expectations and there is nothing to correct for.
+ *
+ * The two penalty values are calibrated, not arbitrary:
+ *   - At Risk = 0.70. A 90%-fit chronic no-show drops to 63, so a reliable
+ *     candidate needs roughly 63%+ fit to overtake them -- proven
+ *     unreliability costs about one band of fit. 0.65 was judged too
+ *     aggressive (a barely-qualified reliable volunteer would beat a highly
+ *     skilled one) and 0.75 too forgiving.
+ *   - Developing = 0.90, a mild nudge for minor dings or a score in recovery.
+ */
+export const RELIABILITY_MULTIPLIERS: Record<VScoreBand, number> = {
+  Elite: 1.0,
+  Trusted: 1.0,
+  Active: 1.0,
+  Developing: 0.9,
+  'At Risk': 0.7,
+};
+
+/**
+ * Ranking multiplier for a volunteer's V-Score.
+ *
+ * A null/undefined/non-finite score returns 1.0 (fully neutral), and so does
+ * the `NEW_VOLUNTEER_V_SCORE` of 70, which sits inside Active. This is
+ * deliberate and must not be "tightened": not having a track record is NOT the
+ * same as having a bad one, and an untested volunteer must never be penalised
+ * for it.
+ */
+export function getReliabilityMultiplier(vScore: number | null | undefined): number {
+  if (vScore == null || !Number.isFinite(vScore)) return 1;
+  return RELIABILITY_MULTIPLIERS[getVScoreBand(vScore)];
+}
+
+/**
+ * The value candidates are ORDERED by: matchScore x reliabilityMultiplier.
+ *
+ * This is a ranking key, not a match percentage. The raw match score and the
+ * V-Score both stay separately visible to organisations, and the match
+ * breakdown continues to explain fit on its own terms -- the multiplier must
+ * never be presented to anyone as "your match is X%".
+ */
+export function computeRankingScore(matchScore: number, vScore: number | null | undefined): number {
+  return matchScore * getReliabilityMultiplier(vScore);
+}
+
+// ---------------------------------------------------------------------------
 // V-Score recompute math (CLAUDE.md -> V-Score, spec final where stated).
 // Pure functions only. This is deliberately the ONLY place this math is
 // defined; the serverless /api/vscore endpoint imports it rather than

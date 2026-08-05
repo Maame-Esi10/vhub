@@ -61,19 +61,30 @@ function toNormalizedSet(values: readonly string[] | null | undefined): Set<stri
 // ---------------------------------------------------------------------------
 
 /**
- * Skills component (CLAUDE.md: "overlap of skill_tags vs required_skills
- * divided by the size of the larger set").
+ * Skills component: matched required skills / REQUIRED skills.
  *
- * ASSUMPTION flagged for owner sign-off (docs/REPORT_NOTES.md): CLAUDE.md
- * doesn't state what an empty list means. We define an empty
- * `requiredSkills` list OR an empty `volunteerTags` list as scoring 0 (not a
- * "free pass" 1.0) -- Skills is the single largest weight (35 of 100), and
- * missing data on either side should never silently max it out.
+ * The denominator is the requirement, NOT (as originally specified) the
+ * larger of the two sets. Owner decision, 2026-08-05. Dividing by the larger
+ * set penalised breadth: for an outreach requiring 5 skills, a volunteer
+ * holding exactly those 5 scored 5/5 = 1.0, while a broad, experienced
+ * volunteer holding the same 5 plus 15 others scored 5/20 = 0.25 -- marked
+ * down for being well-rounded despite meeting every requirement. Under the
+ * current rule both score 1.0. Skills beyond the requirement neither help nor
+ * hurt, which is the correct reading of "does this person cover what the
+ * event needs".
+ *
+ * Empty-list handling, revised with the same decision: an outreach with NO
+ * required skills scores 1.0 -- nothing is required, so nothing can be
+ * missing. (Previously 0, on the reasoning that missing data shouldn't max
+ * out the largest weight; but an empty requirement is a statement by the
+ * organisation, not a data gap.) A volunteer with no skills against a
+ * non-empty requirement still scores 0, and needs no special case: nothing
+ * matches, so the numerator is 0.
  *
  * Matching is case-insensitive and whitespace-trimmed, and duplicate/
  * whitespace/case variants of the same tag are deduplicated before
- * comparing (`["Wound Care", "wound care "]` counts once), so denominators
- * reflect distinct skills, not raw array length.
+ * comparing (`["Wound Care", "wound care "]` counts once), so the denominator
+ * reflects distinct required skills, not raw array length.
  *
  * `equivalences` is an optional injected map of normalized-skill ->
  * normalized-equivalent-skills (e.g. "venipuncture" -> {"blood draw"}),
@@ -90,7 +101,9 @@ export function skillsScore(
   const volunteerSet = toNormalizedSet(volunteerTags);
   const requiredSet = toNormalizedSet(requiredSkills);
 
-  if (volunteerSet.size === 0 || requiredSet.size === 0) return 0;
+  // Nothing required -> nothing can be missing. Guarded before the division
+  // rather than relying on 0/0.
+  if (requiredSet.size === 0) return 1;
 
   const areEquivalent = (a: string, b: string): boolean => {
     if (a === b) return true;
@@ -108,8 +121,7 @@ export function skillsScore(
     }
   }
 
-  const denominator = Math.max(volunteerSet.size, requiredSet.size);
-  return matched / denominator;
+  return matched / requiredSet.size;
 }
 
 // ---------------------------------------------------------------------------

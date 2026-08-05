@@ -51,6 +51,18 @@
           "photosPermission": "V-HUB needs access to your photos so you can set a profile picture and add a flyer to an outreach.",
           "cameraPermission": "V-HUB needs camera access so you can photograph a credential document for verification."
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "V-HUB needs camera access so you can scan the check-in code at an outreach."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "V-HUB checks your location once, only when you scan a check-in code, to confirm you are at the event. Your location is never stored or tracked."
+        }
       ]
     ],
     "extra": {

@@ -155,10 +155,8 @@ export default function OutreachDetail() {
         </View>
 
         {/*
-          Built from a list rather than four hand-placed rows so first/last
-          spacing and the hairline dividers stay correct when the optional
-          role row is absent -- otherwise the divider under "slots" would be
-          the card's last visible line whenever role_type is null.
+          Built from a list rather than four hand-placed rows so the spacing
+          stays even when the optional role row is absent.
         */}
         <View style={styles.card}>
           {(
@@ -194,18 +192,18 @@ export default function OutreachDetail() {
                   ]
                 : []),
             ] as const
-          ).map((row, index, rows) => (
-            <DetailRow
-              key={row.label}
-              icon={row.icon}
-              label={row.label}
-              first={index === 0}
-              last={index === rows.length - 1}
-            >
+          ).map((row) => (
+            <DetailRow key={row.label} icon={row.icon} label={row.label}>
               {row.value}
             </DetailRow>
           ))}
 
+          {/*
+            The link is an action, not another fact, so it needs more air above
+            it than one fact needs from the next -- otherwise it reads as
+            spilling out of the last row. Separated by space rather than a
+            rule, since the card has no rules in it.
+          */}
           {organisation ? (
             <Pressable
               onPress={() => router.push(`/profile/organisation/${organisation.id}`)}
@@ -391,29 +389,36 @@ export default function OutreachDetail() {
 /**
  * One labelled fact in the outreach card.
  *
- * The icon sits in a fixed-size tile rather than being placed directly in the
- * row. Glyphs differ in intrinsic width -- a pin is narrow, a stethoscope
- * wide -- so laid out bare they never share a left edge and the text after
- * them starts at a different x on every row. A fixed tile makes both columns
- * exact regardless of glyph.
+ * The icon sits on the label's own line: rendered at 16pt in a 16pt-wide
+ * column, against a label whose line height is also 16, so the two boxes are
+ * identical and share a line exactly. An earlier version put the icon in a
+ * 28pt circular tile, which cannot sit on a 13pt line however it is aligned --
+ * the tile's edges always overhang the text and it read as floating above.
+ *
+ * The column is fixed-width because glyphs differ in intrinsic width -- a pin
+ * is narrow, a stethoscope wide -- so laid out bare they never share a left
+ * edge and the text after them starts at a different x on every row.
+ *
+ * Rows are separated by the card's `gap` alone. No dividers.
  */
 function DetailRow({
   icon,
   label,
   children,
-  first,
-  last,
 }: {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   label: string;
   children: React.ReactNode;
-  first?: boolean;
-  last?: boolean;
 }) {
   return (
-    <View style={[styles.detailRow, first && styles.detailRowFirst, last && styles.detailRowLast]}>
-      <View style={styles.detailIconTile}>
-        <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
+    <View style={styles.detailRow}>
+      <View style={styles.detailIconColumn}>
+        <MaterialCommunityIcons
+          name={icon}
+          size={16}
+          color={colors.primary}
+          style={styles.detailIcon}
+        />
       </View>
       <View style={styles.detailTextBlock}>
         <Text style={styles.detailLabel}>{label}</Text>
@@ -476,62 +481,56 @@ const styles = StyleSheet.create({
   // a label/value hierarchy -- not from a shadow; nothing else in this
   // codebase is raised.
   //
-  // gap is 0 because the rows carry their own vertical padding; a gap on top
-  // of that would double the space either side of every divider.
+  // Rows are spaced by `gap` alone -- no dividers, no per-row padding -- so
+  // the space between any two facts is one number.
   card: {
     marginTop: spacing.base,
-    paddingHorizontal: spacing.base,
-    // Bottom padding lives on the card, not the last row, so the org link
-    // (when present) is spaced from the rows above AND from the card edge.
-    paddingBottom: spacing.base,
+    padding: spacing.base,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 0,
+    gap: spacing.base,
   },
   detailRow: {
     flexDirection: 'row',
-    // Centred so the icon tile sits level with the middle of its text block,
-    // including the two-line rows (location, date) where flex-start left it
-    // stranded at the top.
-    alignItems: 'center',
+    // Top-aligned, so the icon anchors to the label line at the head of the
+    // row. Centring stranded the pin beside line 2 of a two-line address.
+    alignItems: 'flex-start',
     gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  detailRowFirst: {
-    paddingTop: spacing.base,
-  },
-  detailRowLast: {
-    borderBottomWidth: 0,
-  },
-  // Fixed size, so every icon shares one left edge and one text start column
-  // whatever the glyph's natural width. White on the tinted card gives the
-  // separation that makes the rows read as distinct facts.
-  detailIconTile: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  // The rail. Glyphs do NOT all have the same advance width -- the calendar
+  // and stethoscope are wider than the pin -- so a width + textAlign on the
+  // glyph itself let the wide ones overhang their box to the left and the
+  // column came out ragged. A layout container centres each glyph's box in a
+  // fixed 20pt column instead, which is deterministic: same centre, and
+  // therefore the same left edge, for every icon on the card. 20 rather than
+  // 16 so the widest glyph fits inside the column instead of spilling out.
+  detailIconColumn: {
+    width: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
+  },
+  // Line height matched to the label's, so icon and label share one line box
+  // and read as one line. This is what keeps the pin beside "LOCATION".
+  detailIcon: {
+    lineHeight: 16,
   },
   detailTextBlock: {
     flex: 1,
   },
+  // Set back in size and weight so the value leads and the label only names
+  // it; at 11pt semiBold the two were competing for the same emphasis.
   detailLabel: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 11,
-    letterSpacing: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 10,
+    lineHeight: 16,
+    letterSpacing: 0.8,
     color: colors.textSecondary,
-    marginBottom: 2,
   },
   detailText: {
-    fontFamily: fontFamily.medium,
+    fontFamily: fontFamily.semiBold,
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 19,
     color: colors.textPrimary,
   },
   orgLink: {
@@ -539,6 +538,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
+    // On top of the card's gap, so the action stands clear of the last fact.
+    marginTop: spacing.sm,
     minHeight: 44,
     borderRadius: radius.pill,
     backgroundColor: 'rgba(255, 107, 107, 0.08)',

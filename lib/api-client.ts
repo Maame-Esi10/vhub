@@ -189,8 +189,23 @@ async function apiPost<TResponse>(
 export interface ScoredApplicant {
   applicationId: string;
   volunteerId: string;
+  /**
+   * Raw fit, 0-100. THIS is the volunteer's match percentage and the only one
+   * that may be shown as such.
+   */
   matchScore: number;
   breakdown: Layer1MatchResult;
+  /**
+   * The volunteer's reliability score, carried alongside so an organisation
+   * sees fit and reliability as the two separate things they are.
+   */
+  vScore: number | null;
+  /**
+   * matchScore x reliability multiplier -- the value `results` is ordered by.
+   * Ordering only. Never render this as a match percentage; it is deliberately
+   * lower than `matchScore` for volunteers with a poor track record.
+   */
+  rankingScore: number;
 }
 
 export interface ScoreApplicantsResponse {
