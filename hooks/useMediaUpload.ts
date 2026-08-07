@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { recordVerificationDocument } from '@/lib/api-client';
+import { deleteVerificationDocument, recordVerificationDocument } from '@/lib/api-client';
 import {
   pickCredentialDocument,
   pickImage,
@@ -84,6 +84,46 @@ export function useCredentialUpload() {
     },
     onSuccess: (updated) => {
       if (updated) setVolunteerProfile(updated);
+    },
+  });
+}
+
+/**
+ * Withdraws the credential document.
+ *
+ * Goes through the same endpoint as the upload, and for the same reason: both
+ * columns it touches are server-only. The volunteer returns to `unverified`,
+ * which is deliberate — `documents_pending` means a reviewer has something to
+ * read, and with the document gone they would sit in a queue for a decision
+ * nobody can make.
+ */
+export function useDeleteCredential() {
+  const setVolunteerProfile = useAuthStore((state) => state.setVolunteerProfile);
+
+  return useMutation({
+    mutationFn: async (userId: string): Promise<VolunteerProfile> => {
+      const result = await deleteVerificationDocument();
+
+      const { data, error } = await supabase
+        .from('volunteer_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        throw new Error(error.message || 'Document removed, but the status could not be refreshed.');
+      }
+
+      // Surfaced rather than swallowed: the row is authoritative and has been
+      // cleared, but the file may still exist in storage, and a volunteer
+      // withdrawing an identity document deserves to know that.
+      if (!result.storageCleared) {
+        console.warn('Credential row cleared but the stored file could not be deleted.');
+      }
+      return data as VolunteerProfile;
+    },
+    onSuccess: (updated) => {
+      setVolunteerProfile(updated);
     },
   });
 }

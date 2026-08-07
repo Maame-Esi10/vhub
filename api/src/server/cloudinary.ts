@@ -95,6 +95,78 @@ export function signUpload(kind: UploadKind, userId: string): UploadSignature {
  * verification_status to 'documents_pending' with no document behind it,
  * which is the exact assertion the server-side write exists to prevent.
  */
+/**
+ * Recovers a Cloudinary public_id from a stored secure URL.
+ *
+ * Needed because `volunteer_profiles.credential_document_url` holds the URL and
+ * nothing else — there is no public_id column, and adding one is a schema
+ * change rather than a detail to slip in. A URL looks like:
+ *
+ *   https://res.cloudinary.com/<cloud>/raw/upload/v1712345678/vhub/credentials/<uid>/<file>.pdf
+ *
+ * Everything after `/upload/`, minus the version segment, is the public id.
+ * For `raw` assets the extension is PART of the id; for `image` it is not.
+ *
+ * This is deliberately the only place that parses a Cloudinary URL, and it is
+ * best-effort by design: callers must treat null as "could not determine" and
+ * carry on rather than failing the user's request, because a stored URL that
+ * does not parse is our problem, not theirs.
+ */
+export function publicIdFromUrl(
+  secureUrl: string,
+  resourceType: "image" | "raw"
+): string | null {
+  const marker = "/upload/";
+  const index = secureUrl.indexOf(marker);
+  if (index === -1) return null;
+
+  let path = secureUrl.slice(index + marker.length);
+  if (!path) return null;
+
+  // Strip the version segment Cloudinary inserts (v1712345678/), when present.
+  path = path.replace(/^v\d+\//, "");
+  // Strip any query string or fragment.
+  path = path.split("?")[0]!.split("#")[0]!;
+  if (!path) return null;
+
+  if (resourceType === "image") {
+    // An image's public id excludes the extension; a raw asset's includes it.
+    path = path.replace(/\.[^./]+$/, "");
+  }
+
+  return decodeURIComponent(path);
+}
+
+/**
+ * Deletes an asset from Cloudinary. Returns false if it could not be removed.
+ *
+ * BEST-EFFORT ON PURPOSE. When a volunteer removes their credential document,
+ * the thing that must succeed is clearing the database columns — that is what
+ * decides what the app shows and what a reviewer can reach. If Cloudinary is
+ * down, the delete still goes through and this returns false, leaving an
+ * orphaned file rather than a row pointing at a document the volunteer
+ * believes they removed. The alternative — refusing the delete — would leave
+ * BOTH the row and the file in place, which is strictly worse for the person
+ * asking to withdraw their own document.
+ */
+export async function destroyAsset(
+  publicId: string,
+  resourceType: "image" | "raw"
+): Promise<boolean> {
+  const authorization =
+    "Basic " + Buffer.from(`${env.cloudinaryApiKey}:${env.cloudinaryApiSecret}`).toString("base64");
+
+  try {
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${env.cloudinaryCloudName}/resources/${resourceType}/upload?public_ids[]=${encodeURIComponent(publicId)}`,
+      { method: "DELETE", headers: { Authorization: authorization } }
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function assetExists(publicId: string, resourceType: "image" | "raw"): Promise<boolean> {
   // Cloudinary's Admin API authenticates with HTTP Basic (key:secret), not
   // the upload signature scheme above -- no timestamp or hash is involved.

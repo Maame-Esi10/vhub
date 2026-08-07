@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, ScreenHeader } from '@/components/ui';
+import { Button, ConfirmDialog, ScreenHeader } from '@/components/ui';
 import { useSignDeclaration } from '@/hooks/useSignDeclaration';
 // Imported from its own module, never the hooks barrel: useMediaUpload pulls in
 // the native picker modules, and a barrel import would drag them into every
 // screen that imports any hook. See the note in lib/cloudinary.ts.
-import { useCredentialUpload } from '@/hooks/useMediaUpload';
+import { useCredentialUpload, useDeleteCredential } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
@@ -65,8 +65,11 @@ export default function VolunteerVerifyIdentity() {
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const signDeclaration = useSignDeclaration();
   const credentialUpload = useCredentialUpload();
+  const deleteCredential = useDeleteCredential();
   const [confirmed, setConfirmed] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
+  const documentUrl = volunteerProfile?.credential_document_url ?? null;
   const status = volunteerProfile?.verification_status ?? 'unverified';
   const presentation = STATUS_PRESENTATION[status] ?? STATUS_PRESENTATION.unverified;
   const declarationSigned = volunteerProfile?.declaration_signed === true;
@@ -162,21 +165,157 @@ export default function VolunteerVerifyIdentity() {
             />
           </>
         ) : (
-          <View style={styles.signedRow}>
-            <MaterialCommunityIcons
-              name={status === 'verified' ? 'check-circle' : 'file-check-outline'}
-              size={18}
-              color={status === 'verified' ? colors.success : colors.warning}
-            />
-            <Text style={styles.signedText}>
-              {status === 'verified'
-                ? 'Your credential has been reviewed and accepted.'
-                : 'Your document has been received and is waiting on review.'}
-            </Text>
-          </View>
+          <>
+            <View style={styles.signedRow}>
+              <MaterialCommunityIcons
+                name={status === 'verified' ? 'check-circle' : 'file-check-outline'}
+                size={18}
+                color={status === 'verified' ? colors.success : colors.warning}
+              />
+              <Text style={styles.signedText}>
+                {status === 'verified'
+                  ? 'Your credential has been reviewed and accepted.'
+                  : 'Your document has been received and is waiting on review.'}
+              </Text>
+            </View>
+
+            {/*
+              The document itself, which used to be invisible the moment it was
+              uploaded: a volunteer could not check WHICH file they had sent,
+              could not swap a wrong one, and could not take it back. That last
+              one matters most — this is an identity document, and being unable
+              to withdraw your own is the wrong default.
+            */}
+            {documentUrl ? (
+              <DocumentPreview
+                url={documentUrl}
+                // A verified volunteer keeps the view and loses the controls:
+                // the document is the evidence behind an approval a human
+                // already made, so it cannot be swapped or withdrawn from here.
+                canManage={status !== 'verified'}
+                isReplacing={credentialUpload.isPending}
+                isDeleting={deleteCredential.isPending}
+                onReplace={() => user && credentialUpload.mutate(user.id)}
+                onDelete={() => setConfirmingDelete(true)}
+              />
+            ) : null}
+
+            {credentialUpload.error ? (
+              <Text style={styles.errorText}>{credentialUpload.error.message}</Text>
+            ) : null}
+            {deleteCredential.error ? (
+              <Text style={styles.errorText}>{deleteCredential.error.message}</Text>
+            ) : null}
+          </>
         )}
       </ScrollView>
+
+      <ConfirmDialog
+        visible={confirmingDelete}
+        icon="file-remove-outline"
+        tone="destructive"
+        title="Remove this document?"
+        message="Your verification goes back to Not verified and the file is deleted, so nobody at V-HUB can read it. You can upload a different one whenever you like."
+        confirmLabel="Remove document"
+        cancelLabel="Keep it"
+        busy={deleteCredential.isPending}
+        onConfirm={() => {
+          setConfirmingDelete(false);
+          if (user) deleteCredential.mutate(user.id);
+        }}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </SafeAreaView>
+  );
+}
+
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.gif'];
+
+/** True when the stored URL points at something React Native can render inline. */
+function isImageDocument(url: string): boolean {
+  const path = url.split('?')[0]?.toLowerCase() ?? '';
+  return IMAGE_EXTENSIONS.some((extension) => path.endsWith(extension));
+}
+
+interface DocumentPreviewProps {
+  url: string;
+  canManage: boolean;
+  isReplacing: boolean;
+  isDeleting: boolean;
+  onReplace: () => void;
+  onDelete: () => void;
+}
+
+/**
+ * The uploaded document, with the two controls that were missing.
+ *
+ * A PDF cannot be rendered inline without a viewer dependency, and adding one
+ * would cost a native rebuild for a screen most volunteers visit once — so a
+ * non-image opens in the phone's own browser instead. An image is shown
+ * directly, since that is the common case (people photograph certificates) and
+ * it answers "did I send the right file?" without leaving the app.
+ */
+function DocumentPreview({
+  url,
+  canManage,
+  isReplacing,
+  isDeleting,
+  onReplace,
+  onDelete,
+}: DocumentPreviewProps) {
+  const isImage = isImageDocument(url);
+  const busy = isReplacing || isDeleting;
+
+  return (
+    <View style={styles.documentCard}>
+      {isImage ? (
+        <Pressable
+          onPress={() => void Linking.openURL(url)}
+          accessibilityRole="imagebutton"
+          accessibilityLabel="Open your credential document full size"
+        >
+          <Image source={{ uri: url }} style={styles.documentImage} resizeMode="cover" />
+        </Pressable>
+      ) : (
+        <Pressable
+          onPress={() => void Linking.openURL(url)}
+          accessibilityRole="button"
+          accessibilityLabel="Open your credential document"
+          style={({ pressed }) => [styles.documentFileRow, pressed && styles.documentPressed]}
+        >
+          <MaterialCommunityIcons name="file-document-outline" size={24} color={colors.primary} />
+          <View style={styles.documentFileText}>
+            <Text style={styles.documentFileTitle}>Your document</Text>
+            <Text style={styles.documentFileHint}>Tap to open it</Text>
+          </View>
+          <MaterialCommunityIcons name="open-in-new" size={18} color={colors.textSecondary} />
+        </Pressable>
+      )}
+
+      {canManage ? (
+        <View style={styles.documentActions}>
+          <Button
+            title={isReplacing ? 'Uploading...' : 'Replace'}
+            variant="outline"
+            disabled={busy}
+            onPress={onReplace}
+            style={styles.documentAction}
+          />
+          <Button
+            title={isDeleting ? 'Removing...' : 'Remove'}
+            variant="outline"
+            disabled={busy}
+            onPress={onDelete}
+            style={styles.documentAction}
+            textStyle={styles.documentDeleteLabel}
+          />
+        </View>
+      ) : (
+        <Text style={styles.documentLockedNote}>
+          Your document is locked now that you are verified. Contact V-HUB if it needs updating.
+        </Text>
+      )}
+    </View>
   );
 }
 
@@ -184,6 +323,61 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  documentCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+    padding: spacing.md,
+    marginTop: spacing.base,
+    gap: spacing.md,
+  },
+  documentImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+  },
+  documentFileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 56,
+    paddingHorizontal: spacing.sm,
+  },
+  documentPressed: {
+    opacity: 0.8,
+  },
+  documentFileText: {
+    flex: 1,
+  },
+  documentFileTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  documentFileHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  documentActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  documentAction: {
+    flex: 1,
+  },
+  documentDeleteLabel: {
+    color: colors.danger,
+  },
+  documentLockedNote: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
   },
   content: {
     paddingHorizontal: spacing.xl,

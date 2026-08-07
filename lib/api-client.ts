@@ -622,7 +622,37 @@ export function recordVerificationDocument(
 ): Promise<{ verificationStatus: 'documents_pending' }> {
   return apiPost<{ verificationStatus: 'documents_pending' }>(
     API_ROUTES.verificationDocument,
-    { publicId, secureUrl },
+    { action: 'record', publicId, secureUrl },
+    options
+  );
+}
+
+export interface DeleteVerificationDocumentResponse {
+  verificationStatus: 'unverified';
+  /**
+   * False when the file could not be removed from Cloudinary storage. The
+   * database is authoritative and was cleared either way — this is reported
+   * so the UI can be honest rather than claiming a clean removal it cannot
+   * confirm.
+   */
+  storageCleared: boolean;
+}
+
+/**
+ * Withdraws the credential document and returns the volunteer to
+ * `unverified`.
+ *
+ * The status drops deliberately: `documents_pending` means a reviewer has
+ * something to read, and with the document gone they would be queued for a
+ * decision nobody can make. Refused once `verified` — that document is the
+ * evidence behind an approval a human already gave.
+ */
+export function deleteVerificationDocument(
+  options?: RequestOptions
+): Promise<DeleteVerificationDocumentResponse> {
+  return apiPost<DeleteVerificationDocumentResponse>(
+    API_ROUTES.verificationDocument,
+    { action: 'delete' },
     options
   );
 }
