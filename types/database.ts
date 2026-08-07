@@ -1,6 +1,14 @@
 // V-HUB database types — mirrors supabase/schema.sql exactly (snake_case columns).
 // Backend is Supabase ONLY. Do not add Firebase types here.
 
+// The location verdict is defined once, in lib/attendance.ts, alongside the
+// logic that produces it — the values are a behaviour, not just a column
+// constraint, and a second copy here would be free to drift from the rule the
+// API actually applies.
+import type { LocationCheck } from "@/lib/attendance";
+
+export type { LocationCheck };
+
 export type ProfileRole = "volunteer" | "organisation";
 
 // Qualified professionals first, then students, then support roles — the same
@@ -123,8 +131,32 @@ export interface Outreach {
   status: OutreachStatus;
   /** Cloudinary URL of the flyer image. Client-writable by the owning org. */
   flyer_url: string | null;
+  /**
+   * Venue anchor for the attendance location check, captured from the
+   * ORGANISER's device. Server-only (written by /api/checkin) — absent from
+   * the outreaches grant lists, so a client cannot forge an anchor.
+   *
+   * Note there is no `checkin_code` here: the QR secret lives in
+   * `outreach_checkin_codes`, because every authenticated user can read an
+   * outreach row and RLS cannot hide a column.
+   */
+  venue_latitude: number | null;
+  venue_longitude: number | null;
+  /** Honoured only on the event's own day — see isVenueAnchorUsable(). */
+  venue_anchored_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * The secret encoded in an outreach's check-in QR. One row per outreach,
+ * readable ONLY by the owning organisation (outreach_checkin_codes_select_owner)
+ * and never rotated — reissuing would invalidate a QR already on display.
+ */
+export interface OutreachCheckinCode {
+  outreach_id: string;
+  code: string;
+  created_at: string;
 }
 
 /**
@@ -161,9 +193,65 @@ export interface EventReview {
   attended: boolean | null;
   reliability_score: number | null;
   clinical_score: number | null;
+  /** Slugs from constants/review-remarks.ts. Never null — defaults to `{}`. */
+  remark_chips: string[];
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** How an attendance row came to exist. */
+export type CheckInMethod = "qr_scan" | "organiser";
+
+/** The organiser's final word on one volunteer. NULL on the row = unresolved. */
+export type OrganiserAttendanceStatus = "present" | "absent";
+
+/**
+ * One volunteer's attendance at one outreach. UNIQUE (outreach_id, volunteer_id).
+ *
+ * Written ONLY by /api/checkin on the service-role key — `authenticated` has
+ * no insert/update/delete policy or privilege on this table at all.
+ *
+ * PRIVACY: there is no coordinate field here, and that is deliberate rather
+ * than incidental. A scan's location is compared to the venue anchor in memory
+ * and discarded; only `location_check` survives. Do not add one.
+ */
+export interface Attendance {
+  id: string;
+  outreach_id: string;
+  volunteer_id: string;
+  /** Null means they never scanned — which is what puts them on the organiser's list. */
+  checked_in_at: string | null;
+  check_in_method: CheckInMethod | null;
+  location_check: LocationCheck;
+  organiser_status: OrganiserAttendanceStatus | null;
+  organiser_note: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One entry of `volunteer_review_summary.remark_counts`, most frequent first. */
+export interface RemarkCount {
+  chip: string;
+  count: number;
+}
+
+/**
+ * Row of the `volunteer_review_summary` view — what an ORGANISATION may see
+ * about a volunteer's reviews: an aggregate, never the individual reviews.
+ * A volunteer is judged on their pattern of contribution rather than on one
+ * bad day or one grumpy reviewer. Carries no PII; never add a name here.
+ */
+export interface VolunteerReviewSummary {
+  volunteer_id: string;
+  v_score: number;
+  events_attended: number;
+  reviews_count: number;
+  avg_reliability: number | null;
+  avg_clinical: number | null;
+  remark_counts: RemarkCount[];
 }
 
 /**

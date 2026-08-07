@@ -335,10 +335,49 @@ create table if not exists outreaches (
   slots_total int not null check (slots_total > 0),
   slots_filled int not null default 0 check (slots_filled >= 0),
   status outreach_status not null default 'draft',
+  -- The venue ANCHOR for the attendance location check, captured from the
+  -- ORGANISER's device by an explicit "I'm at the venue" tap. The organiser's
+  -- physical presence is the location reference, which is what removes any
+  -- need for a map picker, a geocoding service, or venue coordinates entered
+  -- in advance.
+  --
+  -- Note the asymmetry that makes this privacy-safe: the VENUE's coordinates
+  -- are stored (a published public event, not a person), while the
+  -- VOLUNTEER's coordinates are never stored anywhere -- see `attendance`.
+  --
+  -- All three are absent from the grant lists at the foot of this file:
+  -- written only by /api/checkin on the service-role key, so a forged anchor
+  -- cannot be PATCHed in to make a remote check-in look "confirmed".
+  venue_latitude double precision,
+  venue_longitude double precision,
+  -- What makes a bad anchor harmless: an anchor is honoured only on the
+  -- event's OWN day (isVenueAnchorUsable in lib/attendance.ts). An organiser
+  -- who opens the QR screen at home the night before does not poison the
+  -- event -- the stale anchor is discarded, every scan resolves to
+  -- 'unavailable', and everyone is still PRESENT. The failure mode is losing
+  -- a verification signal, never inventing a contradiction.
+  venue_anchored_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint slots_filled_le_total check (slots_filled <= slots_total)
 );
+
+-- Migration for installs where outreaches already existed.
+-- (supabase/migrations/20260805_attendance_and_reviews.sql)
+alter table outreaches add column if not exists venue_latitude double precision;
+alter table outreaches add column if not exists venue_longitude double precision;
+alter table outreaches add column if not exists venue_anchored_at timestamptz;
+
+-- NOTE: checkin_code was added here by 20260805 and REMOVED by
+-- 20260807_checkin_code_isolation.sql. It must not come back: this table's
+-- rows are readable by every authenticated user
+-- (outreaches_select_open_or_own below), RLS cannot restrict columns, and so
+-- a secret stored here was readable by any volunteer with a session -- which
+-- would have let anyone check in without attending. The code now lives in
+-- `outreach_checkin_codes`, one row per outreach, scoped to its owner. The
+-- actual DROP is deliberately deferred to that section, AFTER the backfill
+-- that reads this column -- dropping it here would silently reissue every
+-- live code on a re-run.
 
 drop trigger if exists trg_outreaches_updated_at on outreaches;
 create trigger trg_outreaches_updated_at
@@ -669,11 +708,21 @@ create table if not exists event_reviews (
   attended boolean,
   reliability_score int check (reliability_score between 1 and 5),
   clinical_score int check (clinical_score between 1 and 5),
+  -- Standardised tappable remarks, so an organiser can give real feedback
+  -- without composing prose -- the same friction argument as exception-based
+  -- attendance. Slugs only; constants/review-remarks.ts is the vocabulary and
+  -- holds the display labels, so wording can change without a migration.
+  remark_chips text[] not null default '{}',
+  -- The free-text escape hatch. Always optional, never blocks submission.
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (outreach_id, volunteer_id)
 );
+
+-- Migration for installs where event_reviews already existed.
+-- (supabase/migrations/20260805_attendance_and_reviews.sql)
+alter table event_reviews add column if not exists remark_chips text[] not null default '{}';
 
 drop trigger if exists trg_event_reviews_updated_at on event_reviews;
 create trigger trg_event_reviews_updated_at
@@ -730,6 +779,207 @@ create policy "event_reviews_update_org"
         and o.organisation_id = auth.uid()
     )
   );
+
+-- ============================================================
+-- outreach_checkin_codes — the secret inside each check-in QR.
+-- (supabase/migrations/20260807_checkin_code_isolation.sql)
+--
+-- A separate table rather than a column on `outreaches`, and the reason is the
+-- standing one at the foot of this file: RLS scopes ROWS, never COLUMNS.
+-- outreaches_select_open_or_own makes every non-draft outreach row readable by
+-- every authenticated user, so a secret stored there was readable by any
+-- volunteer with a session -- who could then pass /api/checkin's code check
+-- from home and be recorded present. Storing it here turns a column-privilege
+-- problem into a row problem, which one policy settles.
+--
+-- The code is never rotated: reissuing it would invalidate a QR an organiser
+-- may be displaying at a live event.
+-- ============================================================
+create table if not exists outreach_checkin_codes (
+  outreach_id uuid primary key references outreaches(id) on delete cascade,
+  code uuid not null default gen_random_uuid(),
+  created_at timestamptz not null default now()
+);
+
+-- Issues a code with every new outreach (a column default did this before).
+-- SECURITY DEFINER because the trigger fires as the inserting organisation,
+-- which deliberately has no insert privilege or policy here.
+create or replace function issue_outreach_checkin_code()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  insert into outreach_checkin_codes (outreach_id)
+  values (new.id)
+  on conflict (outreach_id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_outreaches_issue_checkin_code on outreaches;
+create trigger trg_outreaches_issue_checkin_code
+  after insert on outreaches
+  for each row execute function issue_outreach_checkin_code();
+
+-- Backfill for existing installs. Any code already issued under the old
+-- arrangement is carried across FIRST, so an outreach whose QR has been
+-- displayed keeps working; only then does every remaining outreach get a
+-- fresh one.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'outreaches'
+      and column_name = 'checkin_code'
+  ) then
+    insert into outreach_checkin_codes (outreach_id, code)
+    select id, checkin_code from outreaches where checkin_code is not null
+    on conflict (outreach_id) do nothing;
+  end if;
+end $$;
+
+insert into outreach_checkin_codes (outreach_id)
+select id from outreaches
+on conflict (outreach_id) do nothing;
+
+-- Only now is the exposed column safe to remove. See the note in the
+-- outreaches section above.
+alter table outreaches drop column if exists checkin_code;
+
+alter table outreach_checkin_codes enable row level security;
+
+-- The owning organisation, and nobody else. A volunteer gets zero rows, not a
+-- filtered column.
+drop policy if exists "outreach_checkin_codes_select_owner" on outreach_checkin_codes;
+create policy "outreach_checkin_codes_select_owner"
+  on outreach_checkin_codes for select
+  to authenticated
+  using (
+    exists (
+      select 1 from outreaches o
+      where o.id = outreach_checkin_codes.outreach_id
+        and o.organisation_id = auth.uid()
+    )
+  );
+
+-- Written only by the trigger above and the service role in /api/checkin.
+revoke insert, update, delete on outreach_checkin_codes from authenticated;
+
+-- ============================================================
+-- attendance — who actually turned up.
+-- (supabase/migrations/20260805_attendance_and_reviews.sql)
+--
+-- One row per (outreach, volunteer), created by /api/checkin when a volunteer
+-- scans, or when the organiser resolves someone who never did.
+--
+-- PRIVACY, load-bearing: this table stores the VERDICT of the location check
+-- and nothing else. There is deliberately no latitude, no longitude, no
+-- accuracy, no timestamped position -- not "we don't query them", but "they do
+-- not exist here". The volunteer's coordinates are read once, in memory, at
+-- the moment they choose to scan, compared against the venue anchor, and
+-- discarded. There is no movement record to leak, subpoena, or accidentally
+-- join against, and the guarantee comes from the shape of the table rather
+-- than from anyone's discipline.
+--
+-- Do not add coordinate columns here. If a future feature needs them, that is
+-- a decision to re-take explicitly, not a column to slip in.
+-- ============================================================
+create table if not exists attendance (
+  id uuid primary key default gen_random_uuid(),
+  outreach_id uuid not null references outreaches(id) on delete cascade,
+  volunteer_id uuid not null references volunteer_profiles(id) on delete cascade,
+
+  -- Null means they never scanned, which is what puts them on the organiser's
+  -- "needs action" list.
+  checked_in_at timestamptz,
+  check_in_method text check (check_in_method in ('qr_scan', 'organiser')),
+
+  -- The silent location check's verdict at scan time:
+  --   not_checked -- no scan happened (organiser-entered row)
+  --   confirmed   -- scan agreed with the venue anchor
+  --   unavailable -- location denied, unavailable, too imprecise, or the
+  --                  organiser never anchored the venue. COUNTS AS PRESENT:
+  --                  uneven phone and data access is a fact of the target
+  --                  context, and an honest volunteer must never be penalised
+  --                  for a device limitation or poor signal.
+  --   mismatch    -- scan clearly contradicted the venue. The only value that
+  --                  escalates; it exists to close the shared-code hole (a
+  --                  photo of the QR sent to someone at home).
+  location_check text not null default 'not_checked'
+    check (location_check in ('not_checked', 'confirmed', 'unavailable', 'mismatch')),
+
+  -- The organiser's final word. NULL = unresolved. The organisation ALWAYS has
+  -- the final override on anyone, present or absent: no automated signal ever
+  -- overrules a human who was physically at the event.
+  organiser_status text check (organiser_status in ('present', 'absent')),
+  organiser_note text,
+  resolved_by uuid references organisation_profiles(id) on delete set null,
+  resolved_at timestamptz,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (outreach_id, volunteer_id)
+);
+
+drop trigger if exists trg_attendance_updated_at on attendance;
+create trigger trg_attendance_updated_at
+  before update on attendance
+  for each row execute function set_updated_at();
+
+create index if not exists idx_attendance_outreach_id on attendance (outreach_id);
+create index if not exists idx_attendance_volunteer_id on attendance (volunteer_id);
+
+-- The effective answer to "did they attend?", in one place so no screen
+-- re-derives it and drifts. Mirrored by isPresent() in lib/attendance.ts.
+--
+-- DEFAULT PRESENT. An unresolved row with no scan still reads as present,
+-- because the organiser only actively flags real no-shows -- effort scales
+-- with the number of ABSENCES, not the number of volunteers, so a
+-- well-attended 20-person event needs no review work at all. Absence is only
+-- ever an explicit human judgement, never an inference from silence (which
+-- would turn a flat phone into a -15 penalty).
+create or replace function attendance_is_present(a attendance)
+returns boolean
+language sql
+immutable
+as $$
+  select case
+    when a.organiser_status is not null then a.organiser_status = 'present'
+    else true
+  end;
+$$;
+
+alter table attendance enable row level security;
+
+-- A volunteer sees their own attendance; the owning organisation sees every
+-- row for its own outreaches.
+drop policy if exists "attendance_select_own_or_org" on attendance;
+create policy "attendance_select_own_or_org"
+  on attendance for select
+  to authenticated
+  using (
+    volunteer_id = auth.uid()
+    or exists (
+      select 1 from outreaches o
+      where o.id = attendance.outreach_id
+        and o.organisation_id = auth.uid()
+    )
+  );
+
+-- No insert/update/delete policy for `authenticated`, deliberately. EVERY
+-- write goes through /api/checkin on the service-role key, for two reasons
+-- that cannot be enforced client-side:
+--   1. A check-in must be verified against outreach_checkin_codes.code, which
+--      the volunteer must not be able to read. Were the client to write this
+--      table directly, marking yourself present at an event you never attended
+--      would be a single PATCH.
+--   2. Resolving someone absent applies the -15 no-show penalty to
+--      volunteer_profiles.v_score, which is already service-role-only.
+-- Service role bypasses RLS, so it needs no policy here. The privileges are
+-- revoked too -- see the write-protection block at the foot of this file.
 
 -- ============================================================
 -- skill_match_cache — Gemini Layer 2 skill-equivalence cache.
@@ -952,6 +1202,58 @@ revoke all on public_organisation_profiles from anon;
 grant select on public_organisation_profiles to authenticated;
 
 -- ============================================================
+-- volunteer_review_summary — what an ORGANISATION sees about a volunteer.
+-- (supabase/migrations/20260805_attendance_and_reviews.sql)
+--
+-- An aggregate, never the individual reviews. This is a fairness decision, not
+-- a convenience one: aggregation still gives an organisation a genuinely
+-- informative picture at a glance, while ensuring a volunteer is judged on
+-- their PATTERN of contribution rather than on one bad day or one grumpy
+-- reviewer -- and it rewards consistency, which is what the system is actually
+-- trying to measure. Individual reviews stay readable only by their author and
+-- their subject, under event_reviews_select_org_or_volunteer.
+--
+-- security_invoker = true, unlike the two discovery views above: this one
+-- aggregates rows the caller may already reach, so it needs no elevation.
+--
+-- No PII, and the standing rule on the discovery views applies here too --
+-- never add a phone, an email, or a name to this select list.
+-- ============================================================
+drop view if exists volunteer_review_summary;
+create view volunteer_review_summary
+with (security_invoker = true) as
+  select
+    vp.id as volunteer_id,
+    vp.v_score,
+    vp.events_attended,
+    count(er.id) filter (where er.reliability_score is not null) as reviews_count,
+    round(avg(er.reliability_score) filter (where er.reliability_score is not null), 2)
+      as avg_reliability,
+    round(avg(er.clinical_score) filter (where er.clinical_score is not null), 2)
+      as avg_clinical,
+    -- Chip slugs paired with how often they were received, most frequent
+    -- first, e.g. [{"chip":"punctual","count":7}, ...]. Aggregated in the
+    -- database so every screen shows the same ordering.
+    coalesce(
+      (
+        select jsonb_agg(t order by t.count desc, t.chip asc)
+        from (
+          select chip, count(*) as count
+          from event_reviews er2, unnest(er2.remark_chips) as chip
+          where er2.volunteer_id = vp.id
+          group by chip
+        ) t
+      ),
+      '[]'::jsonb
+    ) as remark_counts
+  from volunteer_profiles vp
+  left join event_reviews er on er.volunteer_id = vp.id
+  group by vp.id, vp.v_score, vp.events_attended;
+
+revoke all on volunteer_review_summary from anon;
+grant select on volunteer_review_summary to authenticated;
+
+-- ============================================================
 -- Column-level write protection.
 --
 -- RLS row policies above decide WHICH rows a user may update; they cannot
@@ -1072,6 +1374,11 @@ revoke update on applications from authenticated;
 -- match_score, cancelled_at and late_cancellation stay absent: service-role only.
 grant update (status, cancellation_reason, type, motivation) on applications to authenticated;
 
+-- venue_latitude, venue_longitude and venue_anchored_at are deliberately
+-- ABSENT from both this list and the INSERT list below. /api/checkin writes
+-- them on the service-role key when the organiser taps "I'm at the venue", so
+-- that a forged anchor cannot be PATCHed in to make a remote check-in resolve
+-- as "confirmed". Do not "fix" a write failure on them by adding them here.
 revoke update on outreaches from authenticated;
 grant update (
   title,
@@ -1174,3 +1481,21 @@ grant insert (
   type,
   motivation
 ) on applications to authenticated;
+
+-- attendance and outreach_checkin_codes: nothing is client-writable AT ALL, so
+-- these are whole-table revokes with no grant-back list. Both tables also have
+-- no insert/update/delete policy, which already denies the writes -- the
+-- revokes are the belt to that braces, and they fail with a different, clearer
+-- error (42501 "permission denied for table", rather than an RLS violation).
+--
+-- attendance: a check-in must be verified against outreach_checkin_codes.code,
+-- which the volunteer cannot read, and marking someone absent applies the -15
+-- no-show penalty to a service-role-only column. Both belong in /api/checkin.
+--
+-- outreach_checkin_codes: issued by trg_outreaches_issue_checkin_code (a
+-- SECURITY DEFINER trigger, which is why revoking here does not stop new
+-- outreaches getting a code) and read by the service role. SELECT is NOT
+-- revoked -- the owning organisation reads its own code through
+-- outreach_checkin_codes_select_owner to render the QR.
+revoke insert, update, delete on attendance from authenticated;
+revoke insert, update, delete on outreach_checkin_codes from authenticated;

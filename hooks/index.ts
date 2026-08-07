@@ -71,6 +71,14 @@ export type {
   CreateApplicationParams,
   CancelApplicationParams,
 } from './useApplications';
+export {
+  attendanceKeys,
+  useOutreachCheckinCode,
+  useMyAttendance,
+  useAnchorVenue,
+  useCheckIn,
+} from './useAttendance';
+export type { CheckInParams } from './useAttendance';
 export { eventReviewKeys, useOutreachReviews, useSubmitEventReview } from './useEventReviews';
 export type { SubmitEventReviewParams } from './useEventReviews';
 export {

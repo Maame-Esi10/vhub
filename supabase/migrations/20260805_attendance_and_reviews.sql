@@ -3,6 +3,13 @@
 -- Owner decisions, 2026-08-05. See docs/REPORT_NOTES.md.
 -- ============================================================
 --
+-- PARTLY SUPERSEDED by 20260807_checkin_code_isolation.sql. The
+-- `outreaches.checkin_code` column added in section 1 below was NOT private:
+-- outreaches rows are readable by every authenticated user and RLS cannot
+-- restrict columns, so any volunteer could read the secret and check in
+-- without attending. It has moved to its own table. Run this file first, then
+-- that one; everything else here still stands.
+--
 -- Run this whole file in the Supabase SQL editor. It is idempotent.
 --
 -- Two features land together because they share one flow: an organiser marks

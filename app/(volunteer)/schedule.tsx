@@ -107,6 +107,28 @@ export default function Schedule() {
           : `${upcoming.length} confirmed ${upcoming.length === 1 ? 'event' : 'events'} ahead`}
       </Text>
 
+      {/*
+        Always available, rather than attached to a specific event row. The
+        list above holds only events that have not STARTED yet
+        (isUpcomingEvent), so an event-scoped button would vanish at exactly
+        the moment a volunteer standing at the venue needs it. Nothing is lost
+        by leaving it open: the API accepts a scan only from someone on the
+        accepted list, for a code only that organiser is showing.
+      */}
+      <Pressable
+        onPress={() => router.push('/(volunteer)/scan')}
+        accessibilityRole="button"
+        accessibilityLabel="Scan check-in code"
+        style={({ pressed }) => [styles.scanRow, pressed && styles.pressed]}
+      >
+        <MaterialCommunityIcons name="qrcode-scan" size={20} color={colors.primary} />
+        <View style={styles.eventText}>
+          <Text style={styles.scanTitle}>Scan check-in code</Text>
+          <Text style={styles.eventMeta}>At the venue, scan the code your organiser shows.</Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+      </Pressable>
+
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
@@ -190,6 +212,24 @@ const styles = StyleSheet.create({
   centerFill: {
     flex: 1,
     justifyContent: 'center',
+  },
+  scanRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 60,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.base,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  scanTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
   },
   listContent: {
     paddingHorizontal: spacing.xl,

@@ -65,6 +65,7 @@ export default function OrganisationTabsLayout() {
         route file in this group becomes a tab unless it opts out.
       */}
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
+      <Tabs.Screen name="checkin/[id]" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="info-hub" options={{ href: null }} />
       <Tabs.Screen name="account-security" options={{ href: null }} />

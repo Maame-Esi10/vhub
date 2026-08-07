@@ -17,10 +17,10 @@ export const runtime = "nodejs";
 // insert/update policy on that table at all. Two things make that necessary
 // rather than merely tidy:
 //
-//   1. A scan is only valid against outreaches.checkin_code, which a volunteer
-//      must never be able to read. If the client wrote attendance directly,
-//      marking yourself present at an event you never attended would be one
-//      PATCH.
+//   1. A scan is only valid against outreach_checkin_codes.code, which a
+//      volunteer must never be able to read. If the client wrote attendance
+//      directly, marking yourself present at an event you never attended would
+//      be one PATCH.
 //   2. Resolving someone as absent applies the -15 no-show penalty to
 //      volunteer_profiles.v_score, which is already service-role-only.
 //
@@ -50,7 +50,7 @@ const AnchorVenueBody = z.object({
 const ScanBody = z.object({
   mode: z.literal("scan"),
   outreachId: z.string().uuid(),
-  /** The secret carried in the QR. Compared against outreaches.checkin_code. */
+  /** The secret carried in the QR. Compared against outreach_checkin_codes.code. */
   checkinCode: z.string().uuid(),
   /**
    * Optional by design. A volunteer who denies location, or whose device
@@ -139,15 +139,26 @@ async function recordScan(
 
   const { data: outreach, error: outreachError } = await admin
     .from("outreaches")
-    .select("id, date, checkin_code, venue_latitude, venue_longitude, venue_anchored_at")
+    .select("id, date, venue_latitude, venue_longitude, venue_anchored_at")
     .eq("id", body.outreachId)
     .maybeSingle();
   if (outreachError) throw Errors.internal("Could not load the outreach.");
   if (!outreach) throw Errors.notFound("Outreach not found.");
 
-  // The code is the whole reason a QR is stronger than a button. Compared
-  // here, on the service-role key, against a column no volunteer can read.
-  if (outreach.checkin_code !== body.checkinCode) {
+  // The code is the whole reason a QR is stronger than a button, so where it
+  // lives matters. It is NOT a column on `outreaches`: those rows are readable
+  // by every authenticated user (outreaches_select_open_or_own) and RLS cannot
+  // restrict columns, so a volunteer could simply have selected the secret and
+  // checked in from home. It lives in `outreach_checkin_codes`, one row per
+  // outreach, readable only by the owning organisation.
+  // See supabase/migrations/20260807_checkin_code_isolation.sql.
+  const { data: codeRow, error: codeError } = await admin
+    .from("outreach_checkin_codes")
+    .select("code")
+    .eq("outreach_id", body.outreachId)
+    .maybeSingle();
+  if (codeError) throw Errors.internal("Could not load the check-in code.");
+  if (!codeRow || codeRow.code !== body.checkinCode) {
     throw Errors.forbidden("That check-in code is not valid for this outreach.");
   }
 

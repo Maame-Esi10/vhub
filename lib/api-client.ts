@@ -37,6 +37,7 @@ export const API_ROUTES = {
   vscore: '/api/vscore',
   applicationStatus: '/api/application-status',
   notifications: '/api/notifications',
+  checkin: '/api/checkin',
   uploadSignature: '/api/upload-signature',
   verificationDocument: '/api/verification-document',
   cancelEmailChange: '/api/cancel-email-change',
@@ -457,6 +458,111 @@ export function sendTestPush(
   return apiPost<{ dispatched: number }>(
     API_ROUTES.notifications,
     { action: 'test-dispatch', title, body },
+    options
+  );
+}
+
+// ---------------------------------------------------------------------------
+// /api/checkin
+// ---------------------------------------------------------------------------
+
+export interface AnchorVenueResponse {
+  outreachId: string;
+  anchoredAt: string;
+  /**
+   * False when the anchor was captured on a day other than the event's own,
+   * in which case it will be DISCARDED rather than trusted and every scan will
+   * resolve to `unavailable` (still present, just unverified). The QR screen
+   * shows this so an organiser anchoring the night before is told plainly that
+   * it will not count.
+   */
+  usableForEvent: boolean;
+}
+
+/**
+ * Stamps the venue from the organiser's own device.
+ *
+ * The coordinates must come from the ORGANISER: a volunteer's scan position
+ * can never become the anchor, because storing it is exactly what the
+ * `attendance` table's shape forbids — and the first scanner is unverifiable
+ * by construction, so anchoring on first scan would let one person with a
+ * photo of the QR set the venue to their living room and get every genuine
+ * attendee flagged.
+ */
+export function anchorVenue(
+  outreachId: string,
+  latitude: number,
+  longitude: number,
+  options?: RequestOptions
+): Promise<AnchorVenueResponse> {
+  return apiPost<AnchorVenueResponse>(
+    API_ROUTES.checkin,
+    { mode: 'anchor_venue', outreachId, latitude, longitude },
+    options
+  );
+}
+
+export interface CheckInResponse {
+  outreachId: string;
+  checkedInAt: string;
+  /** Always true. A scan that reaches a 2xx is a check-in, full stop. */
+  present: boolean;
+}
+
+export interface CheckInInput {
+  outreachId: string;
+  /** The secret carried in the QR — the organisation's screen is the only place it appears. */
+  checkinCode: string;
+  /**
+   * Optional BY DESIGN. A volunteer who denies location, or whose device
+   * cannot get a fix, still checks in: the scan alone is accepted rather than
+   * penalising less-connected volunteers.
+   */
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+}
+
+/**
+ * Records the signed-in volunteer's check-in against a scanned QR.
+ *
+ * The coordinates sent here are compared to the venue anchor in memory and
+ * then dropped — the API persists only the verdict, and `attendance` has no
+ * column that could hold a position.
+ *
+ * The response deliberately never mentions a location mismatch. It says
+ * "checked in", because a mismatch is a signal for the ORGANISER's exception
+ * list, not an accusation to put in front of someone whose GPS may simply be
+ * confused — and disclosing it would teach anyone gaming it where the
+ * boundary sits.
+ */
+export function checkIn(input: CheckInInput, options?: RequestOptions): Promise<CheckInResponse> {
+  return apiPost<CheckInResponse>(API_ROUTES.checkin, { mode: 'scan', ...input }, options);
+}
+
+export interface ResolveAttendanceResponse {
+  outreachId: string;
+  volunteerId: string;
+  status: 'present' | 'absent';
+  resolvedAt: string;
+}
+
+/**
+ * The organiser's final word on one volunteer, available for anyone on the
+ * list rather than only the unscanned: no automated signal ever overrules a
+ * human who was physically at the event. Marking someone absent is what
+ * applies the -15 no-show penalty, which is why it cannot live on the client.
+ */
+export function resolveAttendance(
+  outreachId: string,
+  volunteerId: string,
+  status: 'present' | 'absent',
+  note?: string,
+  options?: RequestOptions
+): Promise<ResolveAttendanceResponse> {
+  return apiPost<ResolveAttendanceResponse>(
+    API_ROUTES.checkin,
+    { mode: 'resolve', outreachId, volunteerId, status, note },
     options
   );
 }

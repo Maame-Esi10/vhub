@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { EmptyState, ErrorState, FilterChips, ListSkeleton } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { ApplicantCard, OutreachPicker } from '@/components/organisation';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
   useOrganisationOutreaches,
   useOutreachApplications,
@@ -125,6 +126,31 @@ export default function Applicants() {
         />
       </View>
 
+      {/*
+        The way in to the check-in QR. It lives here rather than on the
+        dashboard card because this screen is already scoped to ONE outreach,
+        which is what the QR is for — and the card's single quick-action slot
+        is spoken for by Publish/Close.
+
+        Hidden for drafts: an unpublished outreach has no accepted volunteers,
+        so nobody could scan it.
+      */}
+      {selectedOutreach && selectedOutreach.status !== 'draft' ? (
+        <Pressable
+          onPress={() => router.push(`/(organisation)/checkin/${selectedOutreach.id}`)}
+          accessibilityRole="button"
+          accessibilityLabel={`Show check-in code for ${selectedOutreach.title}`}
+          style={({ pressed }) => [styles.checkinRow, pressed && styles.checkinRowPressed]}
+        >
+          <MaterialCommunityIcons name="qrcode" size={20} color={colors.primary} />
+          <View style={styles.checkinText}>
+            <Text style={styles.checkinTitle}>Show check-in code</Text>
+            <Text style={styles.checkinMeta}>Display this at the venue for volunteers to scan.</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+        </Pressable>
+      ) : null}
+
       <View style={styles.filtersWrap}>
         <FilterChips options={FILTERS} value={statusFilter} onChange={setStatusFilter} />
       </View>
@@ -217,6 +243,36 @@ const styles = StyleSheet.create({
   pickerWrap: {
     paddingHorizontal: spacing.xl,
     marginTop: spacing.base,
+  },
+  checkinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 56,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  checkinRowPressed: {
+    opacity: 0.85,
+  },
+  checkinText: {
+    flex: 1,
+  },
+  checkinTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  checkinMeta: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   filtersWrap: {
     paddingHorizontal: spacing.xl,
