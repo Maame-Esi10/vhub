@@ -280,6 +280,35 @@ that changes nothing is not filed by accident."
 
 ## Known issues (open, not blocking)
 
+- **The check-in reminder fires in the morning, not as the event ends.** The
+  intended nudge was "scan before you leave", timed near an outreach's end
+  time. Vercel's Hobby plan permits exactly **one cron job per day**, so there
+  is no scheduler available to run at 4pm on the day of each event, and the
+  reminder rides the existing 08:00 pass instead: volunteers are told on the
+  morning of their event to scan the organiser's code.
+
+  `sendCheckinReminders()` is nonetheless written to be correct at any hour —
+  it skips anyone who already has an `attendance` row — so a late invocation
+  chases exactly the volunteers who still have not scanned. Two ways to get the
+  intended timing without changing the function: POST
+  `{ "action": "send-checkin-reminders" }` to `/api/notifications` with the
+  cron secret (manual, and what a demo would use), or move the schedule to a
+  paid Vercel plan / any external scheduler that can hit the same endpoint
+  hourly.
+
+  A third option was considered and not taken: scheduling a **local**
+  notification on the device with `expo-notifications` when the volunteer's
+  event is confirmed. That gives exact end-of-event timing with no server at
+  all, but the notification lives only on the device that scheduled it — lost
+  on reinstall, on a new phone, or if the app never ran that day — so it is a
+  supplement to a server reminder rather than a replacement.
+
+  **Defence.** "The reminder's timing is constrained by the free hosting tier's
+  one-cron-per-day limit, not by the design. The pass itself is idempotent and
+  attendance-aware, so it produces the intended 'before you leave' behaviour
+  the moment a scheduler capable of running it hourly is available — no code
+  change required."
+
 - **Absence has no V-Score effect until the review is filed.** Marking a
   volunteer absent on the post-event attendance screen (`/api/checkin`, mode
   `resolve`) records the absence and moves no score. The −15 no-show penalty

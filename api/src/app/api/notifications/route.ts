@@ -4,6 +4,7 @@ import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { notifyUsers } from "../../../server/notify";
 import { assertCronSecret, sendEventReminders } from "../../../server/eventReminders";
+import { sendCheckinReminders } from "../../../server/checkinReminders";
 
 export const runtime = "nodejs";
 
@@ -48,10 +49,25 @@ const SendEventRemindersAction = z.object({
   action: z.literal("send-event-reminders"),
 });
 
+/**
+ * Fires the "remember to scan the check-in code" pass on demand.
+ *
+ * This is not only a test hook. The Hobby plan's single daily cron can only
+ * reach volunteers on the MORNING of their event; invoking this late in the
+ * day is what produces an actual "before you leave" nudge, and the pass skips
+ * anyone who has already scanned, so a late run chases exactly the people
+ * still missing. Cron-secret protected like the reminder action above — it
+ * pushes to other users, which no ordinary session may do.
+ */
+const SendCheckinRemindersAction = z.object({
+  action: z.literal("send-checkin-reminders"),
+});
+
 const NotificationsRequestBody = z.discriminatedUnion("action", [
   RegisterAction,
   TestDispatchAction,
   SendEventRemindersAction,
+  SendCheckinRemindersAction,
 ]);
 
 export async function POST(req: Request): Promise<Response> {
@@ -64,6 +80,11 @@ export async function POST(req: Request): Promise<Response> {
     if (body.action === "send-event-reminders") {
       assertCronSecret(req);
       return Response.json(await sendEventReminders());
+    }
+
+    if (body.action === "send-checkin-reminders") {
+      assertCronSecret(req);
+      return Response.json(await sendCheckinReminders());
     }
 
     // "register" and "test-dispatch" are ordinary user actions.
