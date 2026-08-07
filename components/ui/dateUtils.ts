@@ -18,16 +18,33 @@ export function formatEventDate(date: string): string {
   return `${WEEKDAYS[d.getDay()]}, ${MONTHS[parsed.month - 1]} ${parsed.day} ${parsed.year}`;
 }
 
-/** Formats `HH:MM` (24h) as "9:00 AM". Returns null for null/invalid input. */
+/**
+ * Matches a clock time with OPTIONAL seconds, which is the whole point.
+ *
+ * Postgres `time` columns arrive through PostgREST as `HH:MM:SS` — "10:00:00",
+ * not "10:00". Every parser here was anchored to `HH:MM` exactly, so every
+ * time read back from the database failed to parse. The visible symptom was
+ * cosmetic (cards reading "10:00:00 - 17:00:00" instead of "10:00 AM -
+ * 5:00 PM") and it masked the real damage: `parseClockTime` returning null
+ * made `msUntilEvent` treat every event as starting at MIDNIGHT, which is why
+ * confirmed events vanished from the volunteer's Schedule for the whole of
+ * their own day.
+ *
+ * Seconds are captured but deliberately unused — no part of this app schedules
+ * to the second, and rounding them away keeps comparisons stable.
+ */
+const CLOCK_TIME = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+
+/** Formats `HH:MM` or `HH:MM:SS` (24h) as "9:00 AM". Returns null for null/invalid input. */
 export function formatEventTime(time: string | null): string | null {
   if (!time) return null;
-  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  const match = CLOCK_TIME.exec(time.trim());
   if (!match) return time;
   const hoursStr = match[1];
   const minutesStr = match[2];
   if (!hoursStr || !minutesStr) return time;
   const hours = parseInt(hoursStr, 10);
-  const minutes = parseInt(minutesStr, 10);
+  if (hours < 0 || hours > 23) return time;
   const period = hours >= 12 ? 'PM' : 'AM';
   const hour12 = hours % 12 === 0 ? 12 : hours % 12;
   return `${hour12}:${minutesStr.padStart(2, '0')} ${period}`;
@@ -170,8 +187,14 @@ interface ParsedTime {
   minutes: number;
 }
 
+/**
+ * Parses `HH:MM` or `HH:MM:SS`. See CLOCK_TIME above for why both must work:
+ * the app WRITES `HH:MM` (masked input) but READS BACK `HH:MM:SS` from
+ * Postgres, and this single anchored regex being strict about it is what
+ * silently broke every time-based decision on the read path.
+ */
 export function parseClockTime(value: string): ParsedTime | null {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  const match = CLOCK_TIME.exec(value.trim());
   if (!match) return null;
   const hoursStr = match[1];
   const minutesStr = match[2];

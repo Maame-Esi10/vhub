@@ -278,6 +278,57 @@ recognise that no fixed value is neutral against a moving baseline — a review
 with no rating now moves nothing, and the form requires the ratings so a review
 that changes nothing is not filed by accident."
 
+## A display-layer symptom masking a data-layer bug (2026-08-07)
+
+Worth the space because the interesting part is not the bug, it is why it
+survived weeks of testing.
+
+**The symptom.** Outreach cards rendered times as `10:00:00 - 17:00:00`
+instead of `10:00 AM - 5:00 PM`. It reads as a formatting slip — the kind of
+thing you note and fix later.
+
+**The actual bug.** The app WRITES `HH:MM` (the masked input in
+`DateTimeField`) but READS BACK `HH:MM:SS`, because Postgres `time` columns
+come through PostgREST with seconds. Every parser in
+`components/ui/dateUtils.ts` was anchored to `HH:MM` exactly, so **every time
+loaded from the database failed to parse**, and each helper fell back to a
+default that looked plausible:
+
+| Helper | Silent fallback | Consequence |
+|---|---|---|
+| `formatEventTime` | returns the raw string | the visible symptom |
+| `msUntilEvent` | start treated as **midnight** | every event looked started-since-00:00 |
+| `isUpcomingEvent` | false all day | confirmed events vanished from Schedule for the whole of their own day |
+| `isLateCancellationWindow` | measured to midnight | the withdrawal warning could be hours off |
+| `hasEventEnded` | falls back to 23:59 | events stayed "in progress" until midnight |
+
+The Schedule bug was reported as its own separate defect ("my accepted event
+isn't in Schedule") and was fixed once at the wrong level — by changing which
+predicate Schedule asked — before the shared cause was found.
+
+**What was NOT affected, and why that is the point.**
+`lib/matching/layer1.ts` parses times with its own regex,
+`/^(\d{1,2}):(\d{2})/` — **no `$` anchor** — so `"10:00:00"` matches and reads
+`10:00` correctly. Availability scoring, `applications.match_score` and
+`skill_match_cache` were all correct throughout; **nothing stored needed
+recomputing**. Two parsers for one format, one of them accidentally lenient,
+is what confined the damage — and it is equally what hid it, since the
+component everyone scrutinises was the one that happened to be right.
+
+**The fix.** One shared `CLOCK_TIME` regex in `dateUtils.ts` accepting optional
+seconds, used by both `parseClockTime` and `formatEventTime`, with tests
+pinning **both** wire formats on every affected helper. Normalising at the
+parse boundary rather than at call sites: there were seven call sites and one
+boundary.
+
+**Defence.** "A cosmetic-looking time format was the visible edge of a parsing
+mismatch between what the app wrote and what the database returned. Because
+each helper degraded to a plausible default rather than failing, the damage
+surfaced as unrelated symptoms on different screens. It is the case for
+normalising at the boundary and for testing the format your database actually
+returns, not the one your form produces — the matching engine escaped only
+because its regex was accidentally more permissive."
+
 ## Known issues (open, not blocking)
 
 - **The check-in reminder fires in the morning, not as the event ends.** The

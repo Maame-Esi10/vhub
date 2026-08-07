@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -21,7 +21,8 @@ import { useAuthStore } from '@/stores/authStore';
 /** One flattened list so a single FlatList can render date-grouped sections. */
 type Row =
   | { kind: 'header'; key: string; label: string }
-  | { kind: 'event'; key: string; application: VolunteerApplication };
+  | { kind: 'pastToggle'; key: string }
+  | { kind: 'event'; key: string; application: VolunteerApplication; isPast?: boolean };
 
 export default function Schedule() {
   const router = useRouter();
@@ -42,22 +43,40 @@ export default function Schedule() {
    * application showing as accepted was missing from Schedule entirely because
    * the event had already begun.
    */
-  const upcoming = useMemo(
+  const accepted = useMemo(
     () =>
-      applications
-        .filter(
-          (application) =>
-            application.status === 'accepted' &&
-            application.outreach !== null &&
-            !hasEventEnded(application.outreach.date, application.outreach.end_time)
-        )
-        .sort((a, b) => {
-          const aStart = a.outreach ? msUntilEvent(a.outreach.date, a.outreach.start_time) : null;
-          const bStart = b.outreach ? msUntilEvent(b.outreach.date, b.outreach.start_time) : null;
-          return (aStart ?? Number.MAX_SAFE_INTEGER) - (bStart ?? Number.MAX_SAFE_INTEGER);
-        }),
+      applications.filter(
+        (application) => application.status === 'accepted' && application.outreach !== null
+      ),
     [applications]
   );
+
+  const { upcoming, past } = useMemo(() => {
+    const ahead: VolunteerApplication[] = [];
+    const done: VolunteerApplication[] = [];
+
+    for (const application of accepted) {
+      const outreach = application.outreach;
+      if (!outreach) continue;
+      if (hasEventEnded(outreach.date, outreach.end_time)) done.push(application);
+      else ahead.push(application);
+    }
+
+    const startOf = (application: VolunteerApplication) =>
+      application.outreach
+        ? (msUntilEvent(application.outreach.date, application.outreach.start_time) ??
+          Number.MAX_SAFE_INTEGER)
+        : Number.MAX_SAFE_INTEGER;
+
+    // Soonest first ahead of us; most recent first behind us. A diary counts
+    // forwards and a history counts backwards.
+    ahead.sort((a, b) => startOf(a) - startOf(b));
+    done.sort((a, b) => startOf(b) - startOf(a));
+
+    return { upcoming: ahead, past: done };
+  }, [accepted]);
+
+  const [showPast, setShowPast] = useState(false);
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
@@ -77,8 +96,33 @@ export default function Schedule() {
       out.push({ kind: 'event', key: application.id, application });
     }
 
+    // Past events live behind a toggle rather than in the diary itself. An
+    // accepted application is a commitment and should stay visible — the
+    // volunteer earned it, and it is what their V-Score is built from — but a
+    // list that grows forever pushes the next event off the screen, which is
+    // the one thing this tab exists to show.
+    if (past.length > 0) {
+      out.push({ kind: 'pastToggle', key: 'past-toggle' });
+      if (showPast) {
+        lastDate = null;
+        for (const application of past) {
+          const outreach = application.outreach;
+          if (!outreach) continue;
+          if (outreach.date !== lastDate) {
+            out.push({
+              kind: 'header',
+              key: `past-header-${outreach.date}`,
+              label: formatEventDate(outreach.date),
+            });
+            lastDate = outreach.date;
+          }
+          out.push({ kind: 'event', key: `past-${application.id}`, application, isPast: true });
+        }
+      }
+    }
+
     return out;
-  }, [upcoming]);
+  }, [upcoming, past, showPast]);
 
   if (applicationsQuery.isLoading) {
     return (
@@ -135,11 +179,34 @@ export default function Schedule() {
             );
           }
 
+          if (item.kind === 'pastToggle') {
+            return (
+              <Pressable
+                onPress={() => setShowPast((shown) => !shown)}
+                accessibilityRole="button"
+                accessibilityLabel={showPast ? 'Hide past outreaches' : 'Show past outreaches'}
+                accessibilityState={{ expanded: showPast }}
+                style={({ pressed }) => [styles.pastToggle, pressed && styles.pressed]}
+              >
+                <MaterialCommunityIcons
+                  name={showPast ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.pastToggleLabel}>
+                  {showPast ? 'Hide past' : `Past (${past.length})`}
+                </Text>
+              </Pressable>
+            );
+          }
+
           const outreach = item.application.outreach;
           if (!outreach) return null;
           const startLabel = formatEventTime(outreach.start_time) ?? 'All day';
 
-          const isToday = isEventToday(outreach.date);
+          // A finished event is never "today" for the purpose of checking in —
+          // the scan action must not reappear on it after the fact.
+          const isToday = !item.isPast && isEventToday(outreach.date);
 
           return (
             <View>
@@ -150,6 +217,7 @@ export default function Schedule() {
                 style={({ pressed }) => [
                   styles.eventRow,
                   isToday && styles.eventRowToday,
+                  item.isPast && styles.eventRowPast,
                   pressed && styles.pressed,
                 ]}
               >
@@ -283,6 +351,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primary,
     marginBottom: spacing.xs,
+  },
+  /** Past events recede rather than disappear — still readable, clearly done. */
+  eventRowPast: {
+    backgroundColor: colors.surfaceSubtle,
+    opacity: 0.85,
+  },
+  pastToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: 44,
+    marginTop: spacing.base,
+  },
+  pastToggleLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    color: colors.textSecondary,
   },
   pressed: {
     opacity: 0.85,
