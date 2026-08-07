@@ -1,14 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  anchorVenue,
-  checkIn,
-  type AnchorVenueResponse,
-  type CheckInResponse,
-} from '@/lib/api-client';
-import { getPositionOrNull, requirePosition } from '@/lib/geolocation';
+import { resolveAttendance, type ResolveAttendanceResponse } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
-import { outreachKeys } from '@/hooks/useOutreaches';
-import type { Attendance } from '@/types/database';
+import { applicationKeys } from '@/hooks/useApplications';
+import type { Attendance, OrganiserAttendanceStatus } from '@/types/database';
+
+/**
+ * Attendance reads, and the organiser's resolve write.
+ *
+ * NO NATIVE MODULES IN THIS FILE, deliberately. The two hooks that need the
+ * device's location live in hooks/useCheckInScan.ts instead, because importing
+ * expo-location here would mean the post-event attendance screen — which needs
+ * neither camera nor GPS — could not even open on a dev client built without
+ * it. Keep it that way: anything touching expo-* belongs in that module.
+ */
 
 export const attendanceKeys = {
   all: ['attendance'] as const,
@@ -80,64 +84,75 @@ export function useMyAttendance(outreachId: string | undefined, volunteerId: str
 }
 
 /**
- * Stamps the venue anchor from the organiser's device.
+ * Every attendance row for one outreach, keyed by volunteer id.
  *
- * Location is REQUIRED here and the failure is surfaced, unlike on the
- * volunteer's side where a missing fix is shrugged off: without the
- * organiser's position there is nothing for any scan to be compared against,
- * and an anchor that failed silently would leave an organiser believing
- * check-ins were being verified when they were not.
+ * A Map rather than an array because the caller joins it against the accepted
+ * applicants: the roster is the list of people, and attendance is what is
+ * KNOWN about each of them so far. Most will have no row at all — that is not
+ * a gap to fill in, it is the ordinary state of someone who has not scanned,
+ * and it still reads as present.
+ *
+ * `attendance_select_own_or_org` scopes this to the outreach's owner, so an
+ * organisation sees its own event and nothing else.
  */
-export function useAnchorVenue() {
-  const queryClient = useQueryClient();
+export function useOutreachAttendance(outreachId: string | undefined) {
+  return useQuery({
+    queryKey: attendanceKeys.byOutreach(outreachId ?? 'unknown'),
+    enabled: !!outreachId,
+    queryFn: async (): Promise<Map<string, Attendance>> => {
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('outreach_id', outreachId!);
 
-  return useMutation({
-    mutationFn: async (outreachId: string): Promise<AnchorVenueResponse> => {
-      const position = await requirePosition();
-      return anchorVenue(outreachId, position.latitude, position.longitude);
-    },
-    onSuccess: (_result, outreachId) => {
-      // venue_anchored_at just moved, and the QR screen reads it off the
-      // outreach to say whether the anchor will actually be honoured.
-      queryClient.invalidateQueries({ queryKey: outreachKeys.detail(outreachId) });
+      if (error) {
+        throw new Error(error.message || 'Could not load attendance for this outreach.');
+      }
+
+      const byVolunteer = new Map<string, Attendance>();
+      for (const row of (data ?? []) as Attendance[]) {
+        byVolunteer.set(row.volunteer_id, row);
+      }
+      return byVolunteer;
     },
   });
 }
 
-export interface CheckInParams {
+export interface ResolveAttendanceParams {
   outreachId: string;
-  /** The secret decoded from the scanned QR. */
-  checkinCode: string;
+  volunteerId: string;
+  status: OrganiserAttendanceStatus;
+  note?: string;
 }
 
 /**
- * Records the volunteer's check-in from a scanned QR.
+ * The organiser's final word on one volunteer.
  *
- * The location read is BEST-EFFORT and deliberately cannot fail the check-in:
- * `getPositionOrNull` swallows refusal, failure and timeout alike, and the
- * request simply goes without coordinates. A volunteer is never blocked, or
- * marked down, for a permission they declined or a fix their phone could not
- * get — that would penalise exactly the people least able to do anything about
- * it. The coordinates, when there are any, are compared to the venue anchor
- * server-side and then dropped; only the verdict is stored.
+ * Goes through /api/checkin rather than writing `attendance` directly, and it
+ * has to: `authenticated` holds no insert/update policy or privilege on that
+ * table, because the row is the evidence a V-Score is later derived from and
+ * must not be forgeable by either party.
+ *
+ * Marking someone absent moves NO V-Score by itself (owner decision,
+ * 2026-08-07). The -15 lands when the organisation files the post-event review
+ * with `attended: false`, so exactly one path can change a score.
+ *
+ * Available for ANYONE on the roster, not only the people who failed to scan.
+ * No automated signal ever overrules a human who was physically at the event —
+ * a scan is evidence, not a verdict.
  */
-export function useCheckIn() {
+export function useResolveAttendance() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: CheckInParams): Promise<CheckInResponse> => {
-      const position = await getPositionOrNull();
-      return checkIn({
-        outreachId: params.outreachId,
-        checkinCode: params.checkinCode,
-        latitude: position?.latitude,
-        longitude: position?.longitude,
-        accuracy: position?.accuracy ?? undefined,
-      });
-    },
+    mutationFn: async (params: ResolveAttendanceParams): Promise<ResolveAttendanceResponse> =>
+      resolveAttendance(params.outreachId, params.volunteerId, params.status, params.note),
     onSuccess: (_result, params) => {
-      queryClient.invalidateQueries({ queryKey: attendanceKeys.mine(params.outreachId) });
       queryClient.invalidateQueries({ queryKey: attendanceKeys.byOutreach(params.outreachId) });
+      queryClient.invalidateQueries({ queryKey: attendanceKeys.mine(params.outreachId) });
+      // A no-show penalty may have moved the volunteer's V-Score, which the
+      // applicant cards on the same outreach display.
+      queryClient.invalidateQueries({ queryKey: applicationKeys.byOutreach(params.outreachId) });
     },
   });
 }

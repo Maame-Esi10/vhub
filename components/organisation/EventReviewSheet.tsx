@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { CONSTRUCTIVE_REMARKS, POSITIVE_REMARKS } from '@/constants/review-remarks';
+import type { ReviewRemark } from '@/constants/review-remarks';
 import type { EventReview } from '@/types/database';
 
 const NOTES_LIMIT = 2000;
@@ -12,6 +14,8 @@ export interface EventReviewDraft {
   attended: boolean;
   reliabilityScore: number | null;
   clinicalScore: number | null;
+  /** Slugs from constants/review-remarks.ts. Empty array = no chips. */
+  remarkChips: string[];
   notes: string | null;
 }
 
@@ -23,6 +27,12 @@ export interface EventReviewSheetProps {
   showClinicalScore: boolean;
   /** Existing review being edited, or null when filing a new one. */
   existingReview: EventReview | null;
+  /**
+   * True when the post-event attendance screen recorded this volunteer as
+   * absent. Seeds the attendance answer so the two screens cannot contradict
+   * each other. Undefined means nobody has decided, which reads as attended.
+   */
+  markedAbsent?: boolean;
   isPending: boolean;
   errorMessage?: string;
   onSubmit: (draft: EventReviewDraft) => void;
@@ -45,6 +55,7 @@ export function EventReviewSheet({
   outreachTitle,
   showClinicalScore,
   existingReview,
+  markedAbsent,
   isPending,
   errorMessage,
   onSubmit,
@@ -53,23 +64,40 @@ export function EventReviewSheet({
   const [attended, setAttended] = useState(true);
   const [reliability, setReliability] = useState<number | null>(null);
   const [clinical, setClinical] = useState<number | null>(null);
+  const [remarkChips, setRemarkChips] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
 
   // Re-seed whenever the sheet opens for a different volunteer, so editing an
   // existing review starts from what was actually filed rather than blank.
+  //
+  // `attended` falls back to what the ATTENDANCE screen recorded before
+  // defaulting to true, so an organiser who already flagged a no-show is not
+  // asked the same question again and cannot accidentally answer it
+  // differently — the two screens would then disagree about the same event.
   useEffect(() => {
     if (!visible) return;
-    setAttended(existingReview?.attended ?? true);
+    setAttended(existingReview?.attended ?? markedAbsent !== true);
     setReliability(existingReview?.reliability_score ?? null);
     setClinical(existingReview?.clinical_score ?? null);
+    setRemarkChips(existingReview?.remark_chips ?? []);
     setNotes(existingReview?.notes ?? '');
-  }, [visible, existingReview]);
+  }, [visible, existingReview, markedAbsent]);
+
+  function toggleChip(slug: string) {
+    setRemarkChips((current) =>
+      current.includes(slug) ? current.filter((entry) => entry !== slug) : [...current, slug]
+    );
+  }
 
   function handleSubmit() {
     onSubmit({
       attended,
       reliabilityScore: attended ? reliability : null,
       clinicalScore: attended && showClinicalScore ? clinical : null,
+      // A no-show gets no chips: every remark in the vocabulary describes how
+      // someone worked, and none of them can be true of a person who was not
+      // there.
+      remarkChips: attended ? remarkChips : [],
       notes: notes.trim() ? notes.trim() : null,
     });
   }
@@ -129,6 +157,40 @@ export function EventReviewSheet({
                     onChange={setClinical}
                   />
                 ) : null}
+
+                {/*
+                  Tappable remarks rather than a text box, for the same reason
+                  attendance is exception-based: a review step that feels like
+                  homework does not get done, and a review that does not get
+                  done means the accountability system quietly does nothing.
+                  Two taps produce feedback specific enough for the volunteer
+                  to act on.
+
+                  Constructive remarks sit in their own group rather than mixed
+                  into one list. Mixed, an organiser scanning quickly taps the
+                  positives and never reads far enough to reach the honest ones
+                  — and a review system that only records praise measures
+                  nothing.
+                */}
+                <Text style={styles.fieldLabel}>What stood out? (optional)</Text>
+                <Text style={styles.fieldHint}>
+                  The volunteer sees these. Other organisations see only how often each one has been
+                  given, never who gave it.
+                </Text>
+                <ChipGroup
+                  remarks={POSITIVE_REMARKS}
+                  selected={remarkChips}
+                  onToggle={toggleChip}
+                  tone={colors.success}
+                />
+
+                <Text style={styles.chipGroupLabel}>Room to improve</Text>
+                <ChipGroup
+                  remarks={CONSTRUCTIVE_REMARKS}
+                  selected={remarkChips}
+                  onToggle={toggleChip}
+                  tone={colors.warning}
+                />
               </>
             ) : (
               <View style={styles.noShowNote}>
@@ -200,6 +262,43 @@ function AttendanceOption({ label, icon, selected, tone, onPress }: AttendanceOp
       <MaterialCommunityIcons name={icon} size={20} color={selected ? tone : colors.textSecondary} />
       <Text style={[styles.attendanceLabel, selected && { color: tone }]}>{label}</Text>
     </Pressable>
+  );
+}
+
+interface ChipGroupProps {
+  remarks: readonly ReviewRemark[];
+  selected: string[];
+  onToggle: (slug: string) => void;
+  tone: string;
+}
+
+/** A wrapping row of toggleable remark chips. */
+function ChipGroup({ remarks, selected, onToggle, tone }: ChipGroupProps) {
+  return (
+    <View style={styles.chipGroup}>
+      {remarks.map((remark) => {
+        const isSelected = selected.includes(remark.slug);
+        return (
+          <Pressable
+            key={remark.slug}
+            onPress={() => onToggle(remark.slug)}
+            accessibilityRole="checkbox"
+            accessibilityLabel={remark.label}
+            accessibilityState={{ checked: isSelected }}
+            hitSlop={4}
+            style={[
+              styles.chip,
+              isSelected && { borderColor: tone, backgroundColor: `${tone}1A` },
+            ]}
+          >
+            {isSelected ? (
+              <MaterialCommunityIcons name="check" size={14} color={tone} />
+            ) : null}
+            <Text style={[styles.chipLabel, isSelected && { color: tone }]}>{remark.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -331,6 +430,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginLeft: spacing.xs,
+  },
+  chipGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chipLabel: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  chipGroupLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: spacing.base,
   },
   noShowNote: {
     flexDirection: 'row',

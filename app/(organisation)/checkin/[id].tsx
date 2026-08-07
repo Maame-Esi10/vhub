@@ -9,7 +9,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { Button, ErrorState, ScreenHeader, formatEventDate, formatEventTimeRange } from '@/components/ui';
 import { useOutreach } from '@/hooks/useOutreaches';
-import { useAnchorVenue, useOutreachCheckinCode } from '@/hooks/useAttendance';
+import { useOutreachCheckinCode } from '@/hooks/useAttendance';
+// Separate module because it reaches expo-location — see the note at its top.
+import { useAnchorVenue } from '@/hooks/useCheckInScan';
 import { encodeCheckinQr } from '@/lib/checkin-qr';
 import { isVenueAnchorUsable } from '@/lib/attendance';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';

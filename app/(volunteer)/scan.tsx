@@ -8,7 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 // components/ui/index.ts.
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Button, ScreenHeader, formatEventDate } from '@/components/ui';
-import { useCheckIn } from '@/hooks/useAttendance';
+import { useCheckIn } from '@/hooks/useCheckInScan';
 import { useOutreach } from '@/hooks/useOutreaches';
 import { decodeCheckinQr } from '@/lib/checkin-qr';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';

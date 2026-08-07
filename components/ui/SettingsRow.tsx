@@ -27,10 +27,29 @@ export function SettingsRow({ icon, label, value, onPress }: SettingsRowProps) {
       <View style={styles.iconTile}>
         <MaterialCommunityIcons name={icon} size={20} color={colors.textPrimary} />
       </View>
-      <Text style={styles.label}>{label}</Text>
-      {value ? <Text style={styles.value}>{value}</Text> : null}
+      {/*
+        numberOfLines on BOTH is what makes a squeezed column impossible. A
+        Text with no line limit will keep wrapping however narrow it gets, and
+        once it is narrower than a single word React Native breaks INSIDE the
+        word -- which is the "Not / verifi / ed" stack. With a limit it
+        ellipsizes instead, so the worst case is a clipped string rather than a
+        vertical ladder of letters.
+      */}
+      <Text style={styles.label} numberOfLines={2} ellipsizeMode="tail">
+        {label}
+      </Text>
+      {value ? (
+        <Text style={styles.value} numberOfLines={2} ellipsizeMode="tail">
+          {value}
+        </Text>
+      ) : null}
       {onPress ? (
-        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+        <MaterialCommunityIcons
+          name="chevron-right"
+          size={20}
+          color={colors.textSecondary}
+          style={styles.chevron}
+        />
       ) : null}
     </>
   );
@@ -60,7 +79,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.base,
+    // spacing.md, not spacing.base: three gaps sit between the four parts, so
+    // every 4px here costs 12px of text width on the narrowest phone.
+    gap: spacing.md,
     minHeight: 64,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -74,40 +95,78 @@ const styles = StyleSheet.create({
   iconTile: {
     width: 40,
     height: 40,
+    // Fixed means fixed: without this the tile is a flex item like any other
+    // and squashes into an oval when the text either side is long.
+    flexGrow: 0,
+    flexShrink: 0,
     borderRadius: radius.pill,
     backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // The title gets a guaranteed FLOOR, not the leftovers.
+  // ---------------------------------------------------------------------
+  // The four parts get ONE explicit distribution, and every part has a floor.
   //
-  // `flex: 1` here was the bug: it sets flexBasis to 0, so the title
-  // contributed nothing to the initial layout and only grew into whatever the
-  // value had not already claimed at its full content width. With a short
-  // value ("Verified") that was plenty; with a long one ("Login email &
-  // password") almost nothing remained and the title broke mid-word into a
-  // vertical column of letters. Capping the value with maxWidth did not help,
-  // because capping what the value MAY take still reserves nothing for the
-  // title.
+  // This row has now been broken twice by fixing one side at the other's
+  // expense, so the model is written out rather than tuned:
   //
-  // flexBasis gives the title a real starting share, flexShrink: 0 stops it
-  // being squeezed below that, and flexGrow lets it reclaim the space when
-  // the value is short -- so rows like "Identity Verification" lay out
-  // exactly as they do today.
+  //   icon      fixed 40           (flexGrow 0, flexShrink 0)
+  //   label     takes the slack    (flexGrow 1, flexBasis 0, minWidth 96)
+  //   value     sized to content   (flexGrow 0, capped 40%, minWidth 84)
+  //   chevron   fixed 20           (flexShrink 0)
+  //
+  // Attempt one gave the label `flex: 1` and the value nothing: flexBasis 0
+  // meant the label started at zero and only grew into whatever the value had
+  // not already claimed at full content width, so "Login email & password"
+  // left the title a few characters wide -- the "one letter per line" bug.
+  //
+  // Attempt two gave the label flexBasis 55% and flexShrink 0. That saved the
+  // title and starved the VALUE instead, because the value could shrink
+  // without limit and had no line cap: hence "Not / verifi / ed".
+  //
+  // The real defect was shared by both: two unbounded text nodes competing for
+  // one row, with nothing stopping either from being squeezed below the width
+  // of a single word. So now BOTH have a minWidth wide enough for the longest
+  // word they must hold ("Verification" ~88px at 15px, "password" ~57px at
+  // 13px), and BOTH cap their line count so the fallback is an ellipsis rather
+  // than a vertical stack.
+  //
+  // The 40% cap on the value is what keeps the arithmetic safe on a 360dp
+  // phone: 328 content - 40 icon - 20 chevron - 36 gaps = 232 for text; the
+  // value takes at most 131 of it, leaving the label 101, comfortably above
+  // its 96 floor. On a 320dp phone the value shrinks to its own floor and the
+  // row still fits without overflowing.
+  // ---------------------------------------------------------------------
   label: {
     flexGrow: 1,
-    flexShrink: 0,
-    flexBasis: '55%',
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 96,
     fontFamily: fontFamily.medium,
     fontSize: 15,
+    lineHeight: 20,
     color: colors.textPrimary,
   },
   value: {
+    flexGrow: 0,
     flexShrink: 1,
+    // Content-sized, so a short value ("Verified") gives its space back to the
+    // title instead of holding a fixed column open.
+    flexBasis: 'auto',
+    minWidth: 84,
+    maxWidth: '40%',
     textAlign: 'right',
     fontFamily: fontFamily.regular,
     fontSize: 13,
+    lineHeight: 18,
     color: colors.textSecondary,
+  },
+  // An icon is a Text node underneath, so without this it is a shrinkable flex
+  // item and the arrow clips to a sliver when the row is tight.
+  chevron: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: 20,
   },
   groupLabel: {
     fontFamily: fontFamily.semiBold,

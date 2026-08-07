@@ -21,8 +21,21 @@ export const runtime = "nodejs";
 //      volunteer must never be able to read. If the client wrote attendance
 //      directly, marking yourself present at an event you never attended would
 //      be one PATCH.
-//   2. Resolving someone as absent applies the -15 no-show penalty to
-//      volunteer_profiles.v_score, which is already service-role-only.
+//   2. Attendance is the evidence a V-Score is later derived from, so the
+//      record has to be unforgeable: a client able to write this table could
+//      mark itself present at an event it never attended, or mark a rival
+//      absent.
+//
+// WHAT THIS ENDPOINT DOES NOT DO, deliberately (owner decision, 2026-08-07):
+// resolving someone absent applies NO V-Score penalty. Absence moves a score
+// only when the organisation files the post-event review, through
+// /api/vscore's "review" action with attended = false. One code path moves
+// v_score, so a single no-show cannot be punished twice -- once here and again
+// by the review -- and the score stays fully derivable from the event records,
+// which the planned V-Score-as-derived-value change depends on.
+//
+// Do not "finish" this by calling the penalty from resolveAttendance below.
+// The missing call is the decision, not an oversight.
 //
 // PRIVACY, and this is the whole design: mode "scan" receives the volunteer's
 // coordinates, compares them to the venue anchor IN MEMORY, and writes only
@@ -229,9 +242,12 @@ async function recordScan(
  * The organiser's final word on one volunteer.
  *
  * Available for ANYONE on the list, not only the unscanned: no automated
- * signal ever overrules a human who was physically at the event. Marking
- * someone absent is what applies the -15 no-show penalty, which is why this
- * cannot live on the client.
+ * signal ever overrules a human who was physically at the event.
+ *
+ * Records the decision and nothing else -- no V-Score movement. See the note
+ * at the top of this file: the -15 no-show penalty belongs to the post-event
+ * review (/api/vscore, attended = false), so that exactly one path can change
+ * a score.
  */
 async function resolveAttendance(caller: AuthedCaller, body: z.infer<typeof ResolveBody>) {
   await assertOwnsOutreach(caller, body.outreachId);

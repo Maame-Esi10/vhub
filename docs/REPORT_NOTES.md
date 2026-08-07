@@ -228,6 +228,36 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
 
 ## Known issues (open, not blocking)
 
+- **Absence has no V-Score effect until the review is filed.** Marking a
+  volunteer absent on the post-event attendance screen (`/api/checkin`, mode
+  `resolve`) records the absence and moves no score. The −15 no-show penalty
+  arrives only when the organisation files the post-event review with
+  `attended: false` (`/api/vscore`, action `review`). **Consequence: an
+  organisation that marks its no-shows but never reviews leaves them
+  unpenalised** — the attendance record exists, but the volunteer's V-Score is
+  untouched and the ranking multiplier never reflects it.
+
+  Decided deliberately on 2026-08-07 in preference to penalising at resolve
+  time. Two paths that both move `v_score` would double-punish a single
+  no-show — once when the organiser flags the absence, again when the review
+  files `attended: false` — and the double-count would be invisible, because
+  neither path can see what the other did (see the non-idempotent penalty note
+  below, which is the same class of problem). Keeping exactly one writer also
+  keeps a V-Score fully derivable from its event records, which the planned
+  V-Score-as-derived-value change depends on: a score that can be recomputed
+  from the reviews alone is one that can be audited and repaired, and a
+  penalty applied outside that trail would break the property.
+
+  Mitigations if it matters before submission: prompt the organisation to
+  review after marking anyone absent, or have the review screen surface
+  unreviewed absentees. Neither changes where the score moves.
+
+  **Defence.** "Attendance and reputation are deliberately separated. Marking
+  someone absent records a fact; changing their score is a judgement, and it
+  happens in one place — the post-event review. That keeps a V-Score derivable
+  from the event record rather than accumulated from side effects, at the cost
+  of an organisation that never reviews leaving no-shows unpenalised."
+
 - **`/api/vscore` `action: "penalty"` is not idempotent.** There is no ledger of
   penalties already applied per application, so the same `applicationId` can be
   submitted repeatedly and each call re-subtracts the flat penalty (−15 no-show

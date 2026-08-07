@@ -51,6 +51,8 @@ export interface SubmitEventReviewParams {
   /** 1–5, or null when not scored. A no-show is scored on neither. */
   reliabilityScore: number | null;
   clinicalScore: number | null;
+  /** Slugs from `constants/review-remarks.ts`; `[]` clears any previously filed chips. */
+  remarkChips: string[];
   notes: string | null;
 }
 
@@ -76,6 +78,7 @@ export function useSubmitEventReview() {
         attended: params.attended,
         reliabilityScore: params.reliabilityScore,
         clinicalScore: params.clinicalScore,
+        remarkChips: params.remarkChips,
         notes: params.notes ?? undefined,
       }),
     onSuccess: (_result, params) => {

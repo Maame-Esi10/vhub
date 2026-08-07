@@ -3,7 +3,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { EmptyState, ErrorState, FilterChips, ListSkeleton } from '@/components/ui';
+import { EmptyState, ErrorState, FilterChips, ListSkeleton, isUpcomingEvent } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { ApplicantCard, OutreachPicker } from '@/components/organisation';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -146,6 +146,29 @@ export default function Applicants() {
           <View style={styles.checkinText}>
             <Text style={styles.checkinTitle}>Show check-in code</Text>
             <Text style={styles.checkinMeta}>Display this at the venue for volunteers to scan.</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+        </Pressable>
+      ) : null}
+
+      {/*
+        Only once the event has actually started. Before that there is nothing
+        to mark, and offering it early invites an organiser to "confirm" a
+        roster for an event nobody has attended yet.
+      */}
+      {selectedOutreach &&
+      selectedOutreach.status !== 'draft' &&
+      !isUpcomingEvent(selectedOutreach.date, selectedOutreach.start_time) ? (
+        <Pressable
+          onPress={() => router.push(`/(organisation)/attendance/${selectedOutreach.id}`)}
+          accessibilityRole="button"
+          accessibilityLabel={`Mark attendance for ${selectedOutreach.title}`}
+          style={({ pressed }) => [styles.checkinRow, pressed && styles.checkinRowPressed]}
+        >
+          <MaterialCommunityIcons name="clipboard-check-outline" size={20} color={colors.primary} />
+          <View style={styles.checkinText}>
+            <Text style={styles.checkinTitle}>Mark attendance</Text>
+            <Text style={styles.checkinMeta}>Everyone counts as present — flag only the no-shows.</Text>
           </View>
           <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
         </Pressable>

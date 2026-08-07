@@ -14,6 +14,9 @@ import {
   useSubmitEventReview,
 } from '@/hooks';
 import type { ApplicationWithVolunteer, OutreachWithCounts } from '@/hooks';
+// Direct import: useAttendance stays out of the hooks barrel's native-module
+// blast radius, and this is the read half (no expo-location).
+import { useOutreachAttendance } from '@/hooks/useAttendance';
 import { useAuthStore } from '@/stores/authStore';
 import type { EventReview } from '@/types/database';
 
@@ -52,7 +55,10 @@ export default function Reviews() {
 
   const applicationsQuery = useOutreachApplications(selectedOutreachId);
   const reviewsQuery = useOutreachReviews(selectedOutreachId);
+  const attendanceQuery = useOutreachAttendance(selectedOutreachId);
   const submitReview = useSubmitEventReview();
+
+  const attendance = attendanceQuery.data;
 
   const attendees = useMemo(
     () => (applicationsQuery.data ?? []).filter((a) => a.status === 'accepted'),
@@ -73,6 +79,7 @@ export default function Reviews() {
         attended: draft.attended,
         reliabilityScore: draft.reliabilityScore,
         clinicalScore: draft.clinicalScore,
+        remarkChips: draft.remarkChips,
         notes: draft.notes,
       },
       { onSuccess: () => setReviewing(null) }
@@ -193,6 +200,14 @@ export default function Reviews() {
         outreachTitle={selectedOutreach?.title ?? ''}
         showClinicalScore={selectedOutreach?.role_type === 'clinical'}
         existingReview={reviewing ? (reviews?.get(reviewing.volunteer_id) ?? null) : null}
+        // Seeded from the attendance screen so the two cannot disagree about
+        // the same event: someone already flagged absent opens as a no-show
+        // rather than as "attended" waiting to be corrected.
+        markedAbsent={
+          reviewing
+            ? attendance?.get(reviewing.volunteer_id)?.organiser_status === 'absent'
+            : undefined
+        }
         isPending={submitReview.isPending}
         errorMessage={
           submitReview.isError

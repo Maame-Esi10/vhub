@@ -976,10 +976,18 @@ create policy "attendance_select_own_or_org"
 --      the volunteer must not be able to read. Were the client to write this
 --      table directly, marking yourself present at an event you never attended
 --      would be a single PATCH.
---   2. Resolving someone absent applies the -15 no-show penalty to
---      volunteer_profiles.v_score, which is already service-role-only.
+--   2. This table is the evidence a V-Score is later derived from, so the
+--      record must be unforgeable by either party -- a volunteer marking
+--      itself present, or anyone marking a rival absent.
 -- Service role bypasses RLS, so it needs no policy here. The privileges are
 -- revoked too -- see the write-protection block at the foot of this file.
+--
+-- NOTE (owner decision, 2026-08-07): setting organiser_status = 'absent' here
+-- applies NO V-Score penalty. Absence moves a score only when the
+-- organisation files the post-event review (/api/vscore, attended = false),
+-- so exactly one code path can change v_score and a single no-show cannot be
+-- punished twice. The consequence is recorded in docs/REPORT_NOTES.md: an
+-- organisation that never reviews leaves its no-shows unpenalised.
 
 -- ============================================================
 -- skill_match_cache — Gemini Layer 2 skill-equivalence cache.
@@ -1489,8 +1497,8 @@ grant insert (
 -- error (42501 "permission denied for table", rather than an RLS violation).
 --
 -- attendance: a check-in must be verified against outreach_checkin_codes.code,
--- which the volunteer cannot read, and marking someone absent applies the -15
--- no-show penalty to a service-role-only column. Both belong in /api/checkin.
+-- which the volunteer cannot read, and the resulting record is the evidence a
+-- V-Score is later derived from. Both belong in /api/checkin.
 --
 -- outreach_checkin_codes: issued by trg_outreaches_issue_checkin_code (a
 -- SECURITY DEFINER trigger, which is why revoking here does not stop new

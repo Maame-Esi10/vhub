@@ -7,11 +7,15 @@ import {
   V_SCORE_PENALTIES,
   type VScorePenaltyType,
 } from "@/lib/vscore";
+import { REVIEW_REMARKS } from "@/constants/review-remarks";
 import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 
 export const runtime = "nodejs";
+
+/** The remark vocabulary, as a set, so validation is a lookup rather than a scan. */
+const VALID_REMARK_SLUGS = new Set(REVIEW_REMARKS.map((remark) => remark.slug));
 
 // ---------------------------------------------------------------------------
 // Request contract -- CLAUDE.md: "recomputes a volunteer's V-Score after an
@@ -49,6 +53,25 @@ const ReviewAction = z.object({
   attended: z.boolean(),
   reliabilityScore: z.number().int().min(1).max(5).nullable().optional(),
   clinicalScore: z.number().int().min(1).max(5).nullable().optional(),
+  /**
+   * Slugs from constants/review-remarks.ts, validated against that vocabulary
+   * rather than accepted as free text.
+   *
+   * The check is worth making server-side: `volunteer_review_summary`
+   * aggregates these by frequency across every review a volunteer has ever
+   * received, so one client posting an off-vocabulary string would put a chip
+   * in that aggregate which no screen can render a label for. Rejecting it
+   * here keeps the summary meaningful without a database constraint that would
+   * need a migration every time the wording list changes.
+   */
+  remarkChips: z
+    .array(z.string())
+    .max(REVIEW_REMARKS.length)
+    .optional()
+    .refine(
+      (chips) => !chips || chips.every((chip) => VALID_REMARK_SLUGS.has(chip)),
+      { message: "remarkChips contains a slug that is not in the review vocabulary." }
+    ),
   notes: z.string().max(2000).optional(),
 });
 
@@ -127,6 +150,10 @@ async function handleReview(
       attended: body.attended,
       reliability_score: body.reliabilityScore ?? null,
       clinical_score: body.clinicalScore ?? null,
+      // Always written, never left undefined: re-filing a review that had
+      // chips with one that has none must CLEAR them, and an omitted key in an
+      // upsert payload would silently keep the old array.
+      remark_chips: body.remarkChips ?? [],
       notes: body.notes ?? null,
     },
     { onConflict: "outreach_id,volunteer_id" }

@@ -358,6 +358,11 @@ export interface SubmitEventReviewInput {
   attended: boolean;
   reliabilityScore?: number | null;
   clinicalScore?: number | null;
+  /**
+   * Slugs from `constants/review-remarks.ts`. The API validates them against
+   * that vocabulary and rejects anything else, so never send free text here.
+   */
+  remarkChips?: string[];
   notes?: string;
 }
 
@@ -550,8 +555,11 @@ export interface ResolveAttendanceResponse {
 /**
  * The organiser's final word on one volunteer, available for anyone on the
  * list rather than only the unscanned: no automated signal ever overrules a
- * human who was physically at the event. Marking someone absent is what
- * applies the -15 no-show penalty, which is why it cannot live on the client.
+ * human who was physically at the event.
+ *
+ * Records the decision only — marking someone absent moves NO V-Score. That
+ * happens when the post-event review is filed with `attended: false`
+ * (`submitEventReview`), so one path owns every score change.
  */
 export function resolveAttendance(
   outreachId: string,
