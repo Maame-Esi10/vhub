@@ -74,4 +74,6 @@ export {
   msUntilEvent,
   isLateCancellationWindow,
   isUpcomingEvent,
+  isEventToday,
+  hasEventEnded,
 } from './dateUtils';

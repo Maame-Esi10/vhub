@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
@@ -7,7 +8,14 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 // re-export would take the whole app down on a dev client built without it
 // rather than just this screen. Same rule as DateTimeField (see that barrel).
 import QRCode from 'react-native-qrcode-svg';
-import { Button, ErrorState, ScreenHeader, formatEventDate, formatEventTimeRange } from '@/components/ui';
+import {
+  Button,
+  ConfirmDialog,
+  ErrorState,
+  ScreenHeader,
+  formatEventDate,
+  formatEventTimeRange,
+} from '@/components/ui';
 import { useOutreach } from '@/hooks/useOutreaches';
 import { useOutreachCheckinCode } from '@/hooks/useAttendance';
 // Separate module because it reaches expo-location — see the note at its top.
@@ -40,6 +48,7 @@ export default function OrganisationCheckinQr() {
   const outreachQuery = useOutreach(id);
   const codeQuery = useOutreachCheckinCode(id);
   const anchor = useAnchorVenue();
+  const [confirmingAnchor, setConfirmingAnchor] = useState(false);
 
   const outreach = outreachQuery.data;
 
@@ -151,6 +160,34 @@ export default function OrganisationCheckinQr() {
 
         {anchorError ? <Text style={styles.errorText}>{anchorError}</Text> : null}
 
+        {/*
+          An explicit outcome after the tap, and this is not decoration.
+          Without it the only feedback was the status card above quietly
+          changing wording, and when an anchor saved but fell on the wrong day
+          it changed from one grey card to another -- so a successful save was
+          indistinguishable from nothing happening at all. That was reported.
+        */}
+        {anchor.isSuccess ? (
+          anchor.data.usableForEvent ? (
+            <View style={styles.resultOk}>
+              <MaterialCommunityIcons name="check-circle" size={18} color={colors.success} />
+              <Text style={styles.resultOkText}>
+                Venue saved. Scans here will be matched against this spot for today&apos;s event.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.resultWarn}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={18} color={colors.warning} />
+              <Text style={styles.resultWarnText}>
+                Saved, but it will not be used. A venue only counts on the day of the event, and
+                this outreach is on {formatEventDate(outreach.date)}. Come back and tap this again
+                when you are at the venue on the day — until then everyone who scans is still
+                checked in, just without the location check.
+              </Text>
+            </View>
+          )
+        ) : null}
+
         <Button
           title={
             anchor.isPending
@@ -161,7 +198,7 @@ export default function OrganisationCheckinQr() {
           }
           variant={anchored ? 'outline' : 'solid'}
           disabled={anchor.isPending}
-          onPress={() => anchor.mutate(outreach.id)}
+          onPress={() => setConfirmingAnchor(true)}
           style={styles.anchorButton}
         />
 
@@ -170,6 +207,30 @@ export default function OrganisationCheckinQr() {
           venue&apos;s position — never a volunteer&apos;s. It counts on the day of the event only.
         </Text>
       </ScrollView>
+
+      {/*
+        The disclaimer belongs BEFORE the location read, not after. Tapping
+        this button silently took a GPS fix and made wherever the organiser
+        happened to be standing into the venue -- reasonable once you know
+        that, and surprising if you do not.
+      */}
+      <ConfirmDialog
+        visible={confirmingAnchor}
+        icon="map-marker-radius-outline"
+        title="Use this spot as the venue?"
+        message={
+          `V-HUB will read this phone's location once and save it as the venue for "${outreach.title}". ` +
+          'Volunteers who scan nearby are then confirmed as on site. Only do this while you are actually at the venue, on the day of the event — a location saved on any other day is ignored.'
+        }
+        confirmLabel="Yes, I'm at the venue"
+        cancelLabel="Not yet"
+        busy={anchor.isPending}
+        onConfirm={() => {
+          setConfirmingAnchor(false);
+          anchor.mutate(outreach.id);
+        }}
+        onCancel={() => setConfirmingAnchor(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -246,6 +307,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.danger,
     marginTop: spacing.md,
+  },
+  resultOk: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    borderRadius: radius.md,
+    padding: spacing.base,
+    marginTop: spacing.md,
+  },
+  resultOkText: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textPrimary,
+  },
+  resultWarn: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderRadius: radius.md,
+    padding: spacing.base,
+    marginTop: spacing.md,
+  },
+  resultWarnText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textPrimary,
   },
   anchorButton: {
     width: '100%',

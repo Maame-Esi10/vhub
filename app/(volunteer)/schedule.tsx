@@ -9,7 +9,8 @@ import {
   ListSkeleton,
   formatEventDate,
   formatEventTime,
-  isUpcomingEvent,
+  hasEventEnded,
+  isEventToday,
   msUntilEvent,
 } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -30,9 +31,16 @@ export default function Schedule() {
   const applications = useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
 
   /**
-   * Accepted + still ahead of us, soonest first. `useVolunteerApplications`
+   * Accepted and NOT YET OVER, soonest first. `useVolunteerApplications`
    * returns newest-application-first, which is the wrong order for a diary,
    * so this re-sorts by event start rather than by when the volunteer applied.
+   *
+   * The test is `hasEventEnded`, not `isUpcomingEvent`. The latter flips the
+   * moment the start time passes, so an event vanished from the volunteer's
+   * schedule while they were standing in it — which is exactly when they need
+   * it, since that is when they check in. Reported during testing: an
+   * application showing as accepted was missing from Schedule entirely because
+   * the event had already begun.
    */
   const upcoming = useMemo(
     () =>
@@ -41,7 +49,7 @@ export default function Schedule() {
           (application) =>
             application.status === 'accepted' &&
             application.outreach !== null &&
-            isUpcomingEvent(application.outreach.date, application.outreach.start_time)
+            !hasEventEnded(application.outreach.date, application.outreach.end_time)
         )
         .sort((a, b) => {
           const aStart = a.outreach ? msUntilEvent(a.outreach.date, a.outreach.start_time) : null;
@@ -107,28 +115,6 @@ export default function Schedule() {
           : `${upcoming.length} confirmed ${upcoming.length === 1 ? 'event' : 'events'} ahead`}
       </Text>
 
-      {/*
-        Always available, rather than attached to a specific event row. The
-        list above holds only events that have not STARTED yet
-        (isUpcomingEvent), so an event-scoped button would vanish at exactly
-        the moment a volunteer standing at the venue needs it. Nothing is lost
-        by leaving it open: the API accepts a scan only from someone on the
-        accepted list, for a code only that organiser is showing.
-      */}
-      <Pressable
-        onPress={() => router.push('/(volunteer)/scan')}
-        accessibilityRole="button"
-        accessibilityLabel="Scan check-in code"
-        style={({ pressed }) => [styles.scanRow, pressed && styles.pressed]}
-      >
-        <MaterialCommunityIcons name="qrcode-scan" size={20} color={colors.primary} />
-        <View style={styles.eventText}>
-          <Text style={styles.scanTitle}>Scan check-in code</Text>
-          <Text style={styles.eventMeta}>At the venue, scan the code your organiser shows.</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-      </Pressable>
-
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
@@ -153,27 +139,54 @@ export default function Schedule() {
           if (!outreach) return null;
           const startLabel = formatEventTime(outreach.start_time) ?? 'All day';
 
+          const isToday = isEventToday(outreach.date);
+
           return (
-            <Pressable
-              onPress={() => router.push(`/(volunteer)/outreach/${outreach.id}?from=/(volunteer)/schedule`)}
-              accessibilityRole="button"
-              accessibilityLabel={`${outreach.title} at ${startLabel}`}
-              style={({ pressed }) => [styles.eventRow, pressed && styles.pressed]}
-            >
-              <Text style={styles.eventTime}>{startLabel}</Text>
-              <View style={styles.eventDot} />
-              <View style={styles.eventText}>
-                <Text style={styles.eventTitle} numberOfLines={1}>
-                  {outreach.title}
-                </Text>
-                <Text style={styles.eventMeta} numberOfLines={1}>
-                  {[outreach.organisation?.org_name, outreach.location_name, outreach.district]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-            </Pressable>
+            <View>
+              <Pressable
+                onPress={() => router.push(`/(volunteer)/outreach/${outreach.id}?from=/(volunteer)/schedule`)}
+                accessibilityRole="button"
+                accessibilityLabel={`${outreach.title} at ${startLabel}`}
+                style={({ pressed }) => [
+                  styles.eventRow,
+                  isToday && styles.eventRowToday,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.eventTime}>{startLabel}</Text>
+                <View style={styles.eventDot} />
+                <View style={styles.eventText}>
+                  <Text style={styles.eventTitle} numberOfLines={1}>
+                    {outreach.title}
+                  </Text>
+                  <Text style={styles.eventMeta} numberOfLines={1}>
+                    {[outreach.organisation?.org_name, outreach.location_name, outreach.district]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+              </Pressable>
+
+              {/*
+                Attached to the event it belongs to, and shown only on the day.
+                It used to be one standalone row at the top of the screen,
+                which left a volunteer with several confirmed events unable to
+                tell what they were checking in to — the button named no event,
+                because it belonged to none of them.
+              */}
+              {isToday ? (
+                <Pressable
+                  onPress={() => router.push('/(volunteer)/scan')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Scan check-in code for ${outreach.title}`}
+                  style={({ pressed }) => [styles.scanRow, pressed && styles.pressed]}
+                >
+                  <MaterialCommunityIcons name="qrcode-scan" size={18} color={colors.white} />
+                  <Text style={styles.scanLabel}>Scan check-in code</Text>
+                </Pressable>
+              ) : null}
+            </View>
           );
         }}
         ListEmptyComponent={
@@ -216,20 +229,22 @@ const styles = StyleSheet.create({
   scanRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    minHeight: 60,
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.base,
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    // Pulled up under its event row and indented past the time column, so it
+    // reads as belonging to that event rather than as a separate item.
+    marginTop: -spacing.xs,
+    marginLeft: 70,
+    marginBottom: spacing.sm,
     paddingHorizontal: spacing.base,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.navy,
   },
-  scanTitle: {
+  scanLabel: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 14,
-    color: colors.textPrimary,
+    fontSize: 13,
+    color: colors.white,
   },
   listContent: {
     paddingHorizontal: spacing.xl,
@@ -262,6 +277,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.surface,
     marginBottom: spacing.sm,
+  },
+  /** Today's event gets a border so it stands out from the rest of the diary. */
+  eventRowToday: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginBottom: spacing.xs,
   },
   pressed: {
     opacity: 0.85,

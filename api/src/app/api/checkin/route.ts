@@ -185,9 +185,26 @@ async function recordScan(
     .eq("volunteer_id", userId)
     .maybeSingle();
   if (applicationError) throw Errors.internal("Could not load your application.");
-  if (!application || application.status !== "accepted") {
+
+  // The message names the ACTUAL state rather than restating the rule. "You
+  // are not on the accepted list" is true of four quite different situations
+  // -- never applied, still pending, waitlisted, withdrawn -- and a volunteer
+  // standing at a venue holding a phone cannot tell which one applies to them,
+  // nor can whoever they show it to.
+  if (!application) {
     throw Errors.forbidden(
-      "You are not on the accepted list for this outreach, so you cannot check in."
+      "You have not applied to this outreach, so there is nothing to check in to. Check that this is the right event."
+    );
+  }
+  if (application.status !== "accepted") {
+    const explanation: Record<string, string> = {
+      pending: "Your application is still waiting on the organisation's decision.",
+      waitlisted: "You are on the waitlist for this outreach, not the confirmed list.",
+      rejected: "Your application to this outreach was not accepted.",
+      cancelled: "You withdrew from this outreach.",
+    };
+    throw Errors.forbidden(
+      `${explanation[application.status] ?? "Your application is not accepted."} Only confirmed volunteers can check in — speak to the organiser if you think this is wrong.`
     );
   }
 

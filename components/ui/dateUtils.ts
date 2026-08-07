@@ -129,6 +129,42 @@ export function isUpcomingEvent(date: string, startTime: string | null): boolean
   return remaining !== null && remaining > 0;
 }
 
+/** True when `date` (YYYY-MM-DD) is today in local time. Ghana is GMT year-round. */
+export function isEventToday(date: string): boolean {
+  const parsed = parseCalendarDate(date);
+  if (!parsed) return false;
+  const now = new Date();
+  return (
+    parsed.year === now.getFullYear() &&
+    parsed.month === now.getMonth() + 1 &&
+    parsed.day === now.getDate()
+  );
+}
+
+/**
+ * True once the event is genuinely over.
+ *
+ * Distinct from `!isUpcomingEvent`, which flips the moment the START time
+ * passes — that is what dropped an event off the volunteer's schedule while
+ * they were still standing in it, taking the check-in action with it. An event
+ * with no `end_time` runs to the end of its calendar day rather than being
+ * treated as instantaneous.
+ */
+export function hasEventEnded(date: string, endTime: string | null): boolean {
+  const parsed = parseCalendarDate(date);
+  if (!parsed) return false;
+  const end = endTime ? parseClockTime(endTime) : null;
+  const finish = new Date(
+    parsed.year,
+    parsed.month - 1,
+    parsed.day,
+    end?.hours ?? 23,
+    end?.minutes ?? 59,
+    59
+  );
+  return Date.now() > finish.getTime();
+}
+
 interface ParsedTime {
   hours: number;
   minutes: number;
