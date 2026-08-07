@@ -71,14 +71,14 @@ export type {
   CreateApplicationParams,
   CancelApplicationParams,
 } from './useApplications';
-export {
-  attendanceKeys,
-  useOutreachCheckinCode,
-  useMyAttendance,
-  useAnchorVenue,
-  useCheckIn,
-} from './useAttendance';
-export type { CheckInParams } from './useAttendance';
+// useAttendance is deliberately NOT exported here. It imports lib/geolocation,
+// which imports expo-location — a NATIVE module — and this barrel is imported
+// by app/_layout.tsx, so a re-export evaluates expo-location on EVERY route.
+// On a dev client built before that module was added, the import throws at
+// module scope and every screen in the app loses its default export, not just
+// the attendance ones. Import it directly:
+// `import { useCheckIn } from '@/hooks/useAttendance';`
+// Same rule as DateTimeField and useMediaUpload — see components/ui/index.ts.
 export { eventReviewKeys, useOutreachReviews, useSubmitEventReview } from './useEventReviews';
 export type { SubmitEventReviewParams } from './useEventReviews';
 export {
