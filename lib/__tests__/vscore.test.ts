@@ -8,6 +8,7 @@ import {
   computeRankingScore,
   getReliabilityMultiplier,
   getVScoreBand,
+  hasScorableOutcome,
   recomputeVScoreAfterReview,
   type EventOutcomeInput,
 } from '../vscore';
@@ -72,17 +73,66 @@ describe('computeEventOutcome', () => {
     expect(computeEventOutcome({ attended: true, reliability_score: 1, clinical_score: null })).toBe(20);
   });
 
-  it('substitutes a neutral default when reliability_score is missing despite attended = true', () => {
-    // DEFAULT_MISSING_SUBSCORE = 3 -> 3 * 20 = 60
-    expect(computeEventOutcome({ attended: true, reliability_score: null, clinical_score: null })).toBe(60);
+  // These two used to assert 60, from a `DEFAULT_MISSING_SUBSCORE = 3`
+  // substituted for a missing rating on the reasoning that the midpoint of the
+  // scale is neutral. It is not: 3/5 scales to 60, volunteers START at 70, and
+  // 0.7x70 + 0.3x60 = 67 -- so an unrated review silently cost a good
+  // volunteer three points. Reported on device 2026-08-07. There is no neutral
+  // NUMBER when the baseline is 70; the honest answer is "no signal".
+  it('returns null when reliability_score is missing despite attended = true', () => {
+    expect(
+      computeEventOutcome({ attended: true, reliability_score: null, clinical_score: null })
+    ).toBeNull();
+    // A clinical score alone is still not enough -- reliability is the score
+    // every review has, clinical is the one only some roles get.
+    expect(computeEventOutcome({ attended: true, reliability_score: null, clinical_score: 5 })).toBeNull();
   });
 
-  it('treats attended = null (never reviewed) the same as a missing-data neutral default', () => {
-    expect(computeEventOutcome({ attended: null, reliability_score: null, clinical_score: null })).toBe(60);
+  it('returns null when attendance itself is unknown', () => {
+    expect(
+      computeEventOutcome({ attended: null, reliability_score: null, clinical_score: null })
+    ).toBeNull();
+    expect(computeEventOutcome({ attended: null, reliability_score: 5, clinical_score: 5 })).toBeNull();
   });
 
   it('clamps to 100 even if a caller passes an out-of-range sub-score above 5', () => {
     expect(computeEventOutcome({ attended: true, reliability_score: 10, clinical_score: 10 })).toBe(100);
+  });
+});
+
+describe('an unscorable review must not move the score', () => {
+  // The bug this whole change exists for, stated as a test: a volunteer who
+  // turned up and did nothing wrong must never lose points because the
+  // organiser did not tap any stars.
+  it('leaves a new volunteer at exactly 70 when no rating was given', () => {
+    expect(
+      recomputeVScoreAfterReview(70, { attended: true, reliability_score: null, clinical_score: null })
+    ).toBe(70);
+  });
+
+  it('leaves any score untouched, above or below the starting point', () => {
+    for (const score of [0, 12, 40, 59, 60, 61, 70, 89, 95, 100]) {
+      expect(
+        recomputeVScoreAfterReview(score, {
+          attended: true,
+          reliability_score: null,
+          clinical_score: null,
+        })
+      ).toBe(score);
+    }
+  });
+
+  it('still records a no-show, which is a real signal rather than a gap', () => {
+    expect(
+      recomputeVScoreAfterReview(70, { attended: false, reliability_score: null, clinical_score: null })
+    ).toBe(49);
+  });
+
+  it('hasScorableOutcome agrees with computeEventOutcome', () => {
+    expect(hasScorableOutcome({ attended: true, reliability_score: 4, clinical_score: null })).toBe(true);
+    expect(hasScorableOutcome({ attended: false, reliability_score: null, clinical_score: null })).toBe(true);
+    expect(hasScorableOutcome({ attended: true, reliability_score: null, clinical_score: null })).toBe(false);
+    expect(hasScorableOutcome({ attended: null, reliability_score: 3, clinical_score: 3 })).toBe(false);
   });
 });
 

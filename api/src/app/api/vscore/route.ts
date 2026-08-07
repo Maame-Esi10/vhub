@@ -168,6 +168,11 @@ async function handleReview(
   if (volunteerError || !volunteer) throw Errors.notFound("Volunteer profile not found.");
 
   const oldScore = volunteer.v_score as number;
+  // null when the review carries no scorable signal (attended but unrated).
+  // recomputeVScoreAfterReview then returns oldScore untouched -- see the note
+  // on the removed DEFAULT_MISSING_SUBSCORE in lib/vscore.ts. The response
+  // reports the null honestly rather than a substituted number, so a caller
+  // can tell "scored 60" from "not scored".
   const eventOutcome = computeEventOutcome({
     attended: body.attended,
     reliability_score: body.reliabilityScore ?? null,

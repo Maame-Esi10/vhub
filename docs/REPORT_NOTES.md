@@ -226,6 +226,58 @@ Notes for the Design & Implementation chapter of the Final Year Project report.
   earned score, so there is nothing for a volunteer to gain by editing it that
   they could not also have claimed at signup.
 
+## Spec correction — an unrated review must not move a V-Score (2026-08-07)
+
+**The bug, found on device.** An organisation marked a volunteer present and
+filed a post-event review without tapping any star ratings. The volunteer's
+V-Score fell from 70 to 67 for an event they had attended and done nothing
+wrong at.
+
+**The cause.** `computeEventOutcome` substituted `DEFAULT_MISSING_SUBSCORE = 3`
+— the midpoint of the 1–5 scale — whenever a rating was missing, on the
+documented reasoning that a midpoint "neither rewards nor punishes the
+volunteer". The blend then ran normally:
+
+```
+outcome     = 3 × 20            = 60
+new_score   = 0.7×70 + 0.3×60   = 67
+```
+
+**Why the original assumption was wrong.** It confused the midpoint of the
+RATING scale with a neutral point of the SCORE. 3/5 scales to 60, and every
+volunteer starts at 70, so the substituted value was always *below* a new
+volunteer's score and always pulled them down. Repeated unrated reviews would
+converge anyone on 60 regardless of how well they actually worked — the system
+would have been measuring how diligently organisations tapped stars, not how
+well volunteers performed. There is no fixed number that is neutral against a
+moving baseline; neutrality here means *not moving the score at all*.
+
+**The correction (owner-approved, two parts).**
+
+1. `computeEventOutcome` returns `null` when a review carries no scorable
+   signal — attended with no `reliability_score`, or unknown attendance — and
+   `recomputeVScoreAfterReview` returns the old score unchanged. A missing
+   `clinical_score` is deliberately NOT a gap: support-role volunteers are
+   never clinically scored, so reliability alone is a complete review for them.
+2. The review form now requires the ratings when attendance is true (both,
+   when the outreach is clinical), so the unscorable path should be
+   unreachable from the app. It is kept as a guard because a gap arriving any
+   other way must not cost a volunteer reputation.
+
+**Why keep the guard as well as the form validation.** The form is a UI
+constraint and the math is an invariant; only one of them survives a direct API
+call, a future screen, or a data import.
+
+**Defence.** "An early version substituted the midpoint of the rating scale when
+an organiser filed a review without ratings, reasoning that a midpoint is
+neutral. Device testing showed it was not: the midpoint scales to 60 and
+volunteers start at 70, so an unrated review quietly cost a good volunteer
+three points, and enough of them would drag anyone to 60. The system was
+measuring reviewer diligence rather than volunteer performance. The fix was to
+recognise that no fixed value is neutral against a moving baseline — a review
+with no rating now moves nothing, and the form requires the ratings so a review
+that changes nothing is not filed by accident."
+
 ## Known issues (open, not blocking)
 
 - **Absence has no V-Score effect until the review is filed.** Marking a

@@ -89,7 +89,26 @@ export function EventReviewSheet({
     );
   }
 
+  /**
+   * A review of someone who attended MUST carry its ratings.
+   *
+   * This used to be optional, and the cost was invisible: an unrated review
+   * blended a substituted 3/5 (= 60) into the V-Score, so filing one on a
+   * volunteer who had done nothing wrong moved them 70 -> 67. The math no
+   * longer fabricates a rating (lib/vscore.ts), which means an unrated review
+   * now moves nothing at all — and a review that changes nothing is not worth
+   * an organiser's time to file. Requiring the stars is what makes the review
+   * mean something in both directions.
+   *
+   * Clinical is required only when it is SHOWN. It is hidden entirely for
+   * support-role events, where a volunteer is never clinically scored, and
+   * demanding it there would be asking for a judgement nobody is in a position
+   * to make.
+   */
+  const missingRatings = attended && (reliability === null || (showClinicalScore && clinical === null));
+
   function handleSubmit() {
+    if (missingRatings) return;
     onSubmit({
       attended,
       reliabilityScore: attended ? reliability : null,
@@ -229,10 +248,19 @@ export function EventReviewSheet({
           </ScrollView>
 
           <View style={styles.footer}>
+            {missingRatings ? (
+              <Text style={styles.requiredHint}>
+                {reliability === null && showClinicalScore && clinical === null
+                  ? 'Give both ratings to submit — they are what move the volunteer’s V-Score.'
+                  : reliability === null
+                    ? 'Give a reliability rating to submit.'
+                    : 'Give a clinical rating to submit.'}
+              </Text>
+            ) : null}
             <Button
               title={isPending ? 'Submitting...' : existingReview ? 'Update review' : 'Submit review'}
               onPress={handleSubmit}
-              disabled={isPending}
+              disabled={isPending || missingRatings}
               accessibilityLabel="Submit review"
             />
           </View>
@@ -512,6 +540,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.danger,
     marginTop: spacing.sm,
+  },
+  requiredHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
   },
   footer: {
     paddingHorizontal: spacing.xl,

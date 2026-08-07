@@ -130,13 +130,23 @@ const REVIEW_SCORE_SCALE = 20;
 const NO_SHOW_EVENT_OUTCOME = 0;
 
 /**
- * Neutral 1–5 fallback used only when `attended === true` (or unknown) but a
- * sub-score the blend needs is itself missing — a data-integrity gap the
- * review UI shouldn't normally allow. 3 is the midpoint of the 1–5 scale
- * (-> 60/100 once scaled), chosen so a data gap neither rewards nor punishes
- * the volunteer. See `computeEventOutcome` cases 4–5 below.
+ * REMOVED 2026-08-07, and worth recording why rather than deleting silently.
+ *
+ * There used to be a `DEFAULT_MISSING_SUBSCORE = 3` here: when a review was
+ * filed with no star ratings, the midpoint of the 1–5 scale was substituted,
+ * "chosen so a data gap neither rewards nor punishes the volunteer".
+ *
+ * That reasoning was wrong in effect. 3/5 scales to 60, and every volunteer
+ * STARTS at 70, so blending in 60 always pulled a new volunteer DOWN:
+ * 0.7×70 + 0.3×60 = 67. Repeated unrated reviews would drag anyone toward 60
+ * no matter how well they actually worked. A neutral outcome is not a fixed
+ * number on the scale — it is whatever the volunteer already has, which is
+ * another way of saying there is no such number and the blend should simply
+ * not run.
+ *
+ * Found on device: an organisation marked a volunteer present, filed a review
+ * without stars, and watched the score fall 70 -> 67 for a good event.
  */
-const DEFAULT_MISSING_SUBSCORE = 3;
 
 function clampScore(score: number): number {
   return Math.min(100, Math.max(0, score));
@@ -179,21 +189,32 @@ export interface EventOutcomeInput {
  *      never clinically scored) -> outcome = reliability_score x 20. We fall
  *      back to reliability alone rather than penalising a volunteer for a
  *      dimension that structurally doesn't apply to their role.
- *   4. `reliability_score` itself is missing while attended is true (a data
- *      gap the review form shouldn't normally allow) -> substitute the
- *      neutral `DEFAULT_MISSING_SUBSCORE` (3/5 -> 60/100) so a data-entry gap
- *      neither rewards nor punishes the volunteer, instead of producing NaN
- *      or an arbitrary 0.
- *   5. `attended === null` (never reviewed / unknown) -> treated the same as
- *      case 4, since there is no attendance signal either way.
+ *   4. `reliability_score` is missing while attended is true -> NULL, meaning
+ *      "this review carries no scorable signal". See case 5 and the removed
+ *      constant above: substituting a midpoint here silently penalised anyone
+ *      above 60, which is every new volunteer.
+ *   5. `attended === null` (never reviewed / unknown) -> NULL, same reasoning.
  *
- * Result is always clamped to [0, 100].
+ * Returns null rather than a number when there is nothing to score, so the
+ * caller must decide what to do about it instead of being handed a plausible
+ * fabricated value. `recomputeVScoreAfterReview` leaves the score untouched.
+ *
+ * A non-null result is always clamped to [0, 100].
  */
-export function computeEventOutcome(review: EventOutcomeInput): number {
+export function computeEventOutcome(review: EventOutcomeInput): number | null {
   if (review.attended === false) return clampScore(NO_SHOW_EVENT_OUTCOME);
 
-  const reliability = review.reliability_score ?? DEFAULT_MISSING_SUBSCORE;
+  // Unknown attendance is not evidence of anything.
+  if (review.attended !== true) return null;
+
+  const reliability = review.reliability_score;
   const clinical = review.clinical_score;
+
+  // No reliability score = no signal. Note this is NOT the same as a missing
+  // clinical score: clinical is structurally absent for support-role
+  // volunteers, who are never clinically scored, so reliability alone is a
+  // complete review for them rather than a gap.
+  if (reliability == null) return null;
 
   const outcome =
     clinical == null
@@ -203,12 +224,27 @@ export function computeEventOutcome(review: EventOutcomeInput): number {
   return clampScore(outcome);
 }
 
+/** True when a review carries enough signal to move a V-Score at all. */
+export function hasScorableOutcome(review: EventOutcomeInput): boolean {
+  return computeEventOutcome(review) !== null;
+}
+
 /**
- * Applies the CLAUDE.md-specified post-event blend:
- * new = 0.7×old + 0.3×eventOutcome, clamped to [0, 100].
+ * Applies the post-event blend: new = 0.7×old + 0.3×eventOutcome, clamped to
+ * [0, 100].
+ *
+ * DEPARTS FROM CLAUDE.md's original wording, deliberately (owner-approved
+ * 2026-08-07): a review with no scorable outcome returns the OLD SCORE
+ * UNCHANGED rather than blending in a substituted midpoint. The spec assumed a
+ * missing rating could be treated as neutral; no fixed number is neutral when
+ * volunteers start at 70, so the only honest response to "no rating was given"
+ * is to not move the score. The review form now requires the stars, so this
+ * path should be unreachable from the app — it exists so that a gap arriving
+ * any other way cannot quietly cost someone reputation.
  */
 export function recomputeVScoreAfterReview(oldScore: number, review: EventOutcomeInput): number {
   const outcome = computeEventOutcome(review);
+  if (outcome === null) return clampScore(oldScore);
   return clampScore(OLD_SCORE_WEIGHT * oldScore + EVENT_OUTCOME_WEIGHT * outcome);
 }
 

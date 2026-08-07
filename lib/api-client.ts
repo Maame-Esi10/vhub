@@ -349,7 +349,14 @@ export interface VScoreReviewResponse {
   oldScore: number;
   newScore: number;
   band: VScoreBand;
-  eventOutcome: number;
+  /**
+   * The 0–100 outcome this review contributed, or null when it carried no
+   * scorable signal (attended but unrated). Null means `newScore === oldScore`
+   * — the blend deliberately did not run, rather than running on a substituted
+   * midpoint that would have cost the volunteer points for the organiser's
+   * omission.
+   */
+  eventOutcome: number | null;
 }
 
 export interface SubmitEventReviewInput {
