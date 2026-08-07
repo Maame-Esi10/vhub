@@ -80,6 +80,8 @@ export type {
 // `import { useCheckIn } from '@/hooks/useAttendance';`
 // Same rule as DateTimeField and useMediaUpload — see components/ui/index.ts.
 export { eventReviewKeys, useOutreachReviews, useSubmitEventReview } from './useEventReviews';
+export { feedbackKeys, useMyReviews, useVolunteerReviewSummary } from './useVolunteerFeedback';
+export type { MyEventReview } from './useVolunteerFeedback';
 export type { SubmitEventReviewParams } from './useEventReviews';
 export {
   publicProfileKeys,

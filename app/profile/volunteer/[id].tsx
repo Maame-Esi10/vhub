@@ -6,7 +6,12 @@ import { Avatar, Badge, ErrorState, ListSkeleton, VScoreBadge } from '@/componen
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { EXPERIENCE_LEVELS, VOLUNTEER_CATEGORIES } from '@/constants/categories';
-import { usePublicVolunteerProfile, useUpdateApplicationStatus } from '@/hooks';
+import { ReviewSummaryCard } from '@/components/volunteer';
+import {
+  usePublicVolunteerProfile,
+  useUpdateApplicationStatus,
+  useVolunteerReviewSummary,
+} from '@/hooks';
 import type { OrganisationApplicationDecision } from '@/hooks';
 import { getVScoreBand } from '@/lib/vscore';
 import type { VerificationStatus } from '@/types/database';
@@ -65,6 +70,7 @@ export default function PublicVolunteerProfile() {
   const volunteerId = typeof id === 'string' ? id : undefined;
 
   const profileQuery = usePublicVolunteerProfile(volunteerId);
+  const summaryQuery = useVolunteerReviewSummary(volunteerId);
   const updateStatus = useUpdateApplicationStatus();
 
   // Mirrors the Accept / Waitlist / Reject actions on the applicant list
@@ -196,6 +202,17 @@ export default function PublicVolunteerProfile() {
             </View>
           ))}
         </Section>
+
+        {/*
+          The aggregate, and only the aggregate. This replaces the "Recent
+          High-Impact" event history in the Figma design, which cannot be built
+          as drawn: individual reviews are row-scoped to their author and their
+          subject, and showing them to a browsing organisation is exactly what
+          the 2026-08-05 decision rules out. Averages and chip frequencies
+          answer the same question — is this person reliable? — without
+          exposing anyone's single opinion.
+        */}
+        {summaryQuery.data ? <ReviewSummaryCard summary={summaryQuery.data} /> : null}
       </ScrollView>
 
       {canDecide ? (

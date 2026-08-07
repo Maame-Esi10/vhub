@@ -69,6 +69,22 @@ export default function VolunteerProfile() {
 
       <Pressable
         style={({ pressed }) => [styles.rowCard, pressed && styles.rowCardPressed]}
+        onPress={() => router.push('/(volunteer)/feedback')}
+        accessibilityRole="button"
+        accessibilityLabel="See the feedback organisations have given you"
+      >
+        <MaterialCommunityIcons name="message-star-outline" size={22} color={colors.primary} />
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>My Feedback</Text>
+          <Text style={styles.rowBody}>
+            Everything organisations have said about your work, in full — including their notes.
+          </Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [styles.rowCard, pressed && styles.rowCardPressed]}
         onPress={() => router.push('/(volunteer)/edit-profile')}
         accessibilityRole="button"
         accessibilityLabel="Edit your professional profile"

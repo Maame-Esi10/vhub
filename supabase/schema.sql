@@ -1221,15 +1221,25 @@ grant select on public_organisation_profiles to authenticated;
 -- trying to measure. Individual reviews stay readable only by their author and
 -- their subject, under event_reviews_select_org_or_volunteer.
 --
--- security_invoker = true, unlike the two discovery views above: this one
--- aggregates rows the caller may already reach, so it needs no elevation.
+-- security_invoker = FALSE, like the two discovery views above, and that is
+-- load-bearing (fixed by 20260807_review_summary_aggregate_scope.sql). With
+-- invoker rights the underlying row policies still applied, so an organisation
+-- aggregated only the reviews IT had written -- a volunteer with twenty
+-- reviews read as `reviews_count = 1`, and an average over one bad day looked
+-- identical to an average over a career.
+--
+-- THE AGGREGATE IS THE PRIVACY BOUNDARY. Owner rights let this see every
+-- review; what it returns is counts and averages, never a single review.
+-- Individual rows stay row-scoped under event_reviews_select_org_or_volunteer,
+-- readable only by their author and their subject.
 --
 -- No PII, and the standing rule on the discovery views applies here too --
--- never add a phone, an email, or a name to this select list.
+-- never add a phone, an email, or a name to this select list. `notes` must
+-- never be aggregated in either: free text is identifying by nature.
 -- ============================================================
 drop view if exists volunteer_review_summary;
 create view volunteer_review_summary
-with (security_invoker = true) as
+with (security_invoker = false) as
   select
     vp.id as volunteer_id,
     vp.v_score,
