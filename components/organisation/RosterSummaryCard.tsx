@@ -167,12 +167,15 @@ export function RosterSummaryCard({
 }
 
 const styles = StyleSheet.create({
+  // No outer margins. A component does not own the space around it — the
+  // screen that places it does, so the same card can sit in a padded list
+  // header without double-insetting.
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.base,
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   headerRow: {
     flexDirection: 'row',

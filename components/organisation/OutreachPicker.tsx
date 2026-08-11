@@ -41,9 +41,15 @@ export function OutreachPicker({ outreaches, selectedId, onSelect }: OutreachPic
 }
 
 const styles = StyleSheet.create({
+  // The screen's horizontal inset lives HERE, on the scrollable content, not on
+  // a wrapping View. With it on the wrapper the ScrollView's own bounds were
+  // inset too, so the track ended before the screen edge and the last chip sat
+  // permanently clipped and unreachable. On the content the list scrolls edge
+  // to edge and still starts and ends flush with the rest of the screen.
   row: {
     gap: spacing.sm,
     paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xl,
   },
   chip: {
     flexDirection: 'row',

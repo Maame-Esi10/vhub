@@ -215,41 +215,19 @@ export default function Applicants() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <Text style={styles.title}>Applicant Vetting</Text>
 
-      <View style={styles.pickerWrap}>
-        <OutreachPicker
-          outreaches={outreaches}
-          selectedId={selectedOutreachId}
-          onSelect={(id) => setSelectedOutreachId(id)}
-        />
-      </View>
-
       {/*
-        Draft outreaches are excluded: an unpublished event has no applicants,
-        so a roster bar would only ever read "0 of N".
+        Fixed header: the title and the outreach selector. The selector is
+        navigation — it decides what the whole screen is about — so it stays
+        reachable while the applicant list scrolls beneath it. Everything else
+        moved into the list's own header (see listHeader below) because a
+        screen that pins six stacked sections leaves a phone with barely a
+        applicant visible.
       */}
-      {selectedOutreach && selectedOutreach.status !== 'draft' && plan ? (
-        <RosterSummaryCard
-          slotsFilled={selectedOutreach.slots_filled}
-          slotsTotal={selectedOutreach.slots_total}
-          pendingCount={pendingCount}
-          waitlistedCount={waitlistedCount}
-          coverage={coverage}
-          acceptCount={plan.accept.length}
-          waitlistCount={plan.waitlist.length}
-          leftPendingCount={plan.leftPending.length}
-          onAcceptTop={() => setConfirmingBatch(true)}
-          isPending={batchDecide.isPending}
-        />
-      ) : null}
-
-      {batchOutcome ? <Text style={styles.batchOutcome}>{batchOutcome}</Text> : null}
-      {batchDecide.isError ? (
-        <Text style={styles.batchError}>
-          {batchDecide.error instanceof Error
-            ? batchDecide.error.message
-            : 'Could not process these applicants. Please try again.'}
-        </Text>
-      ) : null}
+      <OutreachPicker
+        outreaches={outreaches}
+        selectedId={selectedOutreachId}
+        onSelect={(id) => setSelectedOutreachId(id)}
+      />
 
       <ConfirmDialog
         visible={confirmingBatch}
@@ -279,58 +257,6 @@ export default function Applicants() {
         onCancel={() => setConfirmingBatch(false)}
       />
 
-      {/*
-        The way in to the check-in QR. It lives here rather than on the
-        dashboard card because this screen is already scoped to ONE outreach,
-        which is what the QR is for — and the card's single quick-action slot
-        is spoken for by Publish/Close.
-
-        Hidden for drafts: an unpublished outreach has no accepted volunteers,
-        so nobody could scan it.
-      */}
-      {selectedOutreach && selectedOutreach.status !== 'draft' ? (
-        <Pressable
-          onPress={() => router.push(`/(organisation)/checkin/${selectedOutreach.id}`)}
-          accessibilityRole="button"
-          accessibilityLabel={`Show check-in code for ${selectedOutreach.title}`}
-          style={({ pressed }) => [styles.checkinRow, pressed && styles.checkinRowPressed]}
-        >
-          <MaterialCommunityIcons name="qrcode" size={20} color={colors.primary} />
-          <View style={styles.checkinText}>
-            <Text style={styles.checkinTitle}>Show check-in code</Text>
-            <Text style={styles.checkinMeta}>Display this at the venue for volunteers to scan.</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-        </Pressable>
-      ) : null}
-
-      {/*
-        Only once the event has actually started. Before that there is nothing
-        to mark, and offering it early invites an organiser to "confirm" a
-        roster for an event nobody has attended yet.
-      */}
-      {selectedOutreach &&
-      selectedOutreach.status !== 'draft' &&
-      !isUpcomingEvent(selectedOutreach.date, selectedOutreach.start_time) ? (
-        <Pressable
-          onPress={() => router.push(`/(organisation)/attendance/${selectedOutreach.id}`)}
-          accessibilityRole="button"
-          accessibilityLabel={`Mark attendance for ${selectedOutreach.title}`}
-          style={({ pressed }) => [styles.checkinRow, pressed && styles.checkinRowPressed]}
-        >
-          <MaterialCommunityIcons name="clipboard-check-outline" size={20} color={colors.primary} />
-          <View style={styles.checkinText}>
-            <Text style={styles.checkinTitle}>Mark attendance</Text>
-            <Text style={styles.checkinMeta}>Everyone counts as present — flag only the no-shows.</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-        </Pressable>
-      ) : null}
-
-      <View style={styles.filtersWrap}>
-        <FilterChips options={FILTERS} value={statusFilter} onChange={setStatusFilter} />
-      </View>
-
       {applicationsQuery.isLoading ? (
         <ListSkeleton rows={3} rowHeight={180} />
       ) : applicationsQuery.isError ? (
@@ -353,6 +279,97 @@ export default function Applicants() {
               refreshing={applicationsQuery.isRefetching}
               onRefresh={() => applicationsQuery.refetch()}
             />
+          }
+          /*
+            Everything between the selector and the applicants scrolls WITH the
+            applicants. Pinned, these five sections filled a phone screen and
+            left the list — the thing the tab exists for — showing perhaps one
+            card.
+
+            Each section is separated by a real margin (see styles.section*)
+            rather than being stacked flush. Sections that touch are what made
+            this screen read as unfinished.
+          */
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              {/*
+                Draft outreaches are excluded: an unpublished event has no
+                applicants, so a roster bar would only ever read "0 of N".
+              */}
+              {selectedOutreach && selectedOutreach.status !== 'draft' && plan ? (
+                <RosterSummaryCard
+                  slotsFilled={selectedOutreach.slots_filled}
+                  slotsTotal={selectedOutreach.slots_total}
+                  pendingCount={pendingCount}
+                  waitlistedCount={waitlistedCount}
+                  coverage={coverage}
+                  acceptCount={plan.accept.length}
+                  waitlistCount={plan.waitlist.length}
+                  leftPendingCount={plan.leftPending.length}
+                  onAcceptTop={() => setConfirmingBatch(true)}
+                  isPending={batchDecide.isPending}
+                />
+              ) : null}
+
+              {batchOutcome ? <Text style={styles.batchOutcome}>{batchOutcome}</Text> : null}
+              {batchDecide.isError ? (
+                <Text style={styles.batchError}>
+                  {batchDecide.error instanceof Error
+                    ? batchDecide.error.message
+                    : 'Could not process these applicants. Please try again.'}
+                </Text>
+              ) : null}
+
+              {/*
+                PROPOSED FOR REMOVAL, pending owner approval on where they go.
+                Check-in and attendance are event-DAY actions and this screen is
+                for choosing who gets a place — a different job at a different
+                moment. They are unpinned here so they no longer crowd the
+                header, and will move to the outreach's own management screen
+                once the destination is agreed.
+              */}
+              {selectedOutreach && selectedOutreach.status !== 'draft' ? (
+                <Pressable
+                  onPress={() => router.push(`/(organisation)/checkin/${selectedOutreach.id}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show check-in code for ${selectedOutreach.title}`}
+                  style={({ pressed }) => [styles.checkinRow, pressed && styles.checkinRowPressed]}
+                >
+                  <MaterialCommunityIcons name="qrcode" size={20} color={colors.primary} />
+                  <View style={styles.checkinText}>
+                    <Text style={styles.checkinTitle}>Show check-in code</Text>
+                    <Text style={styles.checkinMeta}>Display this at the venue for volunteers to scan.</Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+                </Pressable>
+              ) : null}
+
+              {/*
+                Only once the event has actually started. Before that there is
+                nothing to mark, and offering it early invites an organiser to
+                "confirm" a roster for an event nobody has attended yet.
+              */}
+              {selectedOutreach &&
+              selectedOutreach.status !== 'draft' &&
+              !isUpcomingEvent(selectedOutreach.date, selectedOutreach.start_time) ? (
+                <Pressable
+                  onPress={() => router.push(`/(organisation)/attendance/${selectedOutreach.id}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Mark attendance for ${selectedOutreach.title}`}
+                  style={({ pressed }) => [styles.checkinRow, pressed && styles.checkinRowPressed]}
+                >
+                  <MaterialCommunityIcons name="clipboard-check-outline" size={20} color={colors.primary} />
+                  <View style={styles.checkinText}>
+                    <Text style={styles.checkinTitle}>Mark attendance</Text>
+                    <Text style={styles.checkinMeta}>Everyone counts as present — flag only the no-shows.</Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+                </Pressable>
+              ) : null}
+
+              {/* No wrapper: the listHeader gap owns the space on both sides. */}
+              <FilterChips options={FILTERS} value={statusFilter} onChange={setStatusFilter} />
+            </View>
           }
           renderItem={({ item }) => (
             <ApplicantCard
@@ -416,18 +433,25 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.base,
+    paddingBottom: spacing.md,
   },
-  pickerWrap: {
-    paddingHorizontal: spacing.xl,
-    marginTop: spacing.base,
+  /*
+    One rule owns the gap between every section in the scrolling header, so the
+    spacing cannot drift as sections are added or removed. `gap` rather than
+    per-child margins: a section that is conditionally hidden then leaves no
+    orphaned space behind it.
+  */
+  listHeader: {
+    gap: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
   },
   checkinRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    minHeight: 56,
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.md,
+    minHeight: 64,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.base,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -455,20 +479,11 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.medium,
     fontSize: 12,
     color: colors.textSecondary,
-    paddingHorizontal: spacing.xl,
-    marginTop: spacing.sm,
   },
   batchError: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
     color: colors.danger,
-    paddingHorizontal: spacing.xl,
-    marginTop: spacing.sm,
-  },
-  filtersWrap: {
-    paddingHorizontal: spacing.xl,
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
   },
   centerFill: {
     flex: 1,
