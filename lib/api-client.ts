@@ -41,6 +41,7 @@ export const API_ROUTES = {
   uploadSignature: '/api/upload-signature',
   verificationDocument: '/api/verification-document',
   cancelEmailChange: '/api/cancel-email-change',
+  waitlistPosition: '/api/waitlist-position',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -443,6 +444,68 @@ export function setApplicationStatus(
     { applicationId, status },
     options
   );
+}
+
+/** One applicant's decision inside a batch. */
+export interface BatchApplicationDecision {
+  applicationId: string;
+  status: Extract<ApplicationStatus, 'accepted' | 'rejected' | 'waitlisted'>;
+}
+
+export interface BatchApplicationStatusResponse {
+  outreachId: string;
+  accepted: string[];
+  waitlisted: string[];
+  rejected: string[];
+  /** Applicants the server could not move, each with a readable reason. */
+  failed: { applicationId: string; reason: string }[];
+}
+
+/**
+ * Decides many applicants at once — the organisation's "Accept top N" action.
+ *
+ * `decisions` is ORDER-SENSITIVE for accepts: the server fills the remaining
+ * slots in the order given and reports anyone past the roster's capacity in
+ * `failed`, so callers must send their best-ranked applicant first. Use
+ * `planBatchAccept` from lib/roster.ts to build the list — it produces exactly
+ * this order, and it is the same order the organisation sees on screen.
+ */
+export function setApplicationStatusBatch(
+  outreachId: string,
+  decisions: readonly BatchApplicationDecision[],
+  options?: RequestOptions
+): Promise<BatchApplicationStatusResponse> {
+  return apiPost<BatchApplicationStatusResponse>(
+    API_ROUTES.applicationStatus,
+    { outreachId, decisions },
+    options
+  );
+}
+
+// ---------------------------------------------------------------------------
+// /api/waitlist-position
+// ---------------------------------------------------------------------------
+
+export interface WaitlistPosition {
+  applicationId: string;
+  outreachId: string;
+  /** 1-based place in the queue. */
+  position: number;
+  /** How many volunteers are waiting for this outreach in total. */
+  waitlistSize: number;
+}
+
+/**
+ * Where the signed-in volunteer stands in the queue for every outreach they
+ * are waitlisted on.
+ *
+ * Server-side because position depends on the other applicants' rankings, and
+ * RLS correctly stops a volunteer from reading anyone else's application.
+ */
+export function fetchWaitlistPositions(
+  options?: RequestOptions
+): Promise<{ positions: WaitlistPosition[] }> {
+  return apiPost<{ positions: WaitlistPosition[] }>(API_ROUTES.waitlistPosition, {}, options);
 }
 
 // ---------------------------------------------------------------------------

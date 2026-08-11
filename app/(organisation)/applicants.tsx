@@ -3,16 +3,25 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { EmptyState, ErrorState, FilterChips, ListSkeleton, isUpcomingEvent } from '@/components/ui';
+import {
+  ConfirmDialog,
+  EmptyState,
+  ErrorState,
+  FilterChips,
+  ListSkeleton,
+  isUpcomingEvent,
+} from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
-import { ApplicantCard, OutreachPicker } from '@/components/organisation';
+import { ApplicantCard, OutreachPicker, RosterSummaryCard } from '@/components/organisation';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
+  useBatchDecideApplications,
   useOrganisationOutreaches,
   useOutreachApplications,
   useUpdateApplicationStatus,
 } from '@/hooks';
 import type { ApplicationWithVolunteer, OrganisationApplicationDecision } from '@/hooks';
+import { planBatchAccept, rankApplicants, skillCoverage, waitlistPositions } from '@/lib/roster';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
 
@@ -66,11 +75,99 @@ export default function Applicants() {
   const updateStatus = useUpdateApplicationStatus();
   const activeApplicationId = updateStatus.variables?.applicationId;
 
+  const batchDecide = useBatchDecideApplications();
+  const [confirmingBatch, setConfirmingBatch] = useState(false);
+  const [batchOutcome, setBatchOutcome] = useState<string | null>(null);
+
+  /*
+    One projection of the applicant list into the shape lib/roster.ts ranks, so
+    the ordering shown on screen, the waitlist positions, and the plan the
+    batch button executes are all computed from the SAME derivation. If the
+    button could accept people in an order the organisation never saw, the
+    action would not be one they could meaningfully consent to.
+  */
+  const rankable = useMemo(
+    () =>
+      applications.map((application) => ({
+        id: application.id,
+        status: application.status,
+        matchScore: application.match_score,
+        vScore: application.volunteer?.v_score ?? null,
+        createdAt: application.created_at,
+        application,
+      })),
+    [applications]
+  );
+
+  // Re-sorted here rather than in the query: the query orders by raw
+  // match_score, but ranking applies the reliability multiplier on top of it,
+  // and that needs the volunteer's V-Score from the embed.
+  const rankedApplications = useMemo(
+    () => rankApplicants(rankable).map((entry) => entry.application),
+    [rankable]
+  );
+
+  const positions = useMemo(() => waitlistPositions(rankable), [rankable]);
+
+  const coverage = useMemo(
+    () =>
+      skillCoverage(
+        selectedOutreach?.required_skills,
+        applications.filter((a) => a.status === 'accepted').map((a) => a.volunteer?.skill_tags)
+      ),
+    [selectedOutreach?.required_skills, applications]
+  );
+
+  const plan = useMemo(
+    () =>
+      selectedOutreach
+        ? planBatchAccept({
+            applicants: rankable,
+            slotsTotal: selectedOutreach.slots_total,
+            slotsFilled: selectedOutreach.slots_filled,
+          })
+        : null,
+    [rankable, selectedOutreach]
+  );
+
+  const pendingCount = applications.filter((a) => a.status === 'pending').length;
+  const waitlistedCount = applications.filter((a) => a.status === 'waitlisted').length;
+
   const filteredApplications = useMemo(
     () =>
-      statusFilter === 'all' ? applications : applications.filter((a) => a.status === statusFilter),
-    [applications, statusFilter]
+      statusFilter === 'all'
+        ? rankedApplications
+        : rankedApplications.filter((a) => a.status === statusFilter),
+    [rankedApplications, statusFilter]
   );
+
+  function runBatch() {
+    if (!plan || !selectedOutreachId) return;
+    const decisions = [
+      ...plan.accept.map((applicationId) => ({ applicationId, status: 'accepted' as const })),
+      ...plan.waitlist.map((applicationId) => ({ applicationId, status: 'waitlisted' as const })),
+    ];
+    if (decisions.length === 0) return;
+
+    batchDecide.mutate(
+      { outreachId: selectedOutreachId, decisions },
+      {
+        onSuccess: (result) => {
+          setConfirmingBatch(false);
+          // A partial success is reported as what it is. The alternative —
+          // showing "done" when four of ten accepts hit a full roster — would
+          // leave the organiser believing people are confirmed who are not.
+          const parts = [
+            result.accepted.length > 0 ? `${result.accepted.length} accepted` : null,
+            result.waitlisted.length > 0 ? `${result.waitlisted.length} waitlisted` : null,
+            result.failed.length > 0 ? `${result.failed.length} could not be moved` : null,
+          ].filter(Boolean);
+          setBatchOutcome(parts.length > 0 ? `${parts.join(', ')}.` : 'Nothing changed.');
+        },
+        onError: () => setConfirmingBatch(false),
+      }
+    );
+  }
 
   function handleDecide(application: ApplicationWithVolunteer, status: OrganisationApplicationDecision) {
     if (!selectedOutreachId) return;
@@ -125,6 +222,62 @@ export default function Applicants() {
           onSelect={(id) => setSelectedOutreachId(id)}
         />
       </View>
+
+      {/*
+        Draft outreaches are excluded: an unpublished event has no applicants,
+        so a roster bar would only ever read "0 of N".
+      */}
+      {selectedOutreach && selectedOutreach.status !== 'draft' && plan ? (
+        <RosterSummaryCard
+          slotsFilled={selectedOutreach.slots_filled}
+          slotsTotal={selectedOutreach.slots_total}
+          pendingCount={pendingCount}
+          waitlistedCount={waitlistedCount}
+          coverage={coverage}
+          acceptCount={plan.accept.length}
+          waitlistCount={plan.waitlist.length}
+          leftPendingCount={plan.leftPending.length}
+          onAcceptTop={() => setConfirmingBatch(true)}
+          isPending={batchDecide.isPending}
+        />
+      ) : null}
+
+      {batchOutcome ? <Text style={styles.batchOutcome}>{batchOutcome}</Text> : null}
+      {batchDecide.isError ? (
+        <Text style={styles.batchError}>
+          {batchDecide.error instanceof Error
+            ? batchDecide.error.message
+            : 'Could not process these applicants. Please try again.'}
+        </Text>
+      ) : null}
+
+      <ConfirmDialog
+        visible={confirmingBatch}
+        icon="account-check-outline"
+        title={plan && plan.accept.length > 0 ? `Accept top ${plan.accept.length}?` : 'Update the waitlist?'}
+        message={
+          plan
+            ? [
+                plan.accept.length > 0
+                  ? `The ${plan.accept.length} best-ranked ${plan.accept.length === 1 ? 'applicant' : 'applicants'} will be accepted and emailed.`
+                  : null,
+                plan.waitlist.length > 0
+                  ? `The next ${plan.waitlist.length} will be waitlisted and told their place in the queue.`
+                  : null,
+                plan.leftPending.length > 0
+                  ? `${plan.leftPending.length} will stay pending — the waitlist is full.`
+                  : null,
+                'Nobody is rejected. You can still decide each applicant individually.',
+              ]
+                .filter(Boolean)
+                .join('\n\n')
+            : undefined
+        }
+        confirmLabel="Confirm"
+        busy={batchDecide.isPending}
+        onConfirm={runBatch}
+        onCancel={() => setConfirmingBatch(false)}
+      />
 
       {/*
         The way in to the check-in QR. It lives here rather than on the
@@ -205,6 +358,7 @@ export default function Applicants() {
             <ApplicantCard
               application={item}
               requiredSkills={selectedOutreach?.required_skills ?? []}
+              waitlistPosition={positions.get(item.id)}
               onDecide={(status) => handleDecide(item, status)}
               onViewProfile={
                 item.volunteer && selectedOutreachId
@@ -296,6 +450,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  batchOutcome: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+  },
+  batchError: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.danger,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.sm,
   },
   filtersWrap: {
     paddingHorizontal: spacing.xl,

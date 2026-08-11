@@ -26,6 +26,8 @@ export interface VolunteerApplicationCardProps {
   application: VolunteerApplication;
   onPress: () => void;
   onWithdraw: () => void;
+  /** Live queue place, for waitlisted applications only. Absent while it loads. */
+  waitlistPosition?: { position: number; waitlistSize: number };
 }
 
 /**
@@ -38,6 +40,7 @@ export function VolunteerApplicationCard({
   application,
   onPress,
   onWithdraw,
+  waitlistPosition,
 }: VolunteerApplicationCardProps) {
   const outreach = application.outreach;
   const timeRange = outreach ? formatEventTimeRange(outreach.start_time, outreach.end_time) : null;
@@ -82,6 +85,23 @@ export function VolunteerApplicationCard({
         </View>
       ) : null}
 
+      {/*
+        A waitlist place, said plainly and with what happens next. "Waitlisted"
+        on its own reads as a soft rejection; "3rd of 8, and the top of the
+        queue takes any freed slot automatically" is a real prospect the
+        volunteer can act on — and it is exactly what the promotion rule does.
+      */}
+      {application.status === 'waitlisted' && waitlistPosition ? (
+        <View style={styles.waitlist}>
+          <MaterialCommunityIcons name="format-list-numbered" size={14} color={colors.textSecondary} />
+          <Text style={styles.waitlistText}>
+            You are <Text style={styles.waitlistStrong}>#{waitlistPosition.position}</Text> of{' '}
+            {waitlistPosition.waitlistSize} waiting. If a place frees up, the top of the queue is
+            confirmed automatically.
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.footerRow}>
         <Badge
           label={application.type === 'quick_join' ? 'Quick Join' : 'Full Application'}
@@ -117,6 +137,26 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.85,
+  },
+  waitlist: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  waitlistText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
+    lineHeight: 16,
+    color: colors.textSecondary,
+  },
+  waitlistStrong: {
+    fontFamily: fontFamily.semiBold,
+    color: colors.textPrimary,
   },
   topRow: {
     flexDirection: 'row',

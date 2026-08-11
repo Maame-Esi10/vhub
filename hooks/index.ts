@@ -56,8 +56,10 @@ export {
   applicationKeys,
   useOutreachApplications,
   useUpdateApplicationStatus,
+  useBatchDecideApplications,
   useVolunteerApplications,
   useMyApplicationForOutreach,
+  useMyWaitlistPositions,
   useCreateApplication,
   useCancelApplication,
 } from './useApplications';
@@ -67,6 +69,7 @@ export type {
   ApplicationWithVolunteer,
   OrganisationApplicationDecision,
   UpdateApplicationStatusParams,
+  BatchDecideParams,
   VolunteerApplication,
   CreateApplicationParams,
   CancelApplicationParams,

@@ -41,6 +41,13 @@ export interface ApplicantCardProps {
   onDecide: (status: OrganisationApplicationDecision) => void;
   /** Opens the applicant's public profile. Omitted when the volunteer row was RLS-filtered. */
   onViewProfile?: () => void;
+  /**
+   * 1-based place in the waitlist queue, for waitlisted applicants only.
+   * Derived from the live ranking (lib/roster.ts), never stored — the
+   * promotion rule picks the highest-ranked waitlisted applicant, so any
+   * position shown has to be computed the same way to stay true.
+   */
+  waitlistPosition?: number;
   isPending: boolean;
   errorMessage?: string;
 }
@@ -51,6 +58,7 @@ export function ApplicantCard({
   requiredSkills,
   onDecide,
   onViewProfile,
+  waitlistPosition,
   isPending,
   errorMessage,
 }: ApplicantCardProps) {
@@ -101,6 +109,9 @@ export function ApplicantCard({
           icon={application.match_score != null ? 'star' : undefined}
         />
         <Badge label={APPLICATION_STATUS_LABEL[application.status]} tone={APPLICATION_STATUS_TONE[application.status]} />
+        {application.status === 'waitlisted' && waitlistPosition != null ? (
+          <Badge label={`#${waitlistPosition} in queue`} tone="neutral" />
+        ) : null}
       </View>
 
       {shownSkills.length > 0 ? (

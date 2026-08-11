@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PostgrestError } from '@supabase/supabase-js';
-import { scoreMyApplication, setApplicationStatus } from '@/lib/api-client';
+import {
+  fetchWaitlistPositions,
+  scoreMyApplication,
+  setApplicationStatus,
+  setApplicationStatusBatch,
+  type BatchApplicationDecision,
+  type BatchApplicationStatusResponse,
+  type WaitlistPosition,
+} from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 import { outreachKeys } from '@/hooks/useOutreaches';
 import type { OutreachOrganisation } from '@/hooks/useOutreaches';
@@ -185,6 +193,37 @@ export function useUpdateApplicationStatus() {
   });
 }
 
+export interface BatchDecideParams {
+  outreachId: string;
+  decisions: BatchApplicationDecision[];
+}
+
+/**
+ * Accepts / waitlists / rejects many applicants in one request — the
+ * organisation's one-tap response to an oversubscribed outreach.
+ *
+ * The decision list is built client-side by `planBatchAccept` (lib/roster.ts)
+ * so the organisation acts on exactly the ranking it can see, and the order is
+ * preserved all the way to the server, which fills the free slots in that order.
+ *
+ * A partial success is a SUCCESS, not an error: if the roster filled up while
+ * the request was in flight, the volunteers who did get a place keep it and the
+ * response's `failed` list names the ones who did not. Throwing here would
+ * misreport a batch that mostly worked as a batch that did nothing.
+ */
+export function useBatchDecideApplications() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: BatchDecideParams): Promise<BatchApplicationStatusResponse> =>
+      setApplicationStatusBatch(params.outreachId, params.decisions),
+    onSuccess: (_response, params) => {
+      queryClient.invalidateQueries({ queryKey: applicationKeys.byOutreach(params.outreachId) });
+      queryClient.invalidateQueries({ queryKey: outreachKeys.all });
+    },
+  });
+}
+
 /** Postgres check-constraint violation (`slots_filled <= slots_total`). */
 const CHECK_VIOLATION = '23514';
 /** Postgres unique violation — here, `unique (outreach_id, volunteer_id)`. */
@@ -276,6 +315,39 @@ export function useMyApplicationForOutreach(
       }
 
       return (data as Application | null) ?? null;
+    },
+  });
+}
+
+/**
+ * The signed-in volunteer's place in the queue for each outreach they are
+ * waitlisted on, keyed by application id.
+ *
+ * Best-effort by design: it returns an empty map on failure rather than
+ * throwing, because the applications screen must still render every
+ * application if the position service is unreachable. A missing position shows
+ * as no position — never as an error over the whole list.
+ *
+ * Refetched on mount rather than cached for long: the queue moves whenever
+ * another applicant withdraws or is accepted, and a stale position is worse
+ * than none.
+ */
+export function useMyWaitlistPositions(volunteerId: string | undefined) {
+  return useQuery({
+    queryKey: [...applicationKeys.all, 'waitlist-positions', volunteerId ?? 'unknown'] as const,
+    enabled: !!volunteerId,
+    staleTime: 30_000,
+    queryFn: async (): Promise<Map<string, WaitlistPosition>> => {
+      try {
+        const { positions } = await fetchWaitlistPositions();
+        return new Map(positions.map((p) => [p.applicationId, p]));
+      } catch (error) {
+        console.warn(
+          '[applications] could not load waitlist positions:',
+          error instanceof Error ? error.message : error
+        );
+        return new Map();
+      }
     },
   });
 }

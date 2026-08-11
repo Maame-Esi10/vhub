@@ -6,7 +6,7 @@ import { EmptyState, ErrorState, FilterChips, ListSkeleton } from '@/components/
 import type { FilterChipOption } from '@/components/ui';
 import { VolunteerApplicationCard, WithdrawSheet } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
-import { useCancelApplication, useVolunteerApplications } from '@/hooks';
+import { useCancelApplication, useMyWaitlistPositions, useVolunteerApplications } from '@/hooks';
 import type { VolunteerApplication } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
@@ -44,6 +44,10 @@ export default function Applications() {
 
   const applicationsQuery = useVolunteerApplications(volunteerId);
   const cancelApplication = useCancelApplication();
+  // Independent of the list query on purpose: position comes from the server
+  // (RLS hides the other applicants) and its failure must never stop an
+  // application from rendering.
+  const waitlistPositions = useMyWaitlistPositions(volunteerId);
   const applications = useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
 
   const [statusFilter, setStatusFilter] = useState<StatusGroup>('all');
@@ -156,6 +160,7 @@ export default function Applications() {
               application={item.application}
               onPress={() => router.push(`/(volunteer)/outreach/${item.application.outreach_id}?from=/(volunteer)/applications`)}
               onWithdraw={() => setWithdrawing(item.application)}
+              waitlistPosition={waitlistPositions.data?.get(item.application.id)}
             />
           )
         }

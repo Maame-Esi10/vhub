@@ -85,3 +85,45 @@ export async function sendApplicationStatusEmail(params: ApplicationStatusEmailP
     console.error("[resend] failed to send application-status email:", err instanceof Error ? err.message : err);
   }
 }
+
+/** Resend's batch endpoint accepts at most 100 messages per request. */
+const RESEND_BATCH_LIMIT = 100;
+
+/**
+ * Sends many application-status emails in one call.
+ *
+ * Needed by the batch accept/waitlist path: Resend's free tier rate-limits to
+ * roughly 2 requests per second, so looping `sendApplicationStatusEmail` over
+ * an oversubscribed event's 40 applicants would start dropping messages a
+ * second in. `batch.send` posts up to 100 messages as a single request, which
+ * sidesteps the limit entirely.
+ *
+ * Best-effort in exactly the same way as the single-message version: the
+ * database write is the source of truth and a mail failure must never fail the
+ * decision that was already recorded.
+ */
+export async function sendApplicationStatusEmails(
+  messages: readonly ApplicationStatusEmailParams[]
+): Promise<void> {
+  if (messages.length === 0) return;
+
+  try {
+    const client = getResendClient();
+    for (let i = 0; i < messages.length; i += RESEND_BATCH_LIMIT) {
+      const chunk = messages.slice(i, i + RESEND_BATCH_LIMIT);
+      await client.batch.send(
+        chunk.map((params) => ({
+          from: env.resendFrom,
+          to: params.to,
+          subject: subjectFor(params.kind, params.outreachTitle),
+          text: bodyFor(params),
+        }))
+      );
+    }
+  } catch (err) {
+    console.error(
+      "[resend] failed to send batched application-status emails:",
+      err instanceof Error ? err.message : err
+    );
+  }
+}
