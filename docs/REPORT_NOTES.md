@@ -687,6 +687,47 @@ and OpenStreetMap location work described above.
 
 ---
 
+## The Firebase rule, corrected — FCM is a transport, not a backend (2026-08-11)
+
+**The rule as written was wrong**, and wrong in a way that would have cost time
+repeatedly. It said: *"Never add Firebase in any form — no packages, no config,
+no suggestions. If you see Firebase mentioned anywhere, flag it as an error."*
+
+Firebase **is** in the app, deliberately and with owner approval: **Firebase
+Cloud Messaging as the Android push-notification transport**. The footprint is
+`google-services.json` in the repo plus the FCM service-account credential
+uploaded to Expo. There is no Firebase SDK, no Firebase data, no Firebase auth,
+no Firebase backend of any kind.
+
+**Why it is not a contradiction.** Google permits no other push transport on
+Android. Expo's own push service does not bypass FCM — it relays through it. So
+FCM is not a competing backend that was chosen over Supabase; it is the pipe
+that carries a notification the last hop to an Android handset, in the same
+category as APNs on iOS. **The ban was always about Firebase-as-backend.**
+Rewriting the rule to say so does not weaken it — it makes it enforceable,
+because a rule that forbids something the project provably does is a rule that
+gets ignored wholesale rather than obeyed precisely.
+
+**Why it had to be corrected rather than deleted or quietly softened.** Left as
+written, every `qa-reviewer` pass would flag `google-services.json` as a
+violation, and the same argument would be relitigated each time — with a real
+risk that some pass eventually "fixes" it by deleting the file, silently
+breaking Android push. Left vague ("avoid Firebase where possible"), the
+opposite failure becomes available: someone reaches for Firestore for a feature
+Supabase already covers.
+
+**The corrected rule therefore states both halves explicitly**: the permanent
+ban on Firebase for data, auth, storage, hosting, functions and analytics; and
+the single named exception of FCM as a push transport, with its exact
+footprint, marked as correct and not to be removed.
+
+**Defence.** "The architecture is single-backend by design: Supabase provides
+the database, authentication, row-level security and storage. The only Firebase
+component in the system is Cloud Messaging, used solely as the Android push
+transport, because Google provides no alternative — Expo's push service itself
+relays through FCM. No application data, credentials or business logic passes
+through Firebase."
+
 ## Ghana district list — audit, 2026-08-11
 
 `constants/ghana-locations.ts` was audited against the official 261-MMDA
