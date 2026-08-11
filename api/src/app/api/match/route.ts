@@ -11,6 +11,7 @@ import { getReachableRegions } from "@/constants/ghana-locations";
 import { authenticate, assertOwnsOutreach, type AuthedCaller } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
+import { toOutreachInput } from "../../../server/outreachInput";
 import { checkSkillEquivalences, type SkillPair } from "../../../server/gemini";
 import {
   dedupePairs,
@@ -123,22 +124,10 @@ function toVolunteerInput(volunteer: ApplicantRow["volunteer"]): Layer1Volunteer
   };
 }
 
-function toOutreachInput(outreach: Record<string, unknown>): Layer1OutreachInput {
-  return {
-    required_skills: (outreach.required_skills as string[] | null) ?? null,
-    required_category: (outreach.required_category as string | null) ?? null,
-    // role_type drives computeLayer1MatchScore's support-role category
-    // override (a `support` outreach needs no specific profession, so its
-    // category component is forced to 1.0). Omitting it silently disabled
-    // that owner-approved rule for every scored applicant.
-    role_type: (outreach.role_type as Layer1OutreachInput["role_type"]) ?? null,
-    region: (outreach.region as string | null) ?? null,
-    district: (outreach.district as string | null) ?? null,
-    date: (outreach.date as string | null) ?? null,
-    start_time: (outreach.start_time as string | null) ?? null,
-    end_time: (outreach.end_time as string | null) ?? null,
-  };
-}
+// toOutreachInput moved to ../../../server/outreachInput so the
+// under-subscription pass scores candidates through the same mapper. It had
+// already silently lost `role_type` once; one definition means that class of
+// bug cannot recur in only one of the two callers.
 
 export async function POST(req: Request): Promise<Response> {
   try {

@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Badge, formatEventDate, formatEventTimeRange } from '@/components/ui';
+import { Badge, daysUntilEvent, formatEventDate, formatEventTimeRange } from '@/components/ui';
+import { UNDER_SUBSCRIPTION_STAGES, isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { OutreachWithCounts } from '@/hooks';
@@ -34,6 +35,25 @@ export function OutreachCard({ outreach, onPress, quickAction, quickActionPendin
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
   const pending = outreach.applicantCounts.pending;
 
+  /*
+    Under-subscription, shown in the app rather than only in a push. The push
+    fires once per stage and is easy to miss; an organiser opening the
+    dashboard should be able to see which events are short without counting.
+
+    It STATES the position and stops — no suggestion to reduce slots or move
+    the date. See lib/underSubscription.ts for why that boundary matters.
+  */
+  const daysOut = daysUntilEvent(outreach.date);
+  const isShort =
+    daysOut !== null &&
+    daysOut >= 0 &&
+    daysOut <= UNDER_SUBSCRIPTION_STAGES[0]!.daysOut &&
+    isUnderSubscribed({
+      status: outreach.status,
+      slotsFilled: outreach.slots_filled,
+      slotsTotal: outreach.slots_total,
+    });
+
   return (
     <Pressable
       onPress={onPress}
@@ -61,6 +81,31 @@ export function OutreachCard({ outreach, onPress, quickAction, quickActionPendin
           <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textSecondary} />
           <Text style={styles.metaText} numberOfLines={1}>
             {location}
+          </Text>
+        </View>
+      ) : null}
+
+      {isShort ? (
+        <View style={styles.shortfall}>
+          <MaterialCommunityIcons name="account-alert-outline" size={14} color={colors.warning} />
+          <Text style={styles.shortfallText}>
+            {daysOut === 0
+              ? 'Today'
+              : daysOut === 1
+                ? 'Tomorrow'
+                : `${daysOut} days to go`}
+            {' · '}
+            {placesRemaining({
+              slotsFilled: outreach.slots_filled,
+              slotsTotal: outreach.slots_total,
+            })}{' '}
+            {placesRemaining({
+              slotsFilled: outreach.slots_filled,
+              slotsTotal: outreach.slots_total,
+            }) === 1
+              ? 'place'
+              : 'places'}{' '}
+            still open
           </Text>
         </View>
       ) : null}
@@ -117,6 +162,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  shortfall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  shortfallText: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 11,
+    color: colors.textSecondary,
   },
   title: {
     flex: 1,

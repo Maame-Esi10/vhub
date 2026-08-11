@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { notifyUsers } from "../../../server/notify";
 import { assertCronSecret, sendEventReminders } from "../../../server/eventReminders";
 import { sendCheckinReminders } from "../../../server/checkinReminders";
+import { escalateUnderSubscribedOutreaches } from "../../../server/underSubscription";
 
 export const runtime = "nodejs";
 
@@ -63,11 +64,25 @@ const SendCheckinRemindersAction = z.object({
   action: z.literal("send-checkin-reminders"),
 });
 
+/**
+ * Fires the under-subscription escalation (7 / 3 / 1 days out) on demand.
+ *
+ * Same rationale as the two above: it notifies other users, so it is
+ * cron-secret protected rather than session-authenticated. Useful for
+ * demonstrating the ladder without waiting for an outreach to be exactly seven
+ * days away — and it is idempotent, since each stage is deduped by the
+ * notification rows it wrote.
+ */
+const EscalateUnderSubscribedAction = z.object({
+  action: z.literal("escalate-under-subscribed"),
+});
+
 const NotificationsRequestBody = z.discriminatedUnion("action", [
   RegisterAction,
   TestDispatchAction,
   SendEventRemindersAction,
   SendCheckinRemindersAction,
+  EscalateUnderSubscribedAction,
 ]);
 
 export async function POST(req: Request): Promise<Response> {
@@ -85,6 +100,11 @@ export async function POST(req: Request): Promise<Response> {
     if (body.action === "send-checkin-reminders") {
       assertCronSecret(req);
       return Response.json(await sendCheckinReminders());
+    }
+
+    if (body.action === "escalate-under-subscribed") {
+      assertCronSecret(req);
+      return Response.json(await escalateUnderSubscribedOutreaches());
     }
 
     // "register" and "test-dispatch" are ordinary user actions.

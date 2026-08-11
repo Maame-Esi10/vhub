@@ -76,4 +76,5 @@ export {
   isUpcomingEvent,
   isEventToday,
   hasEventEnded,
+  daysUntilEvent,
 } from './dateUtils';

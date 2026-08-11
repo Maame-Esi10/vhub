@@ -1,6 +1,7 @@
 import { errorResponse } from "../../../../server/httpErrors";
 import { assertCronSecret, sendEventReminders } from "../../../../server/eventReminders";
 import { sendCheckinReminders } from "../../../../server/checkinReminders";
+import { escalateUnderSubscribedOutreaches } from "../../../../server/underSubscription";
 
 export const runtime = "nodejs";
 
@@ -17,20 +18,21 @@ export async function GET(req: Request): Promise<Response> {
   try {
     assertCronSecret(req);
 
-    // TWO passes, one schedule, because Vercel's Hobby plan allows exactly one
-    // cron per day: the 24-hour "your event is tomorrow" reminder, and the
-    // morning-of "remember to scan the check-in code" reminder. They target
-    // different days' outreaches and dedupe independently, so neither can
-    // suppress the other.
+    // THREE passes, one schedule, because Vercel's Hobby plan allows exactly
+    // one cron per day: the 24-hour "your event is tomorrow" reminder, the
+    // morning-of "remember to scan the check-in code" reminder, and the
+    // under-subscription escalation at 7/3/1 days out. They target different
+    // days' outreaches and dedupe independently, so none can suppress another.
     //
-    // Sequential rather than concurrent: both write notifications through the
-    // same service-role client and the whole job has all day to finish, so
+    // Sequential rather than concurrent: they all write notifications through
+    // the same service-role client and the whole job has all day to finish, so
     // there is nothing to gain from overlapping them and a clearer failure
     // story from not.
     const upcoming = await sendEventReminders();
     const checkin = await sendCheckinReminders();
+    const underSubscribed = await escalateUnderSubscribedOutreaches();
 
-    return Response.json({ ...upcoming, checkin });
+    return Response.json({ ...upcoming, checkin, underSubscribed });
   } catch (err) {
     return errorResponse(err);
   }

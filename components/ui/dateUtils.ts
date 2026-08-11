@@ -159,6 +159,23 @@ export function isEventToday(date: string): boolean {
 }
 
 /**
+ * Whole calendar days from today until `date` (YYYY-MM-DD). Negative once the
+ * date has passed, null if the date cannot be parsed.
+ *
+ * Compares dates at midnight local time rather than subtracting timestamps, so
+ * "tomorrow" means the next calendar day regardless of the hour — an event
+ * tomorrow morning is 1 day out whether it is now dawn or nearly midnight.
+ */
+export function daysUntilEvent(date: string): number | null {
+  const parsed = parseCalendarDate(date);
+  if (!parsed) return null;
+  const event = new Date(parsed.year, parsed.month - 1, parsed.day);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((event.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+/**
  * True once the event is genuinely over.
  *
  * Distinct from `!isUpcomingEvent`, which flips the moment the START time
