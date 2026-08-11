@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Badge, formatEventDate, formatEventTimeRange } from '@/components/ui';
+import { Badge, FlyerBackground, formatEventDate, formatEventTimeRange } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { ROLE_TYPES, VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import type { OutreachWizardState } from '@/components/organisation/outreachWizard';
@@ -18,10 +18,20 @@ export function OutreachPreviewCard({ state }: OutreachPreviewCardProps) {
 
   return (
     <View style={styles.card}>
-      <View style={styles.hero}>
-        <MaterialCommunityIcons name="hand-heart-outline" size={40} color={colors.white} />
+      {/*
+        The uploaded flyer, so the preview shows what the volunteer will
+        actually see. Without a flyer this falls back to the navy band and the
+        heart glyph — which is what the preview showed unconditionally before,
+        flyer or not, and is why an uploaded flyer appeared to vanish.
+      */}
+      <FlyerBackground uri={state.flyerUrl} style={styles.hero}>
+        <View style={styles.heroContent}>
+          {state.flyerUrl ? null : (
+            <MaterialCommunityIcons name="hand-heart-outline" size={40} color={colors.white} />
+          )}
+        </View>
         <Badge label="Live Preview" tone="primary" style={styles.previewBadge} textStyle={styles.previewBadgeText} />
-      </View>
+      </FlyerBackground>
 
       <View style={styles.body}>
         <Text style={styles.title}>{state.title || 'Untitled outreach'}</Text>
@@ -75,7 +85,9 @@ const styles = StyleSheet.create({
   },
   hero: {
     height: 120,
-    backgroundColor: colors.navy,
+    justifyContent: 'center',
+  },
+  heroContent: {
     alignItems: 'center',
     justifyContent: 'center',
   },

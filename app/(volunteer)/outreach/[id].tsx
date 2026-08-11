@@ -8,6 +8,7 @@ import {
   Button,
   ConfirmDialog,
   ErrorState,
+  FlyerBackground,
   ListSkeleton,
   formatEventDate,
   formatEventTimeRange,
@@ -146,13 +147,15 @@ export default function OutreachDetail() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <MatchScoreBadge onDark />
-          <Text style={styles.heroOrg} numberOfLines={1}>
-            {organisation?.org_name?.toUpperCase() ?? 'ORGANISATION'}
-          </Text>
-          <Text style={styles.heroTitle}>{outreach.title}</Text>
-        </View>
+        <FlyerBackground uri={outreach.flyer_url} style={styles.hero}>
+          <View style={styles.heroContent}>
+            <MatchScoreBadge onDark />
+            <Text style={styles.heroOrg} numberOfLines={1}>
+              {organisation?.org_name?.toUpperCase() ?? 'ORGANISATION'}
+            </Text>
+            <Text style={styles.heroTitle}>{outreach.title}</Text>
+          </View>
+        </FlyerBackground>
 
         {/*
           Built from a list rather than four hand-placed rows so the spacing
@@ -456,9 +459,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
   },
+  // Minimum height so the hero is the same size with or without a flyer, and
+  // content bottom-aligned so the title sits over the darkest part of a
+  // typical poster rather than floating in the middle of it.
   hero: {
-    backgroundColor: colors.navy,
     borderRadius: radius.lg,
+    minHeight: 180,
+    justifyContent: 'flex-end',
+  },
+  heroContent: {
     padding: spacing.lg,
     gap: spacing.sm,
   },

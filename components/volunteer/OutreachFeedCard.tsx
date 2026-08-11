@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Badge, formatEventDate, formatEventTimeRange } from '@/components/ui';
+import { Badge, FlyerBackground, formatEventDate, formatEventTimeRange } from '@/components/ui';
 import { MatchScoreBadge } from '@/components/volunteer/MatchScoreBadge';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { OutreachWithOrganisation } from '@/hooks';
@@ -17,10 +17,11 @@ export interface OutreachFeedCardProps {
 /**
  * Feed card from design-refs/Volunteer Home Feed.png.
  *
- * The Figma card is topped with event photography. `outreaches` has no image
- * column and nothing in Phase 2 uploads one, so the header is a solid
- * coloured band carrying the same content (match pill, category eyebrow,
- * title) rather than a stock photo standing in for real data.
+ * The Figma card is topped with event photography. That is now the
+ * organisation's own uploaded flyer (`outreaches.flyer_url`), rendered by
+ * FlyerBackground, which falls back to the solid navy band when no flyer was
+ * uploaded — so both states carry the same content (match pill, organisation
+ * eyebrow, title) at the same size.
  */
 export function OutreachFeedCard({
   outreach,
@@ -41,15 +42,17 @@ export function OutreachFeedCard({
       accessibilityLabel={`${outreach.title}, ${formatEventDate(outreach.date)}`}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
-      <View style={styles.header}>
-        <MatchScoreBadge score={matchScore} onDark onPress={onPressScore} />
-        <Text style={styles.eyebrow} numberOfLines={1}>
-          {outreach.organisation?.org_name?.toUpperCase() ?? 'ORGANISATION'}
-        </Text>
-        <Text style={styles.title} numberOfLines={2}>
-          {outreach.title}
-        </Text>
-      </View>
+      <FlyerBackground uri={outreach.flyer_url} style={styles.header}>
+        <View style={styles.headerContent}>
+          <MatchScoreBadge score={matchScore} onDark onPress={onPressScore} />
+          <Text style={styles.eyebrow} numberOfLines={1}>
+            {outreach.organisation?.org_name?.toUpperCase() ?? 'ORGANISATION'}
+          </Text>
+          <Text style={styles.title} numberOfLines={2}>
+            {outreach.title}
+          </Text>
+        </View>
+      </FlyerBackground>
 
       <View style={styles.body}>
         <View style={styles.statsRow}>
@@ -112,8 +115,14 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.85,
   },
+  // A MINIMUM height, not a fixed one, so the band is the same size on every
+  // card whether or not a flyer was uploaded — a list of cards must not change
+  // its rhythm as images load — while still growing for a two-line title.
   header: {
-    backgroundColor: colors.navy,
+    minHeight: 132,
+    justifyContent: 'flex-end',
+  },
+  headerContent: {
     padding: spacing.base,
     gap: spacing.sm,
   },
