@@ -687,6 +687,56 @@ and OpenStreetMap location work described above.
 
 ---
 
+## Ghana district list — audit, 2026-08-11
+
+`constants/ghana-locations.ts` was audited against the official 261-MMDA
+breakdown (Wikipedia, *Districts of Ghana*, cross-checked against
+ghanadistricts.com's 2025–2029 assembly breakdown). The file held **260**
+entries across the correct 16 regions.
+
+**Two genuine absences, both added:**
+
+| Region | Added | Note |
+|---|---|---|
+| Greater Accra | Korle Klottey Municipal | Created 2018 out of Accra Metropolitan. Covers Osu, Adabraka, Ridge — central Accra was unselectable without it. |
+| Central | Komenda Edina Eguafo Abirem Municipal | Long-established (Elmina, Komenda). A plain omission, not a new assembly. |
+
+**One outdated entry, deliberately NOT removed:** `East Akim Municipal`
+(Eastern) was abolished in June 2018 and split into Abuakwa North Municipal and
+Abuakwa South Municipal — both of which the file already lists. Eastern
+therefore carries 34 entries where the official count is 33, and the file totals
+262 rather than 261.
+
+**Twelve further naming discrepancies, also deliberately NOT changed:**
+status-suffix differences (`Jasikan` / `Jasikan Municipal`, `Krachi West` /
+`Krachi West Municipal`, `Obuasi East` / `Obuasi East Municipal`,
+`Asante Akim North Municipal` / `Asante Akim North`, `Assin North Municipal` /
+`Assin North`), spellings (`Mfantseman` / `Mfantsiman`, `Bunkpurugu
+Nyakpanduri` / `Bunkpurugu Nyankpanduri`), a naming variant (`Wassa Amenfi
+Central` / `Amenfi Central`, `Wassa Amenfi West` / `Amenfi West Municipal`), and
+hyphenation (`Twifo Atti-Morkwa`, `Yunyoo-Nasuan`, `Sawla-Tuna-Kalba`,
+`Nadowli-Kaleo`, `Prestea Huni-Valley`, `Tarkwa-Nsuaem`).
+
+**Why the corrections were not simply applied.** These strings are **stored
+values**. `profiles.district` and `outreaches.district` hold them verbatim, and
+the matcher's location component compares them by **exact string equality** —
+same district scores 1.0, anything else 0.5 or 0. Renaming or deleting a name
+that a row already holds therefore does two invisible things at once: the
+district picker renders that profile's district as blank (the stored value is
+no longer in the list), and every affected volunteer silently loses the full 20
+location points against events in their own district.
+
+**Adding a name is safe; renaming one is a data migration.** Corrections need
+an accompanying `update profiles set district = ... where district = ...` per
+renamed value, run in the same transaction as the constant change. That is a
+deliberate, owner-approved operation, not a tidy-up.
+
+**Defence.** "The district vocabulary is a stored key, not display text. New
+assemblies can be added freely because no row can already reference them;
+renaming or removing one requires a data migration in the same transaction,
+because the matching engine compares district strings by equality and a silent
+rename would degrade location scores with no visible symptom."
+
 ## Design decisions — planning discussion, 2026-08-05
 
 The following were decided in a full design discussion with the project owner
@@ -841,3 +891,159 @@ reachable region before scoring, so ranking cost grows with the number of
 relevant outreaches rather than the total on the platform — with a fallback
 that widens the search in low-activity regions so no volunteer sees an empty
 feed."
+
+### 5. Oversubscription: deciding forty applicants for twelve places
+
+**Problem.** A popular outreach can attract far more applicants than it has
+room for. Deciding each one by hand is slow enough that organisations
+realistically stop reviewing and just accept whoever is at the top of the
+list; and the surplus — people who did nothing wrong except apply to a popular
+event — had nowhere to go but a rejection.
+
+**Decision, in four parts.**
+
+1. **One-tap "Accept top N"**, where N is the number of free slots. The
+   ordering is the ranking score already defined in 1b (match fit × bounded
+   reliability multiplier), computed by `planBatchAccept` in `lib/roster.ts`.
+2. **The surplus is waitlisted, never auto-rejected.** A rejection is a
+   judgement about a person and stays a deliberate act by the organisation.
+3. **The waitlist is capped at 2× slots, minimum 5.** Beyond the cap
+   applicants are **left pending** — again, not rejected.
+4. **A skill-coverage indicator** sits directly above the button.
+
+**Reasoning, which must be preserved.**
+
+- **The button acts on exactly what the organiser can see.** The applicant
+  list, the waitlist positions, and the batch plan are all derived from one
+  projection in the screen, so "Accept top 4" can never quietly pick a
+  different four from the four displayed at the top. A batch action whose
+  ordering is invisible is not one anybody can meaningfully consent to — and
+  the confirmation dialog states the full scope before it runs, including the
+  people it will NOT touch.
+- **The cap exists to keep a waitlist position honest.** An unbounded waitlist
+  on a popular event hands out positions like "number 187", which is not a
+  queue, it is a rejection wearing a friendlier word. Twice the slots is the
+  point beyond which a position stops being a realistic prospect: an event
+  would have to lose two-thirds of its confirmed roster before number 21 of 20
+  came up. The floor of 5 covers small outreaches, where 2× is too thin to
+  absorb even one dropout.
+- **Beyond the cap, applications stay pending rather than being rejected.**
+  Being past a capacity line is a fact about the event, not a verdict on the
+  volunteer. The organisation can still decide each one individually.
+- **Skill coverage answers what the match score structurally cannot.** A match
+  score rates ONE volunteer against the event. It says nothing about whether
+  ten individually excellent volunteers have collectively left the one skill
+  the event actually needs uncovered — which is exactly what accepting the top
+  ten by score can produce. Coverage is a property of the team (one holder
+  covers a skill; it is deliberately not weighted by how many hold it), and it
+  is placed next to the batch button because that is the moment it matters.
+- **Waitlist position is computed, never stored.** The promotion rule in
+  `/api/application-status` promotes the highest-ranked waitlisted applicant
+  when a slot frees; a stored position would disagree with it the moment
+  another applicant withdrew or a V-Score moved. The volunteer is told both
+  the number and what happens next ("if a place frees up, the top of the queue
+  is confirmed automatically"), because "waitlisted" alone reads as a soft
+  rejection.
+- **An already-waitlisted applicant is never re-shuffled by a later batch
+  run.** Being overtaken by a newcomer with a better score would be
+  indefensible to someone who has been waiting.
+
+**Implementation notes.** The decision goes through one batch call to
+`/api/application-status` (`{ outreachId, decisions: [...] }`) rather than N
+separate ones: thirty-one round trips would take most of a minute, could
+half-fail invisibly, and would exceed Resend's ~2-requests-per-second free
+tier — so the emails now go through Resend's batch endpoint in a single
+request. Accepts are applied one row at a time and in order, because
+`slots_filled <= slots_total` is a check constraint: a single bulk UPDATE that
+overshot would be rejected in its entirety and decide nobody, whereas row by
+row the event fills to exactly capacity and the applicant who would have
+overfilled it is reported back. A partial success is reported as a partial
+success — showing "done" when four of ten accepts hit a full roster would
+leave an organiser believing people are confirmed who are not.
+
+The volunteer's own queue position needs a server round trip
+(`/api/waitlist-position`) because RLS correctly forbids a volunteer from
+reading anyone else's application, so the client cannot compute a rank. A
+`SECURITY DEFINER` database function was the alternative; the endpoint was
+chosen because it needs no schema change and reuses the same unit-tested
+ranking function as the promotion rule, rather than a second copy in SQL free
+to drift.
+
+**Defence.** "Oversubscription is resolved by ranking, not by triage. The
+organisation accepts the best-ranked applicants in one action whose full scope
+is stated before it runs, the surplus is queued rather than refused, and the
+queue is capped at the point where a position stops being a real prospect —
+so nobody is given a number that is really a no. The skill-coverage indicator
+exists because a per-volunteer match score cannot tell an organiser whether
+the team it has assembled can actually do the job."
+
+### 6. Under-subscription: the app informs, it never advises
+
+**Problem.** The opposite failure. An outreach approaches its date still short
+of volunteers, and the organisation finds out too late to do anything.
+
+**Decision.** A staged escalation at **7, 3 and 1 days** before the event, for
+any `open` outreach with `slots_filled < slots_total`:
+
+| Stage | Who is told | Reach |
+|---|---|---|
+| 7 days | The organisation only | — |
+| 3 days | Organisation + matching volunteers who have not applied | The outreach's own region |
+| 1 day | Organisation + matching volunteers | That region **and every adjacent one** |
+
+**The governing rule: the app INFORMS, it never ADVISES.** It reports the
+shortfall, widens who hears about the event, and stops. It must never suggest
+that an organisation reduce its slot count or move its date.
+
+**Reasoning, which must be preserved.**
+
+- **Why no advice.** How many hands a vaccination drive actually needs is an
+  operational and clinical judgement with consequences for the community being
+  served. Software with no knowledge of the medical plan has no business
+  nudging anyone toward a smaller team. A recommendation to "reduce to 6
+  slots" would also quietly corrupt the platform's own data: an organisation
+  that trims its target to whatever it happened to recruit makes every event
+  look fully staffed, and makes under-subscription statistically invisible —
+  destroying the very measure this feature exists to surface. The no-advice
+  rule is enforced by a unit test over the generated copy, not merely by
+  discipline.
+- **Escalation is about REACH, not about lowering the bar.** Each stage tells
+  more people; the requirement never moves.
+- **Why 7 / 3 / 1, unevenly spaced.** Seven days is the last point at which an
+  organisation can realistically act on the information itself (call a partner
+  clinic, post to its own channels), so it is told first and told alone. Three
+  days is where reach widens to volunteers in the region who never saw the
+  event. One day widens to neighbouring regions, because by then a volunteer
+  willing to travel is worth more than a tidy catchment area. There is no
+  stage on the morning itself: a notification that cannot change anyone's
+  plans is noise.
+- **Unverified volunteers are included for SUPPORT-role outreaches**, a
+  deliberate departure from the `notifyCandidates` fan-out, which is
+  verified-only. The verification gate restricts CLINICAL events only, so
+  support roles are exactly what an unverified volunteer may Quick Join;
+  excluding them would hide the shortfall from the very people eligible to fix
+  it. Clinical outreaches stay verified-only — notifying someone who cannot
+  apply is not outreach, it is spam.
+
+**Implementation notes.** The pass rides the existing daily 08:00 cron
+(Vercel Hobby permits exactly one cron per day — the same constraint that
+shapes the 24-hour reminder window and the check-in reminder). Because the job
+runs once daily, stages test for an EXACT day count and are hit exactly once
+per outreach; if a run is missed, that outreach skips that rung rather than
+firing late, since a "7 days to go" notice arriving 6 days out is worse than
+none. Deduping reuses the check-in reminder's technique — each notification is
+stamped `data->>'stage'` and the rows are read back — so no schema change was
+needed. Candidates are scored with Layer 1 only: this is a broad scan across
+several regions, and the Gemini free-tier quota is reserved for the
+higher-value per-applicant path.
+
+The shortfall is also shown in-app on the organisation's outreach card, not
+only in a push, because a push fires once per stage and is easy to miss.
+
+**Defence.** "Under-subscription escalates by widening reach — the
+organisation at seven days, matching volunteers in the region at three, and
+neighbouring regions at one. The app deliberately never recommends reducing
+slots or rescheduling: staffing levels are a clinical judgement it is not
+qualified to make, and an app that encouraged organisations to trim targets to
+match turnout would make the shortfall it is measuring disappear from its own
+data."
