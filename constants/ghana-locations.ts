@@ -3,6 +3,25 @@
 // renamed by legislative instrument — re-verify against the Ghana
 // Statistical Service / Local Government Ministry before relying on this
 // list for anything compliance-sensitive.
+//
+// AUDITED 2026-08-11 against the official 261-MMDA breakdown. Two genuinely
+// absent assemblies were added (Korle Klottey Municipal, Komenda Edina Eguafo
+// Abirem Municipal), taking the list to 262 entries.
+//
+// It is 262 rather than 261 because ONE OUTDATED ENTRY IS KNOWINGLY LEFT IN
+// PLACE: 'East Akim Municipal' (Eastern) was abolished in June 2018 and split
+// into Abuakwa North Municipal and Abuakwa South Municipal, both of which are
+// also listed here. It is retained pending an owner decision because these
+// strings are STORED VALUES — profiles.district and outreaches.district hold
+// them, and the matcher's location component compares them by exact string.
+// Deleting the name would orphan any row that already holds it: the district
+// picker would render blank and every such row would score 0 on location
+// instead of 1.0. Removal needs a data migration, not a constant edit.
+//
+// The same applies to the ~12 spelling and status-suffix differences the audit
+// found (e.g. 'Mfantseman' vs 'Mfantsiman', 'Jasikan' vs 'Jasikan Municipal').
+// They are documented in docs/REPORT_NOTES.md and deliberately NOT changed
+// here for the same reason. Adding a name is safe; renaming one is not.
 
 export interface GhanaRegion {
   name: string;
@@ -127,6 +146,9 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       'Gomoa Central',
       'Gomoa East',
       'Gomoa West',
+      // Added 2026-08-11: absent from the original compilation. KEEA covers
+      // Elmina and Komenda — a long-established assembly, not a new one.
+      'Komenda Edina Eguafo Abirem Municipal',
       'Mfantseman Municipal',
       'Twifo Atti-Morkwa',
       'Twifo Hemang Lower Denkyira',
@@ -195,6 +217,10 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       'Ga North Municipal',
       'Ga South Municipal',
       'Ga West Municipal',
+      // Added 2026-08-11: created 2018 (carved out of Accra Metropolitan) and
+      // absent from the original compilation. Osu, Adabraka and Ridge sit here,
+      // so its absence made central Accra unselectable.
+      'Korle Klottey Municipal',
       'Kpone Katamanso Municipal',
       'Krowor Municipal',
       'La Dade-Kotopon Municipal',
