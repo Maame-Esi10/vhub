@@ -203,37 +203,90 @@ export default function Schedule() {
           const outreach = item.application.outreach;
           if (!outreach) return null;
           const startLabel = formatEventTime(outreach.start_time) ?? 'All day';
+          const endLabel = formatEventTime(outreach.end_time);
+          const place = [outreach.location_name, outreach.district].filter(Boolean).join(', ');
 
           // A finished event is never "today" for the purpose of checking in —
           // the scan action must not reappear on it after the fact.
           const isToday = !item.isPast && isEventToday(outreach.date);
 
           return (
-            <View>
+            <View style={styles.eventBlock}>
+              {/*
+                Card, not a single-line row. The row packed time, a dot, title,
+                organisation, venue and district onto one 60pt line, so the
+                title and the venue both truncated to nothing readable
+                ("Check in Test Outrea...", "La D..."). The facts are the same
+                facts; they are simply given their own lines.
+
+                Structure and tokens are lifted from the Outreach Detail card:
+                surfaceSubtle tint, hairline border, radius.lg, and the fixed
+                20pt icon rail with a label/value hierarchy. Depth comes from
+                that internal structure, not from a shadow — nothing in this
+                codebase is raised.
+              */}
               <Pressable
                 onPress={() => router.push(`/(volunteer)/outreach/${outreach.id}?from=/(volunteer)/schedule`)}
                 accessibilityRole="button"
                 accessibilityLabel={`${outreach.title} at ${startLabel}`}
                 style={({ pressed }) => [
-                  styles.eventRow,
-                  isToday && styles.eventRowToday,
-                  item.isPast && styles.eventRowPast,
+                  styles.eventCard,
+                  isToday && styles.eventCardToday,
+                  item.isPast && styles.eventCardPast,
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.eventTime}>{startLabel}</Text>
-                <View style={styles.eventDot} />
-                <View style={styles.eventText}>
-                  <Text style={styles.eventTitle} numberOfLines={1}>
-                    {outreach.title}
+                <View style={styles.eventTopRow}>
+                  <View style={styles.eventDot} />
+                  <Text style={styles.eventTime}>
+                    {startLabel}
+                    {endLabel ? ` – ${endLabel}` : ''}
                   </Text>
-                  <Text style={styles.eventMeta} numberOfLines={1}>
-                    {[outreach.organisation?.org_name, outreach.location_name, outreach.district]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </Text>
+                  {isToday ? (
+                    <View style={styles.todayPill}>
+                      <Text style={styles.todayPillText}>TODAY</Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.eventTopSpacer} />
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+
+                {/* Two lines, not one: outreach titles are sentences, not labels. */}
+                <Text style={styles.eventTitle} numberOfLines={2}>
+                  {outreach.title}
+                </Text>
+
+                {outreach.organisation?.org_name ? (
+                  <View style={styles.detailRow}>
+                    <View style={styles.detailIconColumn}>
+                      <MaterialCommunityIcons
+                        name="office-building-outline"
+                        size={15}
+                        color={colors.textSecondary}
+                        style={styles.detailIcon}
+                      />
+                    </View>
+                    <Text style={styles.detailText} numberOfLines={2}>
+                      {outreach.organisation.org_name}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {place ? (
+                  <View style={styles.detailRow}>
+                    <View style={styles.detailIconColumn}>
+                      <MaterialCommunityIcons
+                        name="map-marker-outline"
+                        size={15}
+                        color={colors.textSecondary}
+                        style={styles.detailIcon}
+                      />
+                    </View>
+                    <Text style={styles.detailText} numberOfLines={2}>
+                      {place}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
 
               {/*
@@ -241,7 +294,13 @@ export default function Schedule() {
                 It used to be one standalone row at the top of the screen,
                 which left a volunteer with several confirmed events unable to
                 tell what they were checking in to — the button named no event,
-                because it belonged to none of them.
+                because it belonged to none of them. That association is kept.
+
+                What changed is the spacing. It was pulled UP into the card by a
+                negative margin and indented 70pt, so it collided with the card
+                above and read as a torn-off fragment of it rather than as an
+                action. It now sits below the card with real separation, at the
+                card's own width, and names the event it belongs to.
               */}
               {isToday ? (
                 <Pressable
@@ -299,12 +358,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    minHeight: 44,
-    // Pulled up under its event row and indented past the time column, so it
-    // reads as belonging to that event rather than as a separate item.
-    marginTop: -spacing.xs,
-    marginLeft: 70,
-    marginBottom: spacing.sm,
+    minHeight: 48,
+    // Real separation from the card above, and the card's own width. The old
+    // rule pulled it up by -spacing.xs and indented it 70pt, which made it
+    // touch the card and read as a fragment of it. Grouping now comes from
+    // proximity and from naming the event, not from collision.
+    marginTop: spacing.md,
     paddingHorizontal: spacing.base,
     borderRadius: radius.md,
     backgroundColor: colors.navy,
@@ -336,26 +395,70 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
-  eventRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  /** One event and the actions that belong to it. */
+  eventBlock: {
+    marginBottom: spacing.base,
+  },
+  // Outreach Detail's card, to the token: surfaceSubtle tint, hairline border,
+  // radius.lg, spacing.base padding, and `gap` alone between rows so the space
+  // between any two facts is one number.
+  eventCard: {
+    padding: spacing.base,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
     gap: spacing.sm,
-    minHeight: 60,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    marginBottom: spacing.sm,
   },
   /** Today's event gets a border so it stands out from the rest of the diary. */
-  eventRowToday: {
-    borderWidth: 1,
+  eventCardToday: {
     borderColor: colors.primary,
-    marginBottom: spacing.xs,
+    backgroundColor: colors.surface,
   },
   /** Past events recede rather than disappear — still readable, clearly done. */
-  eventRowPast: {
-    backgroundColor: colors.surfaceSubtle,
+  eventCardPast: {
     opacity: 0.85,
+  },
+  eventTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  eventTopSpacer: {
+    flex: 1,
+  },
+  todayPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+  },
+  todayPillText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    color: colors.white,
+  },
+  // The icon rail from Outreach Detail: a fixed 20pt column centring each
+  // glyph, so every icon shares a left edge regardless of its advance width.
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  detailIconColumn: {
+    width: 20,
+    alignItems: 'center',
+  },
+  detailIcon: {
+    lineHeight: 18,
+  },
+  detailText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
   },
   pastToggle: {
     flexDirection: 'row',
@@ -374,10 +477,9 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   eventTime: {
-    fontFamily: fontFamily.bold,
-    fontSize: 14,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
     color: colors.textPrimary,
-    minWidth: 62,
   },
   eventDot: {
     width: 8,
@@ -385,18 +487,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.success,
   },
-  eventText: {
-    flex: 1,
-  },
+  // 16pt with a real line height and two lines to run into — the title is the
+  // one thing on this card that has to be readable at a glance, and at 14pt on
+  // a single truncating line it was the one thing that was not.
   eventTitle: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 14,
+    fontSize: 16,
+    lineHeight: 21,
     color: colors.textPrimary,
-  },
-  eventMeta: {
-    fontFamily: fontFamily.regular,
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
   },
 });
