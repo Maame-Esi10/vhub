@@ -1,8 +1,29 @@
 # Multi-role outreaches — plan and SQL
 
-**Status: PROPOSAL. Nothing in this document has been built.** It touches two
-gated areas (the database schema and the matching engine), so it needs explicit
-owner approval before any code is written.
+**Status: APPROVED 2026-08-11. Foundation built; screens outstanding.**
+
+| Piece | State |
+|---|---|
+| Migration (`supabase/migrations/20260811_multi_role_outreaches.sql`) | Written, **not yet run** |
+| Pure scorer (`lib/matching/multiRole.ts`) + 21 unit tests | Built, passing |
+| `/api/match` role-aware scoring | Not started |
+| Screens (wizard role builder, detail apply-per-role, applicant grouping) | Not started |
+
+**One change from the original proposal, at the owner's push-back.** The
+uniqueness rule was `unique (outreach_id, category)`, which permanently ruled
+out "1 experienced nurse to lead, 4 nurses of any level" — a realistic
+staffing pattern. It is now a unique **index** over
+`(outreach_id, category, coalesce(min_experience_level, 'any'))`, plus
+`min_experience_level` with **"this level or above"** semantics.
+
+The `coalesce` is not cosmetic. A plain
+`unique (outreach_id, category, min_experience_level)` would let an
+organisation create two separate "nurse, any level" rows, because
+`min_experience_level` is NULL for "any" and **NULL never equals NULL in a
+unique constraint**. Coalescing to a real `'any'` value makes it deduplicate.
+And the minimum must be a floor rather than an exact match, or a 4-slot "any
+level" role could not accept an experienced nurse — absurd, and it would defeat
+the very pattern the change was made for.
 
 Requested 2026-08-11: an outreach should be able to specify role slots — "2
 doctors, 3 nurses, 5 students" — instead of a single `required_category`.
@@ -75,11 +96,14 @@ create table if not exists outreach_roles (
 
   created_at timestamptz not null default now(),
 
-  -- One row per category per outreach. "2 doctors" and "3 doctors" on the same
-  -- event is a data-entry error, not two requirements.
-  constraint outreach_roles_unique_category unique (outreach_id, category),
   constraint outreach_roles_slots_filled_le_total check (slots_filled <= slots_total)
 );
+
+-- SUPERSEDED by the coalesce index — see the status note at the top of this
+-- document and the migration itself. A plain unique (outreach_id, category)
+-- would forbid "1 experienced nurse + 4 nurses of any level".
+create unique index outreach_roles_unique_category_level
+  on outreach_roles (outreach_id, category, coalesce(min_experience_level, 'any'));
 
 create index if not exists outreach_roles_outreach_id_idx on outreach_roles(outreach_id);
 ```
