@@ -12,6 +12,11 @@ export interface OutreachFeedCardProps {
   matchScore?: number | null;
   /** Opens the "why this match" breakdown. Omit to leave the match pill non-interactive. */
   onPressScore?: () => void;
+  /**
+   * "2 doctors · 3 nurses · 5 students" for a multi-role outreach. Omitted in
+   * single-role mode, where the category badge already says everything.
+   */
+  roleSummary?: string | null;
 }
 
 /**
@@ -28,6 +33,7 @@ export function OutreachFeedCard({
   onPress,
   matchScore = null,
   onPressScore,
+  roleSummary,
 }: OutreachFeedCardProps) {
   const slotsLeft = Math.max(0, outreach.slots_total - outreach.slots_filled);
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
@@ -51,6 +57,16 @@ export function OutreachFeedCard({
           <Text style={styles.title} numberOfLines={2}>
             {outreach.title}
           </Text>
+          {/*
+            The breakdown, on the card itself. A volunteer scanning the feed
+            needs to know an event wants students before opening it — without
+            this, a multi-role outreach looks identical to a single-role one.
+          */}
+          {roleSummary ? (
+            <Text style={styles.roleSummary} numberOfLines={1}>
+              {roleSummary}
+            </Text>
+          ) : null}
         </View>
       </FlyerBackground>
 
@@ -125,6 +141,12 @@ const styles = StyleSheet.create({
   headerContent: {
     padding: spacing.base,
     gap: spacing.sm,
+  },
+  roleSummary: {
+    fontFamily: fontFamily.medium,
+    fontSize: 11,
+    color: colors.white,
+    opacity: 0.85,
   },
   eyebrow: {
     fontFamily: fontFamily.semiBold,

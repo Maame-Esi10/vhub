@@ -17,10 +17,18 @@ import {
   useBatchDecideApplications,
   useOrganisationOutreaches,
   useOutreachApplications,
+  useOutreachRoles,
   useUpdateApplicationStatus,
 } from '@/hooks';
 import type { ApplicationWithVolunteer, OrganisationApplicationDecision } from '@/hooks';
-import { planBatchAccept, rankApplicants, skillCoverage, waitlistPositions } from '@/lib/roster';
+import {
+  groupApplicantsByRole,
+  planBatchAccept,
+  rankApplicants,
+  skillCoverage,
+  waitlistPositions,
+} from '@/lib/roster';
+import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
 
@@ -75,7 +83,12 @@ export default function Applicants() {
   const activeApplicationId = updateStatus.variables?.applicationId;
 
   const batchDecide = useBatchDecideApplications();
-  const [confirmingBatch, setConfirmingBatch] = useState(false);
+  // Empty means single-role mode — the same rule the database uses.
+  const rolesQuery = useOutreachRoles(selectedOutreachId);
+  const roles = useMemo(() => rolesQuery.data ?? [], [rolesQuery.data]);
+  // Which section's batch is being confirmed, keyed by roleId ('' for the
+  // single-role / role-less section). Null means no dialog is open.
+  const [confirmingRoleId, setConfirmingRoleId] = useState<string | null>(null);
   const [batchOutcome, setBatchOutcome] = useState<string | null>(null);
 
   /*
@@ -93,6 +106,7 @@ export default function Applicants() {
         matchScore: application.match_score,
         vScore: application.volunteer?.v_score ?? null,
         createdAt: application.created_at,
+        outreachRoleId: application.outreach_role_id,
         application,
       })),
     [applications]
@@ -108,43 +122,103 @@ export default function Applicants() {
 
   const positions = useMemo(() => waitlistPositions(rankable), [rankable]);
 
-  const coverage = useMemo(
-    () =>
-      skillCoverage(
-        selectedOutreach?.required_skills,
-        applications.filter((a) => a.status === 'accepted').map((a) => a.volunteer?.skill_tags)
-      ),
-    [selectedOutreach?.required_skills, applications]
-  );
 
-  const plan = useMemo(
-    () =>
-      selectedOutreach
-        ? planBatchAccept({
-            applicants: rankable,
-            slotsTotal: selectedOutreach.slots_total,
-            slotsFilled: selectedOutreach.slots_filled,
-          })
-        : null,
-    [rankable, selectedOutreach]
-  );
+  /*
+    ONE ROSTER SECTION PER ROLE, and per the owner's decision that is a stack
+    rather than a selector: the point of multi-role is seeing at a glance that
+    you have your nurses but not your students, and a selector hides
+    three-quarters of that behind a tap. Skill coverage is per role too.
 
-  const pendingCount = applications.filter((a) => a.status === 'pending').length;
-  const waitlistedCount = applications.filter((a) => a.status === 'waitlisted').length;
+    In single-role mode this produces exactly one section with roleId null, so
+    the screen is unchanged for every outreach that has no roles — the n=1 case
+    again, not a branch.
+  */
+  const sections = useMemo(() => {
+    const groups = groupApplicantsByRole(
+      rankable,
+      roles.map((role) => role.id)
+    );
 
-  const filteredApplications = useMemo(
-    () =>
-      statusFilter === 'all'
-        ? rankedApplications
-        : rankedApplications.filter((a) => a.status === statusFilter),
-    [rankedApplications, statusFilter]
-  );
+    return groups.map((group) => {
+      const role = roles.find((r) => r.id === group.roleId) ?? null;
+
+      // Per-role slot counts when there is a role; the outreach's own when
+      // there is not.
+      const slotsTotal = role?.slots_total ?? selectedOutreach?.slots_total ?? 0;
+      const slotsFilled = role?.slots_filled ?? selectedOutreach?.slots_filled ?? 0;
+
+      const accepted = group.applicants.filter((a) => a.status === 'accepted');
+
+      return {
+        roleId: group.roleId,
+        title: role
+          ? (VOLUNTEER_CATEGORIES.find((c) => c.value === role.category)?.label ?? role.category)
+          : null,
+        applicants: group.applicants,
+        slotsTotal,
+        slotsFilled,
+        pendingCount: group.applicants.filter((a) => a.status === 'pending').length,
+        waitlistedCount: group.applicants.filter((a) => a.status === 'waitlisted').length,
+        // A role's own skills where it states them, else the outreach's — the
+        // same inheritance the scorer uses.
+        coverage: skillCoverage(
+          role?.required_skills ?? selectedOutreach?.required_skills,
+          accepted.map((a) => a.application.volunteer?.skill_tags)
+        ),
+        plan: planBatchAccept({ applicants: group.applicants, slotsTotal, slotsFilled }),
+      };
+    });
+  }, [rankable, roles, selectedOutreach]);
+
+  /*
+    Rows for one FlatList: a heading per role, then that role's applicants.
+    Grouped rather than one flat list, because on a multi-role event an
+    applicant card that names no role tells an organiser nothing about which
+    requirement it answers.
+  */
+  type Row =
+    | { kind: 'heading'; key: string; title: string; count: number }
+    | { kind: 'applicant'; key: string; application: ApplicationWithVolunteer };
+
+  const rows = useMemo<Row[]>(() => {
+    const out: Row[] = [];
+    const multiRole = roles.length > 0;
+
+    for (const section of sections) {
+      const visible = section.applicants
+        .map((entry) => entry.application)
+        .filter((a) => statusFilter === 'all' || a.status === statusFilter);
+
+      // The heading is only meaningful when there is more than one group.
+      if (multiRole) {
+        out.push({
+          kind: 'heading',
+          key: `heading-${section.roleId ?? 'other'}`,
+          title: section.title ?? 'No role chosen',
+          count: visible.length,
+        });
+      }
+
+      for (const application of visible) {
+        out.push({ kind: 'applicant', key: application.id, application });
+      }
+    }
+
+    return out;
+  }, [sections, roles.length, statusFilter]);
+
+  const visibleApplicantCount = rows.filter((row) => row.kind === 'applicant').length;
+
+  const confirming =
+    confirmingRoleId === null
+      ? null
+      : (sections.find((section) => (section.roleId ?? '') === confirmingRoleId) ?? null);
 
   function runBatch() {
-    if (!plan || !selectedOutreachId) return;
+    if (!confirming || !selectedOutreachId) return;
     const decisions = [
-      ...plan.accept.map((applicationId) => ({ applicationId, status: 'accepted' as const })),
-      ...plan.waitlist.map((applicationId) => ({ applicationId, status: 'waitlisted' as const })),
+      ...confirming.plan.accept.map((applicationId) => ({ applicationId, status: 'accepted' as const })),
+      ...confirming.plan.waitlist.map((applicationId) => ({ applicationId, status: 'waitlisted' as const })),
     ];
     if (decisions.length === 0) return;
 
@@ -152,7 +226,7 @@ export default function Applicants() {
       { outreachId: selectedOutreachId, decisions },
       {
         onSuccess: (result) => {
-          setConfirmingBatch(false);
+          setConfirmingRoleId(null);
           // A partial success is reported as what it is. The alternative —
           // showing "done" when four of ten accepts hit a full roster — would
           // leave the organiser believing people are confirmed who are not.
@@ -163,7 +237,7 @@ export default function Applicants() {
           ].filter(Boolean);
           setBatchOutcome(parts.length > 0 ? `${parts.join(', ')}.` : 'Nothing changed.');
         },
-        onError: () => setConfirmingBatch(false),
+        onError: () => setConfirmingRoleId(null),
       }
     );
   }
@@ -229,20 +303,24 @@ export default function Applicants() {
       />
 
       <ConfirmDialog
-        visible={confirmingBatch}
+        visible={confirming !== null}
         icon="account-check-outline"
-        title={plan && plan.accept.length > 0 ? `Accept top ${plan.accept.length}?` : 'Update the waitlist?'}
+        title={
+          confirming && confirming.plan.accept.length > 0
+            ? `Accept top ${confirming.plan.accept.length}${confirming.title ? ` for ${confirming.title}` : ''}?`
+            : 'Update the waitlist?'
+        }
         message={
-          plan
+          confirming
             ? [
-                plan.accept.length > 0
-                  ? `The ${plan.accept.length} best-ranked ${plan.accept.length === 1 ? 'applicant' : 'applicants'} will be accepted and emailed.`
+                confirming.plan.accept.length > 0
+                  ? `The ${confirming.plan.accept.length} best-ranked ${confirming.plan.accept.length === 1 ? 'applicant' : 'applicants'}${confirming.title ? ` for ${confirming.title}` : ''} will be accepted and emailed.`
                   : null,
-                plan.waitlist.length > 0
-                  ? `The next ${plan.waitlist.length} will be waitlisted and told their place in the queue.`
+                confirming.plan.waitlist.length > 0
+                  ? `The next ${confirming.plan.waitlist.length} will be waitlisted and told their place in the queue.`
                   : null,
-                plan.leftPending.length > 0
-                  ? `${plan.leftPending.length} will stay pending — the waitlist is full.`
+                confirming.plan.leftPending.length > 0
+                  ? `${confirming.plan.leftPending.length} will stay pending — the waitlist is full.`
                   : null,
                 'Nobody is rejected. You can still decide each applicant individually.',
               ]
@@ -253,7 +331,7 @@ export default function Applicants() {
         confirmLabel="Confirm"
         busy={batchDecide.isPending}
         onConfirm={runBatch}
-        onCancel={() => setConfirmingBatch(false)}
+        onCancel={() => setConfirmingRoleId(null)}
       />
 
       {applicationsQuery.isLoading ? (
@@ -270,8 +348,8 @@ export default function Applicants() {
       ) : (
         <FlatList
           style={styles.flex}
-          data={filteredApplications}
-          keyExtractor={(item) => item.id}
+          data={rows}
+          keyExtractor={(item) => item.key}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -309,20 +387,24 @@ export default function Applicants() {
                 Draft outreaches are excluded: an unpublished event has no
                 applicants, so a roster bar would only ever read "0 of N".
               */}
-              {selectedOutreach && selectedOutreach.status !== 'draft' && plan ? (
-                <RosterSummaryCard
-                  slotsFilled={selectedOutreach.slots_filled}
-                  slotsTotal={selectedOutreach.slots_total}
-                  pendingCount={pendingCount}
-                  waitlistedCount={waitlistedCount}
-                  coverage={coverage}
-                  acceptCount={plan.accept.length}
-                  waitlistCount={plan.waitlist.length}
-                  leftPendingCount={plan.leftPending.length}
-                  onAcceptTop={() => setConfirmingBatch(true)}
-                  isPending={batchDecide.isPending}
-                />
-              ) : null}
+              {selectedOutreach && selectedOutreach.status !== 'draft'
+                ? sections.map((section) => (
+                    <RosterSummaryCard
+                      key={section.roleId ?? 'all'}
+                      roleTitle={section.title}
+                      slotsFilled={section.slotsFilled}
+                      slotsTotal={section.slotsTotal}
+                      pendingCount={section.pendingCount}
+                      waitlistedCount={section.waitlistedCount}
+                      coverage={section.coverage}
+                      acceptCount={section.plan.accept.length}
+                      waitlistCount={section.plan.waitlist.length}
+                      leftPendingCount={section.plan.leftPending.length}
+                      onAcceptTop={() => setConfirmingRoleId(section.roleId ?? '')}
+                      isPending={batchDecide.isPending}
+                    />
+                  ))
+                : null}
 
               {batchOutcome ? <Text style={styles.batchOutcome}>{batchOutcome}</Text> : null}
               {batchDecide.isError ? (
@@ -350,35 +432,51 @@ export default function Applicants() {
               <FilterChips options={FILTERS} value={statusFilter} onChange={setStatusFilter} />
             </View>
           }
-          renderItem={({ item }) => (
-            <ApplicantCard
-              application={item}
-              requiredSkills={selectedOutreach?.required_skills ?? []}
-              waitlistPosition={positions.get(item.id)}
-              onDecide={(status) => handleDecide(item, status)}
-              onViewProfile={
-                item.volunteer && selectedOutreachId
-                  ? () =>
-                      router.push(
-                        // applicationId + outreachId turn the profile screen
-                        // into a decision screen, so the org can act on what
-                        // it just read without navigating back here.
-                        `/profile/volunteer/${item.volunteer!.id}?applicationId=${item.id}&outreachId=${selectedOutreachId}`
-                      )
-                  : undefined
-              }
-              isPending={updateStatus.isPending && activeApplicationId === item.id}
-              errorMessage={
-                updateStatus.isError && activeApplicationId === item.id
-                  ? updateStatus.error instanceof Error
-                    ? updateStatus.error.message
-                    : 'Could not update this application.'
-                  : undefined
-              }
-            />
-          )}
+          renderItem={({ item }) => {
+            if (item.kind === 'heading') {
+              return (
+                <View style={styles.roleHeading}>
+                  <Text style={styles.roleHeadingText}>{item.title}</Text>
+                  <Text style={styles.roleHeadingCount}>{item.count}</Text>
+                </View>
+              );
+            }
+
+            const application = item.application;
+            return (
+              <ApplicantCard
+                application={application}
+                requiredSkills={
+                  roles.find((role) => role.id === application.outreach_role_id)?.required_skills ??
+                  selectedOutreach?.required_skills ??
+                  []
+                }
+                waitlistPosition={positions.get(application.id)}
+                onDecide={(status) => handleDecide(application, status)}
+                onViewProfile={
+                  application.volunteer && selectedOutreachId
+                    ? () =>
+                        router.push(
+                          // applicationId + outreachId turn the profile screen
+                          // into a decision screen, so the org can act on what
+                          // it just read without navigating back here.
+                          `/profile/volunteer/${application.volunteer!.id}?applicationId=${application.id}&outreachId=${selectedOutreachId}`
+                        )
+                    : undefined
+                }
+                isPending={updateStatus.isPending && activeApplicationId === application.id}
+                errorMessage={
+                  updateStatus.isError && activeApplicationId === application.id
+                    ? updateStatus.error instanceof Error
+                      ? updateStatus.error.message
+                      : 'Could not update this application.'
+                    : undefined
+                }
+              />
+            );
+          }}
           ListEmptyComponent={
-            applications.length === 0 ? (
+            visibleApplicantCount === 0 && applications.length === 0 ? (
               <EmptyState
                 icon="account-question-outline"
                 title="No applicants yet"
@@ -444,6 +542,23 @@ const styles = StyleSheet.create({
   },
   manageRowPressed: {
     opacity: 0.85,
+  },
+  roleHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.base,
+    marginBottom: spacing.sm,
+  },
+  roleHeadingText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  roleHeadingCount: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   batchOutcome: {
     fontFamily: fontFamily.medium,

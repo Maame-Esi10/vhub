@@ -40,6 +40,43 @@ export function useOutreachRoles(outreachId: string | undefined) {
   });
 }
 
+/**
+ * Roles for MANY outreaches at once, keyed by outreach id.
+ *
+ * One `.in()` query rather than one per card: the feed renders up to fifty
+ * outreaches, and a per-card query would turn a single screen into fifty round
+ * trips. An outreach absent from the map is in single-role mode.
+ *
+ * The key is the SORTED id list, so two renders with the same outreaches in a
+ * different order share a cache entry instead of refetching.
+ */
+export function useOutreachRolesForMany(outreachIds: readonly string[]) {
+  const key = [...outreachIds].sort().join(',');
+
+  return useQuery({
+    queryKey: [...outreachRoleKeys.all, 'many', key] as const,
+    enabled: outreachIds.length > 0,
+    queryFn: async (): Promise<Map<string, OutreachRole[]>> => {
+      const { data, error } = await supabase
+        .from('outreach_roles')
+        .select('*')
+        .in('outreach_id', outreachIds as string[])
+        .order('slots_total', { ascending: false })
+        .order('category', { ascending: true });
+
+      if (error) {
+        throw new Error(error.message || 'Could not load outreach roles.');
+      }
+
+      const byOutreach = new Map<string, OutreachRole[]>();
+      for (const row of (data ?? []) as OutreachRole[]) {
+        byOutreach.set(row.outreach_id, [...(byOutreach.get(row.outreach_id) ?? []), row]);
+      }
+      return byOutreach;
+    },
+  });
+}
+
 /** A role as the create/edit form holds it, before it has a database id. */
 export interface RoleDraft {
   category: VolunteerCategory;

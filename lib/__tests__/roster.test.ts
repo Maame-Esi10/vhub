@@ -1,5 +1,6 @@
 import {
   MIN_WAITLIST_CAPACITY,
+  groupApplicantsByRole,
   isOversubscribed,
   planBatchAccept,
   rankApplicants,
@@ -233,6 +234,49 @@ describe('skillCoverage', () => {
     const coverage = skillCoverage(['Triage'], [['Triage', 'Surgery', 'Phlebotomy']]);
     expect(coverage.covered).toEqual(['Triage']);
     expect(coverage.ratio).toBe(1);
+  });
+});
+
+describe('groupApplicantsByRole', () => {
+  const a = { id: 'a', outreachRoleId: 'nurses' };
+  const b = { id: 'b', outreachRoleId: 'nurses' };
+  const c = { id: 'c', outreachRoleId: 'doctors' };
+  const d = { id: 'd', outreachRoleId: null };
+
+  it('splits applicants by the role they applied for', () => {
+    const groups = groupApplicantsByRole([a, b, c], ['nurses', 'doctors']);
+    expect(groups[0]).toEqual({ roleId: 'nurses', applicants: [a, b] });
+    expect(groups[1]).toEqual({ roleId: 'doctors', applicants: [c] });
+  });
+
+  it('keeps a role with no applicants — that gap is the point', () => {
+    const groups = groupApplicantsByRole([a], ['nurses', 'students']);
+    expect(groups).toHaveLength(2);
+    expect(groups[1]).toEqual({ roleId: 'students', applicants: [] });
+  });
+
+  it('collects role-less applicants in a trailing null group', () => {
+    const groups = groupApplicantsByRole([a, d], ['nurses']);
+    expect(groups[groups.length - 1]).toEqual({ roleId: null, applicants: [d] });
+  });
+
+  it('does not add a null group when every applicant has a known role', () => {
+    const groups = groupApplicantsByRole([a, c], ['nurses', 'doctors']);
+    expect(groups.some((g) => g.roleId === null)).toBe(false);
+  });
+
+  it('puts everyone in the null group in single-role mode', () => {
+    const groups = groupApplicantsByRole([d, { id: 'e', outreachRoleId: null }], []);
+    expect(groups).toEqual([{ roleId: null, applicants: [d, { id: 'e', outreachRoleId: null }] }]);
+  });
+
+  it('treats an applicant pointing at a deleted role as ungrouped, not lost', () => {
+    const stale = { id: 'stale', outreachRoleId: 'deleted-role' };
+    const groups = groupApplicantsByRole([a, stale], ['nurses']);
+    const nullGroup = groups.find((g) => g.roleId === null);
+    expect(nullGroup?.applicants).toEqual([stale]);
+    // Nobody is dropped.
+    expect(groups.reduce((n, g) => n + g.applicants.length, 0)).toBe(2);
   });
 });
 

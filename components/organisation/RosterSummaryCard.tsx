@@ -4,6 +4,11 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { SkillCoverage } from '@/lib/roster';
 
 export interface RosterSummaryCardProps {
+  /**
+   * The role this card is for, on a multi-role outreach. Null in single-role
+   * mode, where the card covers the whole outreach and needs no name.
+   */
+  roleTitle?: string | null;
   slotsFilled: number;
   slotsTotal: number;
   pendingCount: number;
@@ -32,6 +37,7 @@ export interface RosterSummaryCardProps {
  * should make before accepting ten people by score alone.
  */
 export function RosterSummaryCard({
+  roleTitle,
   slotsFilled,
   slotsTotal,
   pendingCount,
@@ -51,7 +57,7 @@ export function RosterSummaryCard({
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Roster</Text>
+        <Text style={styles.title}>{roleTitle ?? 'Roster'}</Text>
         <Text style={styles.slots}>
           {slotsFilled} of {slotsTotal} filled
         </Text>
@@ -121,6 +127,10 @@ export function RosterSummaryCard({
         </View>
       ) : null}
 
+      {roleTitle && pendingCount === 0 && waitlistedCount === 0 && slotsFilled === 0 ? (
+        <Text style={styles.emptyRole}>Nobody has applied for this role yet.</Text>
+      ) : null}
+
       {acceptCount > 0 || waitlistCount > 0 ? (
         <>
           <Pressable
@@ -129,8 +139,8 @@ export function RosterSummaryCard({
             accessibilityRole="button"
             accessibilityLabel={
               acceptCount > 0
-                ? `Accept the top ${acceptCount} ranked ${acceptCount === 1 ? 'applicant' : 'applicants'}`
-                : `Waitlist the top ${waitlistCount} ranked applicants`
+                ? `Accept the top ${acceptCount} ranked ${acceptCount === 1 ? 'applicant' : 'applicants'}${roleTitle ? ` for ${roleTitle}` : ''}`
+                : `Waitlist the top ${waitlistCount} ranked applicants${roleTitle ? ` for ${roleTitle}` : ''}`
             }
             style={({ pressed }) => [styles.action, pressed && styles.actionPressed, isPending && styles.actionDisabled]}
           >
@@ -141,6 +151,7 @@ export function RosterSummaryCard({
                 <MaterialCommunityIcons name="account-check-outline" size={18} color={colors.white} />
                 <Text style={styles.actionText}>
                   {acceptCount > 0 ? `Accept top ${acceptCount}` : `Waitlist top ${waitlistCount}`}
+                  {roleTitle ? ` · ${roleTitle}` : ''}
                 </Text>
               </>
             )}
@@ -317,6 +328,12 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semiBold,
     fontSize: 14,
     color: colors.white,
+  },
+  emptyRole: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
   },
   actionHint: {
     fontFamily: fontFamily.regular,

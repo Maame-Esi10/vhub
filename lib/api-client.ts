@@ -198,6 +198,12 @@ export interface ScoredApplicant {
   matchScore: number;
   breakdown: Layer1MatchResult;
   /**
+   * Which role of a multi-role outreach produced this score. Null in
+   * single-role mode. Without it a 92% names no requirement.
+   */
+  bestRoleId?: string | null;
+
+  /**
    * The volunteer's reliability score, carried alongside so an organisation
    * sees fit and reliability as the two separate things they are.
    */
@@ -246,6 +252,12 @@ export interface ScoreMyApplicationResponse {
   outreachId: string;
   matchScore: number;
   breakdown: Layer1MatchResult;
+  /**
+   * Which role of a multi-role outreach produced this score. Null in
+   * single-role mode. Without it a 92% names no requirement.
+   */
+  bestRoleId?: string | null;
+
   layer2Applied: boolean;
 }
 
@@ -280,6 +292,12 @@ export interface RankedOutreach {
   matchScore: number;
   /** Per-component detail behind `matchScore`, for the feed card's "why this match" panel. */
   breakdown: Layer1MatchResult;
+  /**
+   * Which role of a multi-role outreach produced this score. Null in
+   * single-role mode. Without it a 92% names no requirement.
+   */
+  bestRoleId?: string | null;
+
   outreach: Outreach & { organisation: RankedOutreachOrganisation | null };
 }
 

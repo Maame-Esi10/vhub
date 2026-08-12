@@ -8,7 +8,14 @@ import type { FilterChipOption, SelectOption } from '@/components/ui';
 import { MatchBreakdownSheet, OutreachFeedCard } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { GHANA_REGIONS } from '@/constants/ghana-locations';
-import { unreadCount, useNotifications, useRankedFeed } from '@/hooks';
+import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
+import {
+  unreadCount,
+  useNotifications,
+  useOutreachRoles,
+  useOutreachRolesForMany,
+  useRankedFeed,
+} from '@/hooks';
 import type { RankedFeedItem } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachRoleType } from '@/types/database';
@@ -54,6 +61,37 @@ export default function Feed() {
 
   /** The card whose match pill was tapped, or null when the sheet is closed. */
   const [breakdownFor, setBreakdownFor] = useState<RankedFeedItem | null>(null);
+
+  // Roles for every card on screen, in ONE batched query — a per-card query
+  // would turn one screen into fifty round trips.
+  const visibleOutreachIds = useMemo(
+    () => (feed?.items ?? []).map((item) => item.outreach.id),
+    [feed?.items]
+  );
+  const feedRoles = useOutreachRolesForMany(visibleOutreachIds);
+
+  function roleSummaryFor(outreachId: string): string | null {
+    const roles = feedRoles.data?.get(outreachId);
+    if (!roles?.length) return null;
+    return roles
+      .map(
+        (role) =>
+          `${role.slots_total} ${VOLUNTEER_CATEGORIES.find((c) => c.value === role.category)?.label ?? role.category}`
+      )
+      .join(' · ');
+  }
+
+  // The roles of whichever outreach's breakdown is open, so the sheet can name
+  // the role the score was computed against. Only fetched while the sheet is
+  // open — the feed itself has no use for them.
+  const breakdownRoles = useOutreachRoles(breakdownFor?.outreach.id);
+  const breakdownRoleName = breakdownFor?.bestRoleId
+    ? (VOLUNTEER_CATEGORIES.find(
+        (c) =>
+          c.value ===
+          breakdownRoles.data?.find((role) => role.id === breakdownFor.bestRoleId)?.category
+      )?.label ?? null)
+    : null;
 
   const firstName = profile?.full_name?.trim().split(/\s+/)[0] ?? 'there';
   const filtersActive = region !== ALL_REGIONS || roleType !== 'all';
@@ -162,6 +200,7 @@ export default function Feed() {
             outreach={item.outreach}
             matchScore={item.matchScore}
             onPressScore={item.breakdown ? () => setBreakdownFor(item) : undefined}
+            roleSummary={roleSummaryFor(item.outreach.id)}
             onPress={() => router.push(`/(volunteer)/outreach/${item.outreach.id}?from=/(volunteer)/feed`)}
           />
         )}
@@ -192,6 +231,7 @@ export default function Feed() {
         outreachTitle={breakdownFor?.outreach.title ?? ''}
         breakdown={breakdownFor?.breakdown ?? null}
         layer2Applied={feed?.layer2Applied ?? false}
+        roleName={breakdownRoleName}
         onDismiss={() => setBreakdownFor(null)}
       />
     </SafeAreaView>

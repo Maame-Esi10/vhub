@@ -55,6 +55,7 @@ export type {
 export {
   outreachRoleKeys,
   useOutreachRoles,
+  useOutreachRolesForMany,
   useReplaceOutreachRoles,
 } from './useOutreachRoles';
 export type { RoleDraft, ReplaceOutreachRolesParams } from './useOutreachRoles';

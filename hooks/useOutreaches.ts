@@ -231,6 +231,11 @@ export interface RankedFeedItem {
   /** 0-100, or null when the ranking service was unreachable and this is the unranked fallback. */
   matchScore: number | null;
   breakdown: Layer1MatchResult | null;
+  /**
+   * Which role of a multi-role outreach produced this score — the best one
+   * open to this volunteer. Null in single-role mode.
+   */
+  bestRoleId?: string | null;
 }
 
 export interface RankedFeed {
@@ -274,6 +279,7 @@ export function useRankedFeed(filters: FeedFilters, options?: { enabled?: boolea
             outreach: result.outreach as OutreachWithOrganisation,
             matchScore: result.matchScore,
             breakdown: result.breakdown,
+            bestRoleId: result.bestRoleId ?? null,
           })),
         };
       } catch (err) {

@@ -16,6 +16,14 @@ export interface MatchBreakdownSheetProps {
    * something slightly different in each case.
    */
   layer2Applied: boolean;
+  /**
+   * The role this score was computed against, on a multi-role outreach.
+   *
+   * Without it a 92% names no requirement: an event wanting doctors, nurses
+   * and students produces one number, and the volunteer has no way to know
+   * which of the three it describes.
+   */
+  roleName?: string | null;
   onDismiss: () => void;
 }
 
@@ -81,6 +89,7 @@ export function MatchBreakdownSheet({
   outreachTitle,
   breakdown,
   layer2Applied,
+  roleName,
   onDismiss,
 }: MatchBreakdownSheetProps) {
   return (
@@ -102,7 +111,14 @@ export function MatchBreakdownSheet({
 
               <View style={styles.totalCard}>
                 <Text style={styles.totalValue}>{Math.round(breakdown.total)}%</Text>
-                <Text style={styles.totalLabel}>overall match</Text>
+                {/*
+                  On a multi-role outreach the score is against ONE role — the
+                  best one open to this volunteer. Saying which turns an
+                  unattributed number into an answer.
+                */}
+                <Text style={styles.totalLabel}>
+                  {roleName ? `match as ${roleName}` : 'overall match'}
+                </Text>
               </View>
 
               {COMPONENTS.map((row) => {

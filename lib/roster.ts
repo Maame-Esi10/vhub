@@ -193,6 +193,45 @@ export function skillCoverage(
   };
 }
 
+/** One role's slice of an outreach's applicants, ready to plan and display. */
+export interface RoleGroup<T> {
+  /** Null for the ungrouped bucket — single-role mode, or applicants with no chosen role. */
+  roleId: string | null;
+  applicants: T[];
+}
+
+/**
+ * Splits applicants by the role they applied for.
+ *
+ * Every role gets a group even when nobody has applied to it: an empty
+ * "Doctors — 0 of 2" is the single most useful thing an organiser can see on a
+ * multi-role event, and dropping it would hide exactly the gap they need to
+ * act on.
+ *
+ * Applicants with no `outreach_role_id` — single-role mode, or applications
+ * predating roles — collect in a trailing `roleId: null` group rather than
+ * being silently assigned to a role nobody chose.
+ */
+export function groupApplicantsByRole<T extends { outreachRoleId: string | null }>(
+  applicants: readonly T[],
+  roleIds: readonly string[]
+): RoleGroup<T>[] {
+  const groups: RoleGroup<T>[] = roleIds.map((roleId) => ({
+    roleId,
+    applicants: applicants.filter((applicant) => applicant.outreachRoleId === roleId),
+  }));
+
+  const known = new Set(roleIds);
+  const ungrouped = applicants.filter(
+    (applicant) => applicant.outreachRoleId === null || !known.has(applicant.outreachRoleId)
+  );
+  if (ungrouped.length > 0 || roleIds.length === 0) {
+    groups.push({ roleId: null, applicants: ungrouped });
+  }
+
+  return groups;
+}
+
 /** True when more people want in than there is room for. */
 export function isOversubscribed(params: {
   pendingCount: number;

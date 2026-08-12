@@ -6,6 +6,7 @@ import {
   type Layer1VolunteerInput,
 } from "@/lib/matching/layer1";
 import { shouldWidenFeedSearch } from "@/lib/matching/feedFilter";
+import { computeMultiRoleMatchScore, type RoleInput } from "@/lib/matching/multiRole";
 import { computeRankingScore } from "@/lib/vscore";
 import { getReachableRegions } from "@/constants/ghana-locations";
 import { authenticate, assertOwnsOutreach, type AuthedCaller } from "../../../server/auth";
@@ -101,6 +102,8 @@ interface ApplicantRow {
   id: string;
   volunteer_id: string;
   status: string;
+  /** The role this application is for. Null in single-role mode. */
+  outreach_role_id: string | null;
   volunteer: {
     id: string;
     category: Layer1VolunteerInput["category"];
@@ -162,12 +165,76 @@ export async function POST(req: Request): Promise<Response> {
 // ---------------------------------------------------------------------------
 
 const APPLICANT_SELECT = `
-  id, volunteer_id, status,
+  id, volunteer_id, status, outreach_role_id,
   volunteer:volunteer_profiles (
     id, category, skill_tags, experience_level, availability_slots, v_score,
     profile:profiles ( region, district )
   )
 `;
+
+/**
+ * The roles of many outreaches, keyed by outreach id.
+ *
+ * An outreach absent from the map (or mapping to an empty array) is in
+ * SINGLE-ROLE mode, which `computeMultiRoleMatchScore` handles by delegating
+ * straight back to the single-role scorer. One batched query rather than one
+ * per outreach, so the ranked feed stays a fixed number of round trips.
+ */
+async function fetchRolesByOutreach(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  outreachIds: readonly string[]
+): Promise<Map<string, RoleInput[]>> {
+  const byOutreach = new Map<string, RoleInput[]>();
+  if (outreachIds.length === 0) return byOutreach;
+
+  const { data, error } = await admin
+    .from("outreach_roles")
+    .select("id, outreach_id, category, role_type, min_experience_level, required_skills, slots_total, slots_filled")
+    .in("outreach_id", outreachIds as string[]);
+
+  // A failure here degrades to single-role scoring rather than failing the
+  // request: a ranked feed with slightly coarser category scores beats no feed.
+  if (error) {
+    console.error("[match] could not load outreach roles, scoring as single-role:", error.message);
+    return byOutreach;
+  }
+
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const outreachId = row.outreach_id as string;
+    byOutreach.set(outreachId, [
+      ...(byOutreach.get(outreachId) ?? []),
+      {
+        id: row.id as string,
+        category: (row.category as RoleInput["category"]) ?? null,
+        role_type: (row.role_type as RoleInput["role_type"]) ?? null,
+        min_experience_level: (row.min_experience_level as RoleInput["min_experience_level"]) ?? null,
+        required_skills: (row.required_skills as string[] | null) ?? null,
+        slots_total: (row.slots_total as number) ?? 0,
+        slots_filled: (row.slots_filled as number) ?? 0,
+      },
+    ]);
+  }
+
+  return byOutreach;
+}
+
+/**
+ * The roles a given application should be scored against.
+ *
+ * An applicant who CHOSE a role is scored against that role alone — they are
+ * not competing for the others, and reporting their fit for a role they did
+ * not apply for would misrepresent the decision the organisation is making.
+ * An applicant with no chosen role (single-role mode, or an application made
+ * before roles existed) is scored against the best role available to them.
+ */
+function rolesForApplication(
+  allRoles: readonly RoleInput[],
+  chosenRoleId: string | null | undefined
+): RoleInput[] {
+  if (!chosenRoleId) return [...allRoles];
+  const chosen = allRoles.find((role) => role.id === chosenRoleId);
+  return chosen ? [chosen] : [...allRoles];
+}
 
 async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?: string[]) {
   const admin = getSupabaseAdmin();
@@ -186,13 +253,22 @@ async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?:
 
   const outreachInput = toOutreachInput(outreach);
 
+  // Roles, if this is a multi-role outreach. Empty means single-role mode and
+  // computeMultiRoleMatchScore delegates to the original scorer unchanged.
+  const rolesByOutreach = await fetchRolesByOutreach(admin, [outreach.id as string]);
+  const allRoles = rolesByOutreach.get(outreach.id as string) ?? [];
+
   // Layer 1 ALWAYS runs first, for every applicant -- this is the result
   // every applicant gets if Layer 2 is unavailable for any reason at all.
-  const layer1Results = new Map<string, Layer1MatchResult>();
+  const layer1Results = new Map<string, Layer1MatchResult & { bestRoleId: string | null }>();
   for (const application of applications) {
     layer1Results.set(
       application.id,
-      computeLayer1MatchScore(toVolunteerInput(application.volunteer), outreachInput)
+      computeMultiRoleMatchScore(
+        toVolunteerInput(application.volunteer),
+        outreachInput,
+        rolesForApplication(allRoles, application.outreach_role_id)
+      )
     );
   }
 
@@ -204,7 +280,14 @@ async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?:
       admin,
       applications.map((application) => ({
         key: application.id,
-        requiredSkills: outreachInput.required_skills ?? [],
+        // The winning role's requirement, falling back to the outreach's when
+        // the role does not state its own. Sending the outreach's list for a
+        // role that overrides it would have Gemini compare the wrong skills.
+        requiredSkills:
+          allRoles.find((role) => role.id === layer1Results.get(application.id)?.bestRoleId)
+            ?.required_skills ??
+          outreachInput.required_skills ??
+          [],
         volunteerSkills: application.volunteer?.skill_tags ?? [],
       }))
     );
@@ -216,9 +299,12 @@ async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?:
   const results: ScoredApplicant[] = applications.map((application) => {
     const equivalences = layer2.byKey.get(application.id);
     const final = equivalences
-      ? computeLayer1MatchScore(toVolunteerInput(application.volunteer), outreachInput, {
-          skillEquivalences: equivalences,
-        })
+      ? computeMultiRoleMatchScore(
+          toVolunteerInput(application.volunteer),
+          outreachInput,
+          rolesForApplication(allRoles, application.outreach_role_id),
+          { skillEquivalences: equivalences }
+        )
       : layer1Results.get(application.id)!;
 
     const vScore = application.volunteer?.v_score ?? null;
@@ -228,6 +314,9 @@ async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?:
       volunteerId: application.volunteer_id,
       matchScore: final.total,
       breakdown: final,
+      // Which role this score is FOR. Without it an organisation sees a 92%
+      // with no way to know which of its four requirements it refers to.
+      bestRoleId: "bestRoleId" in final ? final.bestRoleId : null,
       vScore,
       rankingScore: computeRankingScore(final.total, vScore),
     };
@@ -314,22 +403,34 @@ async function scoreMyApplication(caller: AuthedCaller, outreachId: string) {
   const outreachInput = toOutreachInput(outreach);
   const volunteerInput = toVolunteerInput(applicant.volunteer);
 
+  // Scored against the role the volunteer actually applied for, when they
+  // chose one — not against the best role on the event, which they are not
+  // competing for.
+  const rolesByOutreach = await fetchRolesByOutreach(admin, [outreachId]);
+  const roles = rolesForApplication(
+    rolesByOutreach.get(outreachId) ?? [],
+    applicant.outreach_role_id
+  );
+
   // Layer 1 first, always -- the score that stands if Layer 2 is unavailable.
-  let result = computeLayer1MatchScore(volunteerInput, outreachInput);
+  let result = computeMultiRoleMatchScore(volunteerInput, outreachInput, roles);
   let layer2Applied = false;
 
   try {
     const layer2 = await computeLayer2Equivalences(admin, [
       {
         key: applicant.id,
-        requiredSkills: outreachInput.required_skills ?? [],
+        requiredSkills:
+          roles.find((role) => role.id === result.bestRoleId)?.required_skills ??
+          outreachInput.required_skills ??
+          [],
         volunteerSkills: applicant.volunteer?.skill_tags ?? [],
       },
     ]);
     layer2Applied = layer2.applied;
     const equivalences = layer2.byKey.get(applicant.id);
     if (equivalences) {
-      result = computeLayer1MatchScore(volunteerInput, outreachInput, {
+      result = computeMultiRoleMatchScore(volunteerInput, outreachInput, roles, {
         skillEquivalences: equivalences,
       });
     }
@@ -519,22 +620,41 @@ async function rankFeed(caller: AuthedCaller, body: z.infer<typeof RankFeedBody>
     inputs.set(outreach.id as string, toOutreachInput(outreach));
   }
 
+  // Roles for every candidate, in ONE batched query, so the ranked feed stays
+  // a fixed number of round trips regardless of how many are multi-role.
+  const rolesByOutreach = await fetchRolesByOutreach(
+    admin,
+    outreaches.map((outreach) => outreach.id as string)
+  );
+
   // Layer 1 first, always -- the ranking that survives any Layer 2 failure.
-  const layer1Results = new Map<string, Layer1MatchResult>();
+  const layer1Results = new Map<string, Layer1MatchResult & { bestRoleId: string | null }>();
   for (const outreach of outreaches) {
     const id = outreach.id as string;
-    layer1Results.set(id, computeLayer1MatchScore(volunteer, inputs.get(id)!));
+    layer1Results.set(
+      id,
+      computeMultiRoleMatchScore(volunteer, inputs.get(id)!, rolesByOutreach.get(id) ?? [])
+    );
   }
 
   let layer2: Layer2Outcome = { byKey: new Map(), applied: false };
   try {
     layer2 = await computeLayer2Equivalences(
       admin,
-      outreaches.map((outreach) => ({
-        key: outreach.id as string,
-        requiredSkills: inputs.get(outreach.id as string)?.required_skills ?? [],
-        volunteerSkills: volunteer.skill_tags ?? [],
-      }))
+      outreaches.map((outreach) => {
+        const id = outreach.id as string;
+        const bestRoleId = layer1Results.get(id)?.bestRoleId;
+        return {
+          key: id,
+          // The winning role's own skills where it states them, so Gemini
+          // compares against what the volunteer would actually be doing.
+          requiredSkills:
+            (rolesByOutreach.get(id) ?? []).find((role) => role.id === bestRoleId)?.required_skills ??
+            inputs.get(id)?.required_skills ??
+            [],
+          volunteerSkills: volunteer.skill_tags ?? [],
+        };
+      })
     );
   } catch (err) {
     console.error("[match] Layer 2 failed, falling back to Layer 1:", err instanceof Error ? err.message : err);
@@ -545,10 +665,18 @@ async function rankFeed(caller: AuthedCaller, body: z.infer<typeof RankFeedBody>
     const id = outreach.id as string;
     const equivalences = layer2.byKey.get(id);
     const final = equivalences
-      ? computeLayer1MatchScore(volunteer, inputs.get(id)!, { skillEquivalences: equivalences })
+      ? computeMultiRoleMatchScore(volunteer, inputs.get(id)!, rolesByOutreach.get(id) ?? [], {
+          skillEquivalences: equivalences,
+        })
       : layer1Results.get(id)!;
 
-    return { outreachId: id, matchScore: final.total, breakdown: final, outreach };
+    return {
+      outreachId: id,
+      matchScore: final.total,
+      breakdown: final,
+      bestRoleId: "bestRoleId" in final ? final.bestRoleId : null,
+      outreach,
+    };
   });
 
   // No reliability multiplier here, deliberately. In this direction the
