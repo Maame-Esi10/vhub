@@ -1,5 +1,5 @@
 -- ============================================================
--- Ghana district renames — constants and stored values, one transaction.
+-- Ghana district renames — constants and stored values together.
 --
 -- WHY THIS IS A MIGRATION AND NOT A CONSTANT EDIT.
 --
@@ -16,53 +16,42 @@
 --      events in their own district — no error, no warning, just a worse
 --      match score forever.
 --
--- Both halves therefore happen together, in one transaction, or neither does.
+-- NO TEMPORARY TABLE. An earlier draft built one and failed in the Supabase
+-- SQL editor with `42P01: relation "district_renames" does not exist`. The
+-- editor pools connections, so a temp table created by one statement is not
+-- visible to the next — it is session-scoped and the next statement can land
+-- on a different backend. Every section below is therefore ONE self-contained
+-- statement with the rename list inlined as a CTE. A single statement is also
+-- implicitly atomic, which is exactly the guarantee this needs.
 --
--- SCOPE. Thirteen changes: one abolished assembly and twelve corrections
--- (status suffixes, spellings, a naming variant). Audited 2026-08-11 against
--- the official 261-MMDA list; see docs/REPORT_NOTES.md.
+-- Nothing is created, so there is no RLS prompt and NOTHING TO DROP AFTERWARDS.
 --
--- ORDER OF OPERATIONS. Run the SELECT in section 1 FIRST and read the counts.
--- If a row count is not what you expect, stop — do not run section 2.
+-- ORDER: run section 1, read the counts, then run section 2, then section 3.
 -- ============================================================
 
 
 -- ============================================================
--- 1. DRY RUN — how many rows does each rename touch?
---
--- Run this ON ITS OWN first. It writes nothing.
+-- SECTION 1 — DRY RUN. Writes nothing. Run this first.
 -- ============================================================
 
 with renames(old_name, new_name) as (
   values
-    -- Abolished 2018, split into Abuakwa North Municipal and Abuakwa South
-    -- Municipal (both already valid options). Anyone still holding this is
-    -- holding a district that no longer exists.
-    ('East Akim Municipal',          'Abuakwa South Municipal'),
-
-    -- Status suffix corrections.
-    ('Asante Akim North Municipal',  'Asante Akim North'),
-    ('Obuasi East',                  'Obuasi East Municipal'),
-    ('Assin North Municipal',        'Assin North'),
-    ('Jasikan',                      'Jasikan Municipal'),
-    ('Krachi West',                  'Krachi West Municipal'),
-
-    -- Spelling corrections.
-    ('Mfantseman Municipal',         'Mfantsiman Municipal'),
-    ('Bunkpurugu Nyakpanduri',       'Bunkpurugu Nyankpanduri'),
-
-    -- Naming-variant corrections (the official names drop the "Wassa" prefix
-    -- for Central and West, but keep it for Wassa Amenfi East).
-    ('Wassa Amenfi Central',         'Amenfi Central'),
-    ('Wassa Amenfi West',            'Amenfi West Municipal'),
-
-    -- Hyphenation, aligned to the official list.
-    ('Twifo Atti-Morkwa',            'Twifo Atti Morkwa'),
-    ('Yunyoo-Nasuan',                'Yunyoo Nasuan'),
-    ('Sawla-Tuna-Kalba',             'Sawla Tuna Kalba'),
-    ('Nadowli-Kaleo',                'Nadowli Kaleo'),
-    ('Prestea Huni-Valley Municipal','Prestea Huni Valley Municipal'),
-    ('Tarkwa-Nsuaem Municipal',      'Tarkwa Nsuaem Municipal')
+    ('East Akim Municipal',           'Abuakwa South Municipal'),
+    ('Asante Akim North Municipal',   'Asante Akim North'),
+    ('Obuasi East',                   'Obuasi East Municipal'),
+    ('Assin North Municipal',         'Assin North'),
+    ('Jasikan',                       'Jasikan Municipal'),
+    ('Krachi West',                   'Krachi West Municipal'),
+    ('Mfantseman Municipal',          'Mfantsiman Municipal'),
+    ('Bunkpurugu Nyakpanduri',        'Bunkpurugu Nyankpanduri'),
+    ('Wassa Amenfi Central',          'Amenfi Central'),
+    ('Wassa Amenfi West',             'Amenfi West Municipal'),
+    ('Twifo Atti-Morkwa',             'Twifo Atti Morkwa'),
+    ('Yunyoo-Nasuan',                 'Yunyoo Nasuan'),
+    ('Sawla-Tuna-Kalba',              'Sawla Tuna Kalba'),
+    ('Nadowli-Kaleo',                 'Nadowli Kaleo'),
+    ('Prestea Huni-Valley Municipal', 'Prestea Huni Valley Municipal'),
+    ('Tarkwa-Nsuaem Municipal',       'Tarkwa Nsuaem Municipal')
 )
 select
   r.old_name,
@@ -70,87 +59,106 @@ select
   (select count(*) from profiles   p where p.district = r.old_name) as profiles_affected,
   (select count(*) from outreaches o where o.district = r.old_name) as outreaches_affected
 from renames r
-where (select count(*) from profiles   p where p.district = r.old_name) > 0
-   or (select count(*) from outreaches o where o.district = r.old_name) > 0
-order by r.old_name;
+order by
+  (select count(*) from profiles   p where p.district = r.old_name) +
+  (select count(*) from outreaches o where o.district = r.old_name) desc,
+  r.old_name;
 
--- Expected on a small test dataset: zero or very few rows. Every rename with
--- no affected rows is a pure constants change and carries no risk at all.
-
-
--- ============================================================
--- 2. THE MIGRATION — run only after reading section 1's output.
---
--- Wrapped in an explicit transaction: a partial rename would leave some rows
--- pointing at a name the constants no longer list, which is precisely the
--- orphaning this migration exists to prevent.
--- ============================================================
-
-begin;
-
-create temporary table district_renames(old_name text primary key, new_name text not null)
-  on commit drop;
-
-insert into district_renames(old_name, new_name) values
-  ('East Akim Municipal',          'Abuakwa South Municipal'),
-  ('Asante Akim North Municipal',  'Asante Akim North'),
-  ('Obuasi East',                  'Obuasi East Municipal'),
-  ('Assin North Municipal',        'Assin North'),
-  ('Jasikan',                      'Jasikan Municipal'),
-  ('Krachi West',                  'Krachi West Municipal'),
-  ('Mfantseman Municipal',         'Mfantsiman Municipal'),
-  ('Bunkpurugu Nyakpanduri',       'Bunkpurugu Nyankpanduri'),
-  ('Wassa Amenfi Central',         'Amenfi Central'),
-  ('Wassa Amenfi West',            'Amenfi West Municipal'),
-  ('Twifo Atti-Morkwa',            'Twifo Atti Morkwa'),
-  ('Yunyoo-Nasuan',                'Yunyoo Nasuan'),
-  ('Sawla-Tuna-Kalba',             'Sawla Tuna Kalba'),
-  ('Nadowli-Kaleo',                'Nadowli Kaleo'),
-  ('Prestea Huni-Valley Municipal','Prestea Huni Valley Municipal'),
-  ('Tarkwa-Nsuaem Municipal',      'Tarkwa Nsuaem Municipal');
-
--- profiles.district is client-writable, so no grant work is needed; this runs
--- as the service role in the SQL editor regardless.
-update profiles p
-   set district = r.new_name
-  from district_renames r
- where p.district = r.old_name;
-
-update outreaches o
-   set district = r.new_name
-  from district_renames r
- where o.district = r.old_name;
-
--- Proof that nothing was left behind: this must return zero rows.
--- If it returns anything, the transaction is rolled back below.
-do $$
-declare
-  orphaned int;
-begin
-  select count(*) into orphaned
-    from (
-      select p.district from profiles p join district_renames r on p.district = r.old_name
-      union all
-      select o.district from outreaches o join district_renames r on o.district = r.old_name
-    ) leftovers;
-
-  if orphaned > 0 then
-    raise exception 'District rename left % row(s) on an old name — rolling back.', orphaned;
-  end if;
-end $$;
-
-commit;
+-- Every row with 0 and 0 is a pure constants change and carries no risk.
+-- Only rows with a non-zero count are actually rewritten by section 2.
 
 
 -- ============================================================
--- 3. AFTERWARDS
+-- SECTION 2 — THE RENAME. One statement, therefore atomic.
 --
--- constants/ghana-locations.ts must be updated in the SAME deployment: apply
--- the sixteen renames above, delete the now-unused 'East Akim Municipal'
--- entry, and the file drops from 262 entries to the official 261.
+-- Both UPDATEs are data-modifying CTEs of a single statement, so they commit
+-- together or not at all. They see the same snapshot and touch different
+-- tables, so they cannot interfere with each other.
+-- ============================================================
+
+with renames(old_name, new_name) as (
+  values
+    ('East Akim Municipal',           'Abuakwa South Municipal'),
+    ('Asante Akim North Municipal',   'Asante Akim North'),
+    ('Obuasi East',                   'Obuasi East Municipal'),
+    ('Assin North Municipal',         'Assin North'),
+    ('Jasikan',                       'Jasikan Municipal'),
+    ('Krachi West',                   'Krachi West Municipal'),
+    ('Mfantseman Municipal',          'Mfantsiman Municipal'),
+    ('Bunkpurugu Nyakpanduri',        'Bunkpurugu Nyankpanduri'),
+    ('Wassa Amenfi Central',          'Amenfi Central'),
+    ('Wassa Amenfi West',             'Amenfi West Municipal'),
+    ('Twifo Atti-Morkwa',             'Twifo Atti Morkwa'),
+    ('Yunyoo-Nasuan',                 'Yunyoo Nasuan'),
+    ('Sawla-Tuna-Kalba',              'Sawla Tuna Kalba'),
+    ('Nadowli-Kaleo',                 'Nadowli Kaleo'),
+    ('Prestea Huni-Valley Municipal', 'Prestea Huni Valley Municipal'),
+    ('Tarkwa-Nsuaem Municipal',       'Tarkwa Nsuaem Municipal')
+),
+updated_profiles as (
+  update profiles p
+     set district = r.new_name
+    from renames r
+   where p.district = r.old_name
+  returning p.id
+),
+updated_outreaches as (
+  update outreaches o
+     set district = r.new_name
+    from renames r
+   where o.district = r.old_name
+  returning o.id
+)
+select
+  (select count(*) from updated_profiles)   as profiles_updated,
+  (select count(*) from updated_outreaches) as outreaches_updated;
+
+
+-- ============================================================
+-- SECTION 3 — PROOF. Must return ZERO rows.
 --
--- Ship the constants change and this migration together. Constants first
--- leaves stored values orphaned; migration first leaves rows pointing at names
--- the picker does not yet offer. Neither gap is visible in the UI, which is
--- exactly why they must not be separated.
+-- Any row here is a stored district still on an abolished or misspelled name,
+-- which is the orphaning this migration exists to prevent.
+-- ============================================================
+
+with renames(old_name) as (
+  values
+    ('East Akim Municipal'),
+    ('Asante Akim North Municipal'),
+    ('Obuasi East'),
+    ('Assin North Municipal'),
+    ('Jasikan'),
+    ('Krachi West'),
+    ('Mfantseman Municipal'),
+    ('Bunkpurugu Nyakpanduri'),
+    ('Wassa Amenfi Central'),
+    ('Wassa Amenfi West'),
+    ('Twifo Atti-Morkwa'),
+    ('Yunyoo-Nasuan'),
+    ('Sawla-Tuna-Kalba'),
+    ('Nadowli-Kaleo'),
+    ('Prestea Huni-Valley Municipal'),
+    ('Tarkwa-Nsuaem Municipal')
+)
+select 'profiles' as source_table, p.district, count(*) as rows_left
+  from profiles p join renames r on p.district = r.old_name
+ group by p.district
+union all
+select 'outreaches', o.district, count(*)
+  from outreaches o join renames r on o.district = r.old_name
+ group by o.district;
+
+
+-- ============================================================
+-- AFTERWARDS
+--
+-- Nothing to drop — no objects were created.
+--
+-- constants/ghana-locations.ts is updated in the SAME push as this migration
+-- runs: the sixteen renames applied, and the abolished 'East Akim Municipal'
+-- entry deleted, taking the file from 262 entries to the official 261.
+--
+-- Constants first would leave stored values orphaned; migration first would
+-- leave rows pointing at names the picker does not yet offer. Neither gap is
+-- visible in the UI, which is exactly why they must not be separated.
 -- ============================================================

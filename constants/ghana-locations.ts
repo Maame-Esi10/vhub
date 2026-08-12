@@ -4,24 +4,26 @@
 // Statistical Service / Local Government Ministry before relying on this
 // list for anything compliance-sensitive.
 //
-// AUDITED 2026-08-11 against the official 261-MMDA breakdown. Two genuinely
-// absent assemblies were added (Korle Klottey Municipal, Komenda Edina Eguafo
-// Abirem Municipal), taking the list to 262 entries.
+// AUDITED 2026-08-11 against the official 261-MMDA breakdown, and now matching
+// it exactly at 261 entries across 16 regions.
 //
-// It is 262 rather than 261 because ONE OUTDATED ENTRY IS KNOWINGLY LEFT IN
-// PLACE: 'East Akim Municipal' (Eastern) was abolished in June 2018 and split
-// into Abuakwa North Municipal and Abuakwa South Municipal, both of which are
-// also listed here. It is retained pending an owner decision because these
-// strings are STORED VALUES — profiles.district and outreaches.district hold
-// them, and the matcher's location component compares them by exact string.
-// Deleting the name would orphan any row that already holds it: the district
-// picker would render blank and every such row would score 0 on location
-// instead of 1.0. Removal needs a data migration, not a constant edit.
+// Two genuinely absent assemblies were added (Korle Klottey Municipal, Komenda
+// Edina Eguafo Abirem Municipal). One abolished entry was removed: 'East Akim
+// Municipal' (Eastern) was split in June 2018 into Abuakwa North Municipal and
+// Abuakwa South Municipal, both already listed. Sixteen names were corrected
+// for status suffix, spelling or hyphenation.
 //
-// The same applies to the ~12 spelling and status-suffix differences the audit
-// found (e.g. 'Mfantseman' vs 'Mfantsiman', 'Jasikan' vs 'Jasikan Municipal').
-// They are documented in docs/REPORT_NOTES.md and deliberately NOT changed
-// here for the same reason. Adding a name is safe; renaming one is not.
+// THE REMOVAL AND THE RENAMES SHIP WITH A DATA MIGRATION, NOT ALONE.
+// These strings are STORED VALUES — profiles.district and outreaches.district
+// hold them verbatim, and the matcher's location component compares them by
+// exact string equality. Changing a name here without rewriting the stored
+// rows makes the district picker render blank for anyone holding the old value
+// AND silently costs them the full 20 location points against events in their
+// own district, with no error and no visible symptom.
+//
+// The matching migration is supabase/migrations/20260811_district_renames.sql
+// and MUST be run against the database in the same deployment as this file.
+// Adding a name is safe on its own; renaming or removing one is never.
 
 export interface GhanaRegion {
   name: string;
@@ -59,7 +61,7 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       'Amansie South',
       'Amansie West',
       'Asante Akim Central Municipal',
-      'Asante Akim North Municipal',
+      'Asante Akim North',
       'Asante Akim South Municipal',
       'Asokore Mampong Municipal',
       'Asokwa Municipal',
@@ -77,7 +79,7 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       'Kwabre East Municipal',
       'Kwadaso Municipal',
       'Mampong Municipal',
-      'Obuasi East',
+      'Obuasi East Municipal',
       'Obuasi Municipal',
       'Offinso Municipal',
       'Offinso North',
@@ -136,7 +138,7 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       'Ajumako Enyan Essiam',
       'Asikuma Odoben Brakwa',
       'Assin Central Municipal',
-      'Assin North Municipal',
+      'Assin North',
       'Assin South',
       'Awutu Senya East Municipal',
       'Awutu Senya West',
@@ -149,8 +151,8 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       // Added 2026-08-11: absent from the original compilation. KEEA covers
       // Elmina and Komenda — a long-established assembly, not a new one.
       'Komenda Edina Eguafo Abirem Municipal',
-      'Mfantseman Municipal',
-      'Twifo Atti-Morkwa',
+      'Mfantsiman Municipal',
+      'Twifo Atti Morkwa',
       'Twifo Hemang Lower Denkyira',
       'Upper Denkyira East Municipal',
       'Upper Denkyira West',
@@ -175,7 +177,6 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       'Birim North',
       'Birim South',
       'Denkyembour',
-      'East Akim Municipal',
       'Fanteakwa North',
       'Fanteakwa South',
       'Kwaebibirem Municipal',
@@ -238,12 +239,12 @@ export const GHANA_REGIONS: GhanaRegion[] = [
     name: 'North East',
     capital: 'Nalerigu',
     districts: [
-      'Bunkpurugu Nyakpanduri',
+      'Bunkpurugu Nyankpanduri',
       'Chereponi',
       'East Mamprusi Municipal',
       'Mamprugu Moagduri',
       'West Mamprusi Municipal',
-      'Yunyoo-Nasuan',
+      'Yunyoo Nasuan',
     ],
   },
   {
@@ -274,11 +275,11 @@ export const GHANA_REGIONS: GhanaRegion[] = [
     districts: [
       'Biakoye',
       'Guan',
-      'Jasikan',
+      'Jasikan Municipal',
       'Kadjebi',
       'Krachi East Municipal',
       'Krachi Nchumuru',
-      'Krachi West',
+      'Krachi West Municipal',
       'Nkwanta North',
       'Nkwanta South Municipal',
     ],
@@ -292,7 +293,7 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       'East Gonja Municipal',
       'North East Gonja',
       'North Gonja',
-      'Sawla-Tuna-Kalba',
+      'Sawla Tuna Kalba',
       'West Gonja Municipal',
     ],
   },
@@ -325,7 +326,7 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       'Jirapa Municipal',
       'Lambussie Karni',
       'Lawra Municipal',
-      'Nadowli-Kaleo',
+      'Nadowli Kaleo',
       'Nandom Municipal',
       'Sissala East Municipal',
       'Sissala West',
@@ -368,13 +369,13 @@ export const GHANA_REGIONS: GhanaRegion[] = [
       'Jomoro Municipal',
       'Mpohor',
       'Nzema East Municipal',
-      'Prestea Huni-Valley Municipal',
+      'Prestea Huni Valley Municipal',
       'Sekondi-Takoradi Metropolitan',
       'Shama',
-      'Tarkwa-Nsuaem Municipal',
-      'Wassa Amenfi Central',
+      'Tarkwa Nsuaem Municipal',
+      'Amenfi Central',
       'Wassa Amenfi East Municipal',
-      'Wassa Amenfi West',
+      'Amenfi West Municipal',
       'Wassa East',
     ],
   },
