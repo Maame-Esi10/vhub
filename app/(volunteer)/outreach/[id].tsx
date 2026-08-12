@@ -12,6 +12,7 @@ import {
   ListSkeleton,
   formatEventDate,
   formatEventTimeRange,
+  isUpcomingEvent,
 } from '@/components/ui';
 import { FullApplicationSheet, MatchScoreBadge, WithdrawSheet } from '@/components/volunteer';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -120,11 +121,26 @@ export default function OutreachDetail() {
   const slotsLeft = Math.max(0, outreach.slots_total - outreach.slots_filled);
   const isFull = slotsLeft === 0;
   const alreadyApplied = application !== null && application.status !== 'cancelled';
+  /*
+    Withdrawal is only meaningful while the event is genuinely ahead. This
+    screen previously checked the application's STATUS alone and never looked
+    at the date, so "Withdraw application" stayed on an event that had already
+    happened — withdrawing from a past event does nothing, and the sheet it
+    opened then claimed the event "starts within 24 hours".
+
+    `isUpcomingEvent`, not `hasEventEnded`: once an event has STARTED the
+    volunteer is either there or absent, and that is the attendance and review
+    path's business, not cancellation's.
+
+    The applications-list card (components/volunteer/VolunteerApplicationCard)
+    already gated on the same condition; this screen was the way in that did not.
+  */
   const canWithdraw =
     application !== null &&
     (application.status === 'pending' ||
       application.status === 'accepted' ||
-      application.status === 'waitlisted');
+      application.status === 'waitlisted') &&
+    isUpcomingEvent(outreach.date, outreach.start_time);
   const organisation = outreach.organisation;
 
   return (

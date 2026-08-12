@@ -64,7 +64,12 @@ describe('both wire formats parse identically', () => {
     // midnight, so an event at 23:00 looked like it had started 23 hours ago.
     const withSeconds = msUntilEvent('2099-01-01', '23:00:00');
     const withoutSeconds = msUntilEvent('2099-01-01', '23:00');
-    expect(withSeconds).toBe(withoutSeconds);
+    // Compared with a tolerance, not for exact equality: each call reads
+    // Date.now() independently, so two invocations that straddle a millisecond
+    // boundary differ by 1 and the strict assertion failed at random. The
+    // property under test is that both formats parse to the same CLOCK TIME,
+    // which a 1ms wall-clock drift does not affect.
+    expect(Math.abs(withSeconds! - withoutSeconds!)).toBeLessThan(1000);
 
     const atMidnight = msUntilEvent('2099-01-01', '00:00:00');
     expect(withSeconds).toBeGreaterThan(atMidnight!);
@@ -74,6 +79,36 @@ describe('both wire formats parse identically', () => {
     // A far-future event is never a late cancellation, in either format.
     expect(isLateCancellationWindow('2099-01-01', '09:00:00')).toBe(false);
     expect(isLateCancellationWindow('2099-01-01', '09:00')).toBe(false);
+  });
+
+  /*
+    Regression. The window was written as `remaining <= 24h` with no lower
+    bound, which is trivially true for every past event, so the withdrawal
+    screen told a volunteer that an event days gone "starts within 24 hours,
+    so withdrawing now counts as a late cancellation". Reported 2026-08-12
+    against an event dated 2026-08-07.
+  */
+  it('isLateCancellationWindow is FALSE for an event already in the past', () => {
+    expect(isLateCancellationWindow('2020-01-01', '09:00:00')).toBe(false);
+    expect(isLateCancellationWindow('2020-01-01', null)).toBe(false);
+  });
+
+  it('isLateCancellationWindow is a window with two edges, not a half-line', () => {
+    const inTwelveHours = new Date(Date.now() + 12 * 60 * 60 * 1000);
+    const inThreeDays = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+
+    const asDate = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const asTime = (d: Date) =>
+      `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+    // Inside the window: soon, but not yet started.
+    expect(isLateCancellationWindow(asDate(inTwelveHours), asTime(inTwelveHours))).toBe(true);
+    // Before the window: too far ahead.
+    expect(isLateCancellationWindow(asDate(inThreeDays), asTime(inThreeDays))).toBe(false);
+    // Past the window: already started, which is a no-show, not a cancellation.
+    expect(isLateCancellationWindow(asDate(twelveHoursAgo), asTime(twelveHoursAgo))).toBe(false);
   });
 });
 

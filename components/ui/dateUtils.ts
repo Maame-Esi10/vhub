@@ -133,11 +133,25 @@ export function msUntilEvent(date: string, startTime: string | null): number | n
   return start.getTime() - Date.now();
 }
 
-/** True when the event starts within 24 hours (or has already started). */
+/**
+ * True only inside the REAL late-cancellation window: the event starts within
+ * the next 24 hours and has not started yet.
+ *
+ * The bound at zero is the fix for a reported bug. This was written as
+ * `remaining <= 24h` with no lower bound, which is trivially true for any
+ * event in the PAST — `remaining` is negative — so the withdrawal screen told
+ * a volunteer that an event five days gone "starts within 24 hours, so
+ * withdrawing now counts as a late cancellation". A window needs two edges.
+ *
+ * Cancelling after the start is deliberately NOT this window. That is not a
+ * late cancellation, it is a no-show, and it belongs to the attendance and
+ * review path (-15) rather than to cancellation (-8). The UI now prevents it
+ * entirely — see `isUpcomingEvent` in the withdraw gates.
+ */
 export function isLateCancellationWindow(date: string, startTime: string | null): boolean {
   const remaining = msUntilEvent(date, startTime);
   if (remaining === null) return false;
-  return remaining <= 24 * 60 * 60 * 1000;
+  return remaining > 0 && remaining <= 24 * 60 * 60 * 1000;
 }
 
 /** True when the event has not started yet — used to pick "upcoming" events. */
