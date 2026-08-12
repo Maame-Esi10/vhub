@@ -9,7 +9,6 @@ import {
   ErrorState,
   FilterChips,
   ListSkeleton,
-  isUpcomingEvent,
 } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { ApplicantCard, OutreachPicker, RosterSummaryCard } from '@/components/organisation';
@@ -292,6 +291,20 @@ export default function Applicants() {
           */
           ListHeaderComponent={
             <View style={styles.listHeader}>
+              {/* Back to the event itself — its details, check-in code and attendance. */}
+              {selectedOutreach ? (
+                <Pressable
+                  onPress={() => router.push(`/(organisation)/outreach/${selectedOutreach.id}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Manage ${selectedOutreach.title}`}
+                  style={({ pressed }) => [styles.manageRow, pressed && styles.manageRowPressed]}
+                >
+                  <MaterialCommunityIcons name="calendar-check-outline" size={18} color={colors.primary} />
+                  <Text style={styles.manageText}>Manage this event</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textSecondary} />
+                </Pressable>
+              ) : null}
+
               {/*
                 Draft outreaches are excluded: an unpublished event has no
                 applicants, so a roster bar would only ever read "0 of N".
@@ -321,51 +334,17 @@ export default function Applicants() {
               ) : null}
 
               {/*
-                PROPOSED FOR REMOVAL, pending owner approval on where they go.
-                Check-in and attendance are event-DAY actions and this screen is
-                for choosing who gets a place — a different job at a different
-                moment. They are unpinned here so they no longer crowd the
-                header, and will move to the outreach's own management screen
-                once the destination is agreed.
-              */}
-              {selectedOutreach && selectedOutreach.status !== 'draft' ? (
-                <Pressable
-                  onPress={() => router.push(`/(organisation)/checkin/${selectedOutreach.id}`)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Show check-in code for ${selectedOutreach.title}`}
-                  style={({ pressed }) => [styles.checkinRow, pressed && styles.checkinRowPressed]}
-                >
-                  <MaterialCommunityIcons name="qrcode" size={20} color={colors.primary} />
-                  <View style={styles.checkinText}>
-                    <Text style={styles.checkinTitle}>Show check-in code</Text>
-                    <Text style={styles.checkinMeta}>Display this at the venue for volunteers to scan.</Text>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-                </Pressable>
-              ) : null}
+                Check-in and Mark attendance USED to sit here. They are
+                event-DAY actions and this screen is for deciding who gets a
+                place — a different job at a different moment — so they now live
+                on the outreach's own management screen,
+                app/(organisation)/outreach/[id].tsx, which the dashboard card
+                opens. That is their permanent home; do not move them back here
+                for want of somewhere to put them.
 
-              {/*
-                Only once the event has actually started. Before that there is
-                nothing to mark, and offering it early invites an organiser to
-                "confirm" a roster for an event nobody has attended yet.
+                A link back to that screen sits above, so an organiser who came
+                straight to the applicant list is one tap from the event.
               */}
-              {selectedOutreach &&
-              selectedOutreach.status !== 'draft' &&
-              !isUpcomingEvent(selectedOutreach.date, selectedOutreach.start_time) ? (
-                <Pressable
-                  onPress={() => router.push(`/(organisation)/attendance/${selectedOutreach.id}`)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Mark attendance for ${selectedOutreach.title}`}
-                  style={({ pressed }) => [styles.checkinRow, pressed && styles.checkinRowPressed]}
-                >
-                  <MaterialCommunityIcons name="clipboard-check-outline" size={20} color={colors.primary} />
-                  <View style={styles.checkinText}>
-                    <Text style={styles.checkinTitle}>Mark attendance</Text>
-                    <Text style={styles.checkinMeta}>Everyone counts as present — flag only the no-shows.</Text>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-                </Pressable>
-              ) : null}
 
               {/* No wrapper: the listHeader gap owns the space on both sides. */}
               <FilterChips options={FILTERS} value={statusFilter} onChange={setStatusFilter} />
@@ -446,34 +425,25 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
   },
-  checkinRow: {
+  manageRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    minHeight: 64,
-    paddingVertical: spacing.md,
+    gap: spacing.sm,
+    minHeight: 48,
     paddingHorizontal: spacing.base,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceSubtle,
   },
-  checkinRowPressed: {
-    opacity: 0.85,
-  },
-  checkinText: {
+  manageText: {
     flex: 1,
-  },
-  checkinTitle: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textPrimary,
   },
-  checkinMeta: {
-    fontFamily: fontFamily.regular,
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
+  manageRowPressed: {
+    opacity: 0.85,
   },
   batchOutcome: {
     fontFamily: fontFamily.medium,

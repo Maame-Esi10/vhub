@@ -55,8 +55,12 @@ export default function Dashboard() {
     [outreaches, statusFilter]
   );
 
-  function goToApplicants(outreachId: string) {
-    router.push({ pathname: '/(organisation)/applicants', params: { outreachId } });
+  // The card now opens the event's own management screen rather than jumping
+  // straight to its applicants. Applicants are one thing an organiser does with
+  // an event, alongside the check-in code and attendance; sending the card
+  // directly there was what left those two actions with nowhere to live.
+  function goToOutreach(outreachId: string) {
+    router.push(`/(organisation)/outreach/${outreachId}`);
   }
 
   function handleQuickAction(outreach: OutreachWithCounts) {
@@ -151,7 +155,7 @@ export default function Dashboard() {
         renderItem={({ item }) => (
           <OutreachCard
             outreach={item}
-            onPress={() => goToApplicants(item.id)}
+            onPress={() => goToOutreach(item.id)}
             quickAction={quickActionFor(item)}
             quickActionPending={updateStatus.isPending && updateStatus.variables?.outreachId === item.id}
           />
