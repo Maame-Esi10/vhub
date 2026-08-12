@@ -687,6 +687,69 @@ and OpenStreetMap location work described above.
 
 ---
 
+## `not_selected` — every applicant gets an answer (2026-08-11)
+
+**Problem.** Applicants past the waitlist cap are deliberately left `pending`
+rather than rejected. That is honest while the event is still ahead — places
+genuinely free up through withdrawals and waitlist promotion. It stops being
+honest the moment the outreach closes or its date passes: nothing more can
+happen, and the volunteer is left in permanent limbo, never told anything.
+
+**Decision.** A new application status, `not_selected`, applied to everyone
+still `pending` or `waitlisted` when an outreach ends.
+
+**Why not reuse `rejected`.** `rejected` means an organisation looked at this
+person and declined them. Being crowded out of a full event is not that.
+Labelling it so would show "Rejected" on the volunteer's own screen for
+something that was never a judgement about them — and it would corrupt the data
+permanently: any future acceptance-rate or selectivity measure that counted
+these as rejections would misdescribe both the volunteer and the organisation.
+
+**Where it fires: both triggers, one writer.** The organisation closing the
+outreach, and a daily-cron sweep for events whose date passed while still open.
+Both call the same `resolve_unsuccessful_applications()`, so an application
+cannot be resolved twice and the wording and no-penalty guarantee live in one
+place. `outreaches_needing_resolution()` is deliberately a read-only query that
+the cron consumes, rather than a second writer.
+
+**No V-Score effect, by construction.** `not_selected` is not an event outcome.
+It never reaches `/api/vscore` and no penalty applies. Not being selected is not
+a failure and the reputation system must not treat it as one.
+
+**Wording:** "This event filled up before a place could be offered to you." It
+names the cause, not the person.
+
+**Defence.** "Applications resolve to a terminal state when the event ends, so
+no volunteer is left indefinitely pending. The state is distinct from rejection
+because being crowded out of a full event is not a judgement about the
+applicant — conflating the two would both mislead the volunteer and corrupt any
+later measure of organisational selectivity."
+
+## The organisation's outreach management screen (2026-08-11)
+
+**Problem.** "Show check-in code" and "Mark attendance" had been living on the
+Applicant Vetting screen. That screen is for deciding who gets a place; those
+are event-DAY actions. A different job at a different moment.
+
+They were there because they had nowhere else to be: the organisation had **no
+per-outreach screen at all**. The dashboard card jumped straight to the
+applicant list, so any per-event action had to be wedged into whichever screen
+happened to be scoped to one outreach.
+
+**Decision.** Build the missing screen — `app/(organisation)/outreach/[id].tsx`
+— as the event's home: details, roster progress and tallies, the confirmed
+volunteers, a link through to Applicants, and the two event-day actions. The
+dashboard card opens it; Applicant Vetting links back to it.
+
+**The general principle.** When a recurring action has no correct home, the
+answer is to build the home, not to keep relocating the action. Two buttons
+moving between screens across successive rounds of feedback was the symptom of
+a missing screen, not of bad placement.
+
+**Editing deferred, deliberately** — see the note in the multi-role plan: the
+Create Outreach wizard's step 2 is being rewritten as a role builder, and the
+edit path must share that component or be thrown away and rebuilt within days.
+
 ## The Firebase rule, corrected — FCM is a transport, not a backend (2026-08-11)
 
 **The rule as written was wrong**, and wrong in a way that would have cost time
