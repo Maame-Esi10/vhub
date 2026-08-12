@@ -1,8 +1,18 @@
 -- ============================================================
 -- Multi-day outreaches — days, commitments, and per-day attendance.
 --
--- NOT YET RUN. Review before executing. Land this AFTER the multi-role
--- screens, so the two slot models are not both in flight at once.
+-- NOT YET RUN. Land this AFTER the multi-role screens are device-tested, so
+-- the two slot models are not both in flight at once.
+--
+-- RUN IT AS ONE PASTE. The whole file is a single transaction — it contains no
+-- transaction control of its own, so the Supabase editor's own transaction
+-- wraps everything and the guard in section 4 aborts the lot if the backfill
+-- is incomplete. Splitting it would BREAK that: sections 2 and 4 both read
+-- rows that section 1 inserts, so running them separately would commit a
+-- half-migrated schema if anything failed later.
+--
+-- It is also idempotent — every create is `if not exists` / `or replace`, and
+-- both backfills are `on conflict do nothing` — so a re-run is safe.
 --
 -- THE MODEL. A volunteer commits to SPECIFIC DAYS when they apply, and is
 -- measured only against those days. A student who commits to 4 Saturdays and
@@ -198,7 +208,19 @@ create policy application_days_write_own on application_days
 -- uniqueness that protects this table.
 -- ============================================================
 
-begin;
+-- NO EXPLICIT `begin;` HERE, DELIBERATELY.
+--
+-- The Supabase SQL editor already runs a submitted script as ONE transaction.
+-- An inner `begin` warns that a transaction is already in progress, and the
+-- matching `commit` then closes the EDITOR'S transaction early — committing
+-- sections 1-3 regardless of whether section 4 succeeds, which is exactly the
+-- all-or-nothing property the guard below exists to provide. Same lesson as
+-- the temp table in the district migration: do not fight the editor's own
+-- transaction handling.
+--
+-- With no transaction control of its own, the whole file is one atomic unit:
+-- the `raise exception` below aborts EVERYTHING, including the tables created
+-- in sections 1 and 2.
 
 alter table attendance
   add column if not exists outreach_day_id uuid references outreach_days(id) on delete cascade;
@@ -225,14 +247,51 @@ end $$;
 
 alter table attendance alter column outreach_day_id set not null;
 
-alter table attendance drop constraint if exists attendance_outreach_id_volunteer_id_key;
+-- ------------------------------------------------------------
+-- Drop the OLD two-column unique constraint by DISCOVERING its name.
+--
+-- `drop constraint if exists attendance_outreach_id_volunteer_id_key` was the
+-- first version and is quietly dangerous: that name is Postgres's default for
+-- an inline `unique (outreach_id, volunteer_id)`, but if the constraint was
+-- ever created with an explicit name the `if exists` turns a miss into a
+-- SILENT no-op. The old constraint would survive, the new three-column one
+-- would be added alongside it, and the two-column rule would then reject the
+-- second day's attendance row for the same volunteer — the precise bug this
+-- migration exists to remove, reintroduced invisibly.
+--
+-- Looked up by its COLUMNS instead, which cannot drift.
+-- ------------------------------------------------------------
+do $$
+declare
+  old_constraint text;
+begin
+  select con.conname into old_constraint
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+   where nsp.nspname = 'public'
+     and rel.relname = 'attendance'
+     and con.contype = 'u'
+     and (
+       select array_agg(att.attname order by att.attname)
+         from unnest(con.conkey) as k(attnum)
+         join pg_attribute att on att.attrelid = con.conrelid and att.attnum = k.attnum
+     ) = array['outreach_id', 'volunteer_id']
+   limit 1;
+
+  if old_constraint is not null then
+    execute format('alter table attendance drop constraint %I', old_constraint);
+    raise notice 'Dropped old attendance constraint %', old_constraint;
+  end if;
+end $$;
+
+alter table attendance
+  drop constraint if exists attendance_unique_day;
 
 alter table attendance
   add constraint attendance_unique_day unique (outreach_id, volunteer_id, outreach_day_id);
 
 create index if not exists attendance_outreach_day_id_idx on attendance(outreach_day_id);
-
-commit;
 
 
 -- ============================================================
