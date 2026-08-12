@@ -30,6 +30,7 @@ const STATUS_MESSAGE: Record<ApplicationStatus, string> = {
   accepted: "You're in. This event is on your schedule.",
   rejected: 'You were not selected for this outreach.',
   waitlisted: "You're on the waitlist — the organisation will be in touch if a slot frees up.",
+  not_selected: 'This event filled up before a place could be offered to you.',
   cancelled: 'You withdrew from this outreach.',
 };
 

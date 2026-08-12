@@ -406,11 +406,27 @@ async function fetchFeedCandidates(
   body: z.infer<typeof RankFeedBody>,
   regions: readonly string[] | null
 ) {
-  let query = admin.from("outreaches").select(FEED_OUTREACH_SELECT).eq("status", "open");
+  // The date bound is load-bearing here in a way it is not on the client.
+  // Candidates are ordered by date ASCENDING and then LIMITED, so without it
+  // every past outreach sorted to the TOP and consumed the candidate budget
+  // before a single upcoming event was considered — a feed could be filled
+  // entirely with events that had already happened. `status = 'open'` did not
+  // exclude them because nothing closed an outreach when its date passed.
+  //
+  // `gte`, not `gt` — an event happening TODAY is still happening. Ghana is
+  // UTC+0 year-round, so the server's UTC date matches the event's local date.
+  const today = new Date().toISOString().slice(0, 10);
+
+  let query = admin
+    .from("outreaches")
+    .select(FEED_OUTREACH_SELECT)
+    .eq("status", "open")
+    .gte("date", today);
   if (body.region) query = query.eq("region", body.region);
   else if (regions && regions.length > 0) query = query.in("region", regions as string[]);
   if (body.roleType) query = query.eq("role_type", body.roleType);
 
+  // Soonest first, which is now genuinely soonest rather than longest-ago.
   const { data, error } = await query
     .order("date", { ascending: true })
     .limit(body.limit ?? FEED_DEFAULT_LIMIT);

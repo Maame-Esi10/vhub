@@ -48,6 +48,16 @@ export type ApplicationStatus =
   | "accepted"
   | "rejected"
   | "waitlisted"
+  /**
+   * Terminal. Applied when an outreach ends with this application still
+   * pending or waitlisted — the event filled up or finished before a place
+   * could be offered.
+   *
+   * DISTINCT FROM `rejected` on purpose. `rejected` means an organisation
+   * looked at this person and declined them; being crowded out of a full event
+   * is not that. Never carries a V-Score effect.
+   */
+  | "not_selected"
   | "cancelled";
 
 /** Base identity. PK = auth.users.id. */

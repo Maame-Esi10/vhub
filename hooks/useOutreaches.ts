@@ -42,6 +42,7 @@ function emptyApplicantCounts(): ApplicantCounts {
     accepted: 0,
     rejected: 0,
     waitlisted: 0,
+    not_selected: 0,
     cancelled: 0,
     total: 0,
   };
@@ -192,10 +193,21 @@ export function useOpenOutreaches(filters: FeedFilters) {
 
 /** The raw, unranked feed query. Shared by `useOpenOutreaches` and `useRankedFeed`'s fallback. */
 async function fetchOpenOutreaches(filters: FeedFilters): Promise<OutreachWithOrganisation[]> {
+  // `status = 'open'` is not on its own enough to mean "still happening".
+  // Nothing moved an outreach out of `open` when its date passed, so past
+  // events sat in the feed indefinitely and could still be applied to. A daily
+  // lifecycle pass now closes them, but the date bound stays here regardless:
+  // relying on a scheduled job to keep a query correct is fragile, and this
+  // costs one predicate.
+  //
+  // `gte`, not `gt` — an event happening TODAY is still happening.
+  const today = new Date().toISOString().slice(0, 10);
+
   let query = supabase
     .from('outreaches')
     .select(OUTREACH_WITH_ORGANISATION_SELECT)
-    .eq('status', 'open');
+    .eq('status', 'open')
+    .gte('date', today);
 
   if (filters.region) {
     query = query.eq('region', filters.region);

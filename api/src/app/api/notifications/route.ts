@@ -6,6 +6,7 @@ import { notifyUsers } from "../../../server/notify";
 import { assertCronSecret, sendEventReminders } from "../../../server/eventReminders";
 import { sendCheckinReminders } from "../../../server/checkinReminders";
 import { escalateUnderSubscribedOutreaches } from "../../../server/underSubscription";
+import { closeAndResolvePastOutreaches } from "../../../server/outreachLifecycle";
 
 export const runtime = "nodejs";
 
@@ -77,12 +78,22 @@ const EscalateUnderSubscribedAction = z.object({
   action: z.literal("escalate-under-subscribed"),
 });
 
+/**
+ * Closes outreaches whose date has passed and resolves their unanswered
+ * applications. Cron-secret protected like the passes above — it writes other
+ * people's applications and notifies them. Idempotent.
+ */
+const CloseAndResolveAction = z.object({
+  action: z.literal("close-past-outreaches"),
+});
+
 const NotificationsRequestBody = z.discriminatedUnion("action", [
   RegisterAction,
   TestDispatchAction,
   SendEventRemindersAction,
   SendCheckinRemindersAction,
   EscalateUnderSubscribedAction,
+  CloseAndResolveAction,
 ]);
 
 export async function POST(req: Request): Promise<Response> {
@@ -105,6 +116,11 @@ export async function POST(req: Request): Promise<Response> {
     if (body.action === "escalate-under-subscribed") {
       assertCronSecret(req);
       return Response.json(await escalateUnderSubscribedOutreaches());
+    }
+
+    if (body.action === "close-past-outreaches") {
+      assertCronSecret(req);
+      return Response.json(await closeAndResolvePastOutreaches());
     }
 
     // "register" and "test-dispatch" are ordinary user actions.

@@ -30,6 +30,7 @@ const GROUP_LABEL: Record<ApplicationStatus, string> = {
   accepted: 'Accepted',
   waitlisted: 'Waitlisted',
   rejected: 'Not selected',
+  not_selected: 'Not selected',
   cancelled: 'Withdrawn',
 };
 

@@ -11,6 +11,7 @@ const STATUS_TONE: Record<ApplicationStatus, BadgeTone> = {
   accepted: 'success',
   rejected: 'danger',
   waitlisted: 'primary',
+  not_selected: 'neutral',
   cancelled: 'neutral',
 };
 
@@ -19,6 +20,7 @@ const STATUS_LABEL: Record<ApplicationStatus, string> = {
   accepted: 'Accepted',
   rejected: 'Not selected',
   waitlisted: 'Waitlisted',
+  not_selected: 'Not selected',
   cancelled: 'Withdrawn',
 };
 
