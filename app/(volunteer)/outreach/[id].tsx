@@ -14,13 +14,14 @@ import {
   formatEventTimeRange,
   isUpcomingEvent,
 } from '@/components/ui';
-import { FullApplicationSheet, MatchScoreBadge, WithdrawSheet } from '@/components/volunteer';
+import { FullApplicationSheet, MatchScoreBadge, RolePicker, WithdrawSheet } from '@/components/volunteer';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
   useCancelApplication,
   useCreateApplication,
   useMyApplicationForOutreach,
   useOutreach,
+  useOutreachRoles,
 } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
@@ -51,6 +52,13 @@ export default function OutreachDetail() {
   const [fullFormVisible, setFullFormVisible] = useState(false);
   const [withdrawVisible, setWithdrawVisible] = useState(false);
   const [verifyNotice, setVerifyNotice] = useState(false);
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+
+  // Empty means single-role mode — the same rule the database uses.
+  const rolesQuery = useOutreachRoles(outreachId);
+  const roles = rolesQuery.data ?? [];
+  const usesRoles = roles.length > 0;
+  const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? null;
 
   const outreach = outreachQuery.data;
   const application = myApplicationQuery.data ?? null;
@@ -61,7 +69,15 @@ export default function OutreachDetail() {
   // application to a clinical outreach. applications_insert_own enforces this
   // server-side too — this branch is what turns that refusal into an
   // explanation and a way forward.
-  const blockedByVerification = isClinical && !isVerified;
+  //
+  // On a multi-role outreach the gate reads the ROLE the volunteer picked, not
+  // the outreach. `outreaches.role_type` only summarises to 'clinical' if ANY
+  // role is, so gating on it would lock an unverified volunteer out of the
+  // support roles of a mixed event — which is precisely the failure multi-role
+  // exists to fix. Nothing is blocked until a role is chosen.
+  const blockedByVerification = usesRoles
+    ? selectedRole !== null && selectedRole.role_type === 'clinical' && !isVerified
+    : isClinical && !isVerified;
 
   const { matchingSkills, missingSkills } = useMemo(() => {
     const required = outreach?.required_skills ?? [];
@@ -74,13 +90,18 @@ export default function OutreachDetail() {
 
   function handleQuickJoin() {
     if (!outreachId || !volunteerId) return;
-    createApplication.mutate({ outreachId, volunteerId, type: 'quick_join' });
+    createApplication.mutate({
+      outreachId,
+      volunteerId,
+      type: 'quick_join',
+      outreachRoleId: selectedRoleId,
+    });
   }
 
   function handleFullSubmit(motivation: string) {
     if (!outreachId || !volunteerId) return;
     createApplication.mutate(
-      { outreachId, volunteerId, type: 'full', motivation },
+      { outreachId, volunteerId, type: 'full', motivation, outreachRoleId: selectedRoleId },
       { onSuccess: () => setFullFormVisible(false) }
     );
   }
@@ -268,6 +289,16 @@ export default function OutreachDetail() {
           </View>
         ) : null}
 
+        {usesRoles && !alreadyApplied ? (
+          <RolePicker
+            roles={roles}
+            selectedRoleId={selectedRoleId}
+            onSelect={setSelectedRoleId}
+            volunteerExperience={volunteerProfile?.experience_level ?? null}
+            isVerified={isVerified}
+          />
+        ) : null}
+
         {alreadyApplied ? (
           <View style={styles.statusPanel}>
             <Badge
@@ -337,7 +368,15 @@ export default function OutreachDetail() {
           </Text>
         ) : (
           <View style={styles.actions}>
-            {!isClinical ? (
+            {/*
+              On a multi-role outreach nothing can be offered until a role is
+              chosen: Quick Join versus Full Application is decided by the
+              ROLE's clinical/support type, not the outreach's summary.
+            */}
+            {usesRoles && !selectedRole ? (
+              <Text style={styles.footerNote}>Choose a role above to apply.</Text>
+            ) : null}
+            {(usesRoles ? selectedRole?.role_type === 'support' : !isClinical) ? (
               <Button
                 title={createApplication.isPending ? 'Joining...' : 'Quick Join'}
                 onPress={handleQuickJoin}
@@ -348,9 +387,13 @@ export default function OutreachDetail() {
             ) : null}
             <Button
               title="Apply Now"
-              variant={isClinical ? 'solid' : 'outline'}
+              variant={(usesRoles ? selectedRole?.role_type === 'clinical' : isClinical) ? 'solid' : 'outline'}
               onPress={() => setFullFormVisible(true)}
-              disabled={blockedByVerification || createApplication.isPending}
+              disabled={
+                blockedByVerification ||
+                createApplication.isPending ||
+                (usesRoles && !selectedRole)
+              }
               style={styles.actionButton}
               accessibilityLabel="Open the full application form"
             />

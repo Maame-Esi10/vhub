@@ -53,6 +53,12 @@ export type {
   UpdateOutreachStatusParams,
 } from './useOutreaches';
 export {
+  outreachRoleKeys,
+  useOutreachRoles,
+  useReplaceOutreachRoles,
+} from './useOutreachRoles';
+export type { RoleDraft, ReplaceOutreachRolesParams } from './useOutreachRoles';
+export {
   applicationKeys,
   useOutreachApplications,
   useUpdateApplicationStatus,

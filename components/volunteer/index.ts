@@ -8,6 +8,8 @@ export { VolunteerApplicationCard } from './VolunteerApplicationCard';
 export type { VolunteerApplicationCardProps } from './VolunteerApplicationCard';
 export { FullApplicationSheet, MOTIVATION_LIMIT } from './FullApplicationSheet';
 export type { FullApplicationSheetProps } from './FullApplicationSheet';
+export { RolePicker } from './RolePicker';
+export type { RolePickerProps } from './RolePicker';
 export { WithdrawSheet } from './WithdrawSheet';
 export type { WithdrawSheetProps } from './WithdrawSheet';
 export { ReviewSummaryCard } from './ReviewSummaryCard';

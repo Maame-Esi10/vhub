@@ -687,6 +687,85 @@ and OpenStreetMap location work described above.
 
 ---
 
+## Multi-day outreaches: commitment, not span (approved 2026-08-12, not yet built)
+
+**Problem.** The data model assumed one event, one day: a single `date` with a
+`start_time` and `end_time`. A screening campaign running for a month cannot be
+represented at all. And "attended / did not attend" assumes one event, one
+commitment — which a month-long campaign is not.
+
+**The decision, and it came from the owner: a volunteer commits to SPECIFIC
+DAYS when they apply, and is measured only against those days.**
+
+- Applying to a multi-day outreach means selecting which days you can do. That
+  selection **is** the commitment.
+- Attendance is scored on **days committed vs days attended**, never against
+  the event's full length.
+- A student who commits to 4 Saturdays and attends all 4 has full reliability.
+  Someone who commits to 20 days and attends 5 has not.
+- Days never committed to are irrelevant: no penalty, no absence, not counted.
+
+**Why the span model was wrong.** Scoring against the event's full length would
+mark a Saturday-only student absent for 26 days they never promised — punishing
+them for something that is not a failure. Nobody works thirty days straight;
+shifts and off-days are the norm, not the exception. A reliability score has to
+measure **kept promises**, and the span model measures hours present, which is
+a different and much less meaningful thing.
+
+**Why `application_days` is a table and not a count.** Days committed is the
+unit the whole accountability system counts against, so it must be a
+first-class row rather than a number someone typed. It is also what answers the
+organisation's real question — "I have 3 nurses on Tuesday but only 1 on
+Thursday" — which no count could.
+
+**Single-day is the n=1 case.** Every outreach gets exactly one `outreach_days`
+row, so there is no branching and no "is multi-day" flag. Same reasoning as the
+multi-role mode flag: a boolean that must agree with the existence of rows will
+eventually disagree with it.
+
+**Shifts need no new concept.** The existing morning/afternoon/evening
+availability slots already express within-day shifts.
+
+**"2 nurses" means per day**, not for the event. It is what an organiser means,
+and it is what makes a per-day fill count meaningful.
+
+**Attendance resolution is per day, as the organiser goes.** Reconstructing who
+was absent on day 9 of a 20-day campaign three weeks later is guesswork, and
+exception-based marking assumes the organiser is present. But daily resolution
+is not *required*: unresolved days simply do not count, exactly as an unrated
+review moves nothing.
+
+### V-Score: one event, one movement (approved 2026-08-12, gated — not built)
+
+`event_outcome` is computed **once per event**, scaled by
+`days_attended / days_committed`. A month-long campaign must not move a score
+twenty times harder than a one-day clinic — that would let one event dominate a
+volunteer's entire history and distort the whole system.
+
+**Partial attendance takes the ratio; only zero attendance takes the flat −15.**
+The −15 is calibrated for *told you nothing, did not turn up*. Someone who
+committed to 20 days and worked 5 did show up and was counted on — worse in
+absolute harm, but not the same failure, and collapsing both to −15 would
+destroy the distinction between them. A 5/20 ratio already produces a severe
+outcome. Attending **zero** committed days is the original no-show case and
+takes the flat penalty.
+
+### Availability becomes continuous (approved 2026-08-12, gated — not built)
+
+The availability component was **binary**: the volunteer's slots either matched
+the event's single day or they did not, scoring 1.0 or 0.
+
+Across a date range it becomes **the fraction of the event's days the
+volunteer's slots can cover, capped once they clear a usable threshold.**
+
+Neither alternative works. "Must match every day" excludes precisely the
+Saturday-only student the commitment model exists to include. "Any day" scores
+a 1-of-20 match identically to a 20-of-20 one, which throws away the
+information that matters most for staffing.
+
+**This is a change to the matching engine and is therefore gated.** Logged here
+so `qa-reviewer` does not read it as drift when it lands.
+
 ## `not_selected` — every applicant gets an answer (2026-08-11)
 
 **Problem.** Applicants past the waitlist cap are deliberately left `pending`

@@ -28,6 +28,7 @@ import type { SelectOption } from '@/components/ui';
 import {
   INITIAL_WIZARD_STATE,
   OutreachPreviewCard,
+  RoleBuilder,
   hasWizardErrors,
   validateWizard,
 } from '@/components/organisation';
@@ -36,7 +37,7 @@ import { colors, fontFamily, spacing } from '@/constants/theme';
 import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { SKILL_CATEGORIES } from '@/constants/skills';
 import { ROLE_TYPES, VOLUNTEER_CATEGORIES } from '@/constants/categories';
-import { useCreateOutreach } from '@/hooks';
+import { useCreateOutreach, useReplaceOutreachRoles } from '@/hooks';
 // Direct import, not the hooks barrel: this reaches the native picker
 // modules. See the note in lib/cloudinary.ts.
 import { useFlyerUpload } from '@/hooks/useMediaUpload';
@@ -52,11 +53,16 @@ export default function CreateOutreach() {
   const router = useRouter();
   const organisationId = useAuthStore((s) => s.user)?.id;
   const createOutreach = useCreateOutreach();
+  const replaceRoles = useReplaceOutreachRoles();
   const flyerUpload = useFlyerUpload();
 
   const [step, setStep] = useState(1);
   const [state, setState] = useState<OutreachWizardState>(INITIAL_WIZARD_STATE);
   const [errors, setErrors] = useState<WizardFieldError>({});
+  const [roleError, setRoleError] = useState<string | null>(null);
+
+  /** Empty roles means single-role mode — the same rule the database uses. */
+  const usingRoles = state.roles.length > 0;
 
   function update<K extends keyof OutreachWizardState>(key: K, value: OutreachWizardState[K]) {
     setState((prev) => ({ ...prev, [key]: value }));
@@ -89,7 +95,7 @@ export default function CreateOutreach() {
     setErrors(nextErrors);
     if (step === 1 && nextErrors.title) return;
     if (step === 2 && (nextErrors.date || nextErrors.startTime || nextErrors.endTime)) return;
-    if (step === 3 && nextErrors.slotsTotal) return;
+    if (step === 3 && !usingRoles && nextErrors.slotsTotal) return;
     setStep((s) => Math.min(TOTAL_STEPS, s + 1));
   }
 
@@ -112,6 +118,8 @@ export default function CreateOutreach() {
       return;
     }
 
+    const usesRoles = state.roles.length > 0;
+
     createOutreach.mutate(
       {
         organisationId,
@@ -124,14 +132,41 @@ export default function CreateOutreach() {
         district: state.district,
         locationName: state.locationName.trim() ? state.locationName.trim() : null,
         requiredSkills: state.requiredSkills,
-        requiredCategory: state.requiredCategory,
-        roleType: state.roleType,
-        slotsTotal: state.slotsTotal,
+        // In multi-role mode these three are derived, not chosen. role_type
+        // summarises to 'clinical' if any role is, slots_total is the sum of
+        // the roles, and both are maintained by trigger — sending a client
+        // value would simply be overwritten. required_category has no single
+        // answer once there are several, so it stays null.
+        requiredCategory: usesRoles ? null : state.requiredCategory,
+        roleType: usesRoles ? null : state.roleType,
+        slotsTotal: usesRoles
+          ? state.roles.reduce((sum, role) => sum + role.slotsTotal, 0)
+          : state.slotsTotal,
         status,
         flyerUrl: state.flyerUrl,
       },
       {
-        onSuccess: () => {
+        onSuccess: async (outreach) => {
+          // Roles are written after the outreach exists, because they need its
+          // id. Best-effort in the sense that the outreach is already saved if
+          // this fails — but NOT silent: a multi-role outreach with no roles is
+          // a single-role outreach asking for the summed total, which is not
+          // what the organisation described, so the failure is surfaced.
+          if (usesRoles) {
+            try {
+              await replaceRoles.mutateAsync({ outreachId: outreach.id, roles: state.roles });
+            } catch (error) {
+              console.warn(
+                '[create-outreach] outreach saved but its roles did not:',
+                error instanceof Error ? error.message : error
+              );
+              setRoleError(
+                'The outreach was saved, but its roles could not be. Open it from the dashboard and set them again.'
+              );
+              return;
+            }
+          }
+
           setState(INITIAL_WIZARD_STATE);
           setErrors({});
           setStep(1);
@@ -332,58 +367,109 @@ export default function CreateOutreach() {
                 onChange={(next) => update('requiredSkills', next)}
               />
 
-              <Text style={styles.chipLabel}>Required Category</Text>
+              {/*
+                Two ways to staff an event, and the simple one stays the
+                default. An organisation that just needs "any 10 volunteers"
+                must be able to post exactly as it always has — multi-role is
+                an addition, not a replacement.
+
+                The toggle writes `roles`: empty is single-role mode, which is
+                the same "presence of rows and nothing else" rule the database
+                uses to tell the two modes apart.
+              */}
+              <Text style={styles.chipLabel}>Who do you need?</Text>
               <View style={styles.chipRow}>
-                {VOLUNTEER_CATEGORIES.map((option) => {
-                  const selected = state.requiredCategory === option.value;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => update('requiredCategory', selected ? null : option.value)}
-                      accessibilityRole="button"
-                      accessibilityLabel={option.label}
-                      accessibilityState={{ selected }}
-                      style={[styles.chip, selected && styles.chipSelected]}
-                    >
-                      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-                    </Pressable>
-                  );
-                })}
+                <Pressable
+                  onPress={() => update('roles', [])}
+                  accessibilityRole="button"
+                  accessibilityLabel="Any volunteers"
+                  accessibilityState={{ selected: !usingRoles }}
+                  style={[styles.chip, !usingRoles && styles.chipSelected]}
+                >
+                  <Text style={[styles.chipText, !usingRoles && styles.chipTextSelected]}>
+                    Any volunteers
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() =>
+                    update('roles', [
+                      { category: 'nurse', roleType: 'clinical', minExperienceLevel: null, slotsTotal: 2 },
+                    ])
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Specific roles"
+                  accessibilityState={{ selected: usingRoles }}
+                  style={[styles.chip, usingRoles && styles.chipSelected]}
+                >
+                  <Text style={[styles.chipText, usingRoles && styles.chipTextSelected]}>
+                    Specific roles
+                  </Text>
+                </Pressable>
               </View>
 
-              <Text style={styles.chipLabel}>Role Type</Text>
-              <View style={styles.chipRow}>
-                {ROLE_TYPES.map((option) => {
-                  const selected = state.roleType === option.value;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => update('roleType', selected ? null : option.value)}
-                      accessibilityRole="button"
-                      accessibilityLabel={option.label}
-                      accessibilityState={{ selected }}
-                      style={[styles.chip, selected && styles.chipSelected]}
-                    >
-                      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              {usingRoles ? (
+                <RoleBuilder roles={state.roles} onChange={(roles) => update('roles', roles)} />
+              ) : (
+                <>
+                  <Text style={styles.chipLabel}>Required Category</Text>
+                  <View style={styles.chipRow}>
+                    {VOLUNTEER_CATEGORIES.map((option) => {
+                      const selected = state.requiredCategory === option.value;
+                      return (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => update('requiredCategory', selected ? null : option.value)}
+                          accessibilityRole="button"
+                          accessibilityLabel={option.label}
+                          accessibilityState={{ selected }}
+                          style={[styles.chip, selected && styles.chipSelected]}
+                        >
+                          <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
 
-              <NumberStepper
-                label="How many volunteers?"
-                value={state.slotsTotal}
-                onChange={(value) => update('slotsTotal', value)}
-                min={1}
-                max={500}
-                error={errors.slotsTotal}
-              />
+                  <Text style={styles.chipLabel}>Role Type</Text>
+                  <View style={styles.chipRow}>
+                    {ROLE_TYPES.map((option) => {
+                      const selected = state.roleType === option.value;
+                      return (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => update('roleType', selected ? null : option.value)}
+                          accessibilityRole="button"
+                          accessibilityLabel={option.label}
+                          accessibilityState={{ selected }}
+                          style={[styles.chip, selected && styles.chipSelected]}
+                        >
+                          <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  <NumberStepper
+                    label="How many volunteers?"
+                    value={state.slotsTotal}
+                    onChange={(value) => update('slotsTotal', value)}
+                    min={1}
+                    max={500}
+                    error={errors.slotsTotal}
+                  />
+                </>
+              )}
             </View>
           ) : null}
 
           {step === TOTAL_STEPS ? (
             <View style={styles.fieldGroup}>
               <OutreachPreviewCard state={state} />
+              {roleError ? <Text style={styles.submitError}>{roleError}</Text> : null}
               {createOutreach.isError ? (
                 <Text style={styles.submitError}>
                   {createOutreach.error instanceof Error

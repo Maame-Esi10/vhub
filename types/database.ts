@@ -122,6 +122,30 @@ export interface OrganisationProfile {
 }
 
 /** Belongs to an OrganisationProfile. */
+/**
+ * One per-category role slot of a multi-role outreach.
+ *
+ * An outreach has EITHER zero of these (single-role mode — the legacy
+ * `required_category` / `role_type` / `slots_total` describe it) OR one row per
+ * category it wants. The two modes are distinguished by the presence of rows
+ * and nothing else; there is deliberately no `is_multi_role` flag.
+ *
+ * `slots_filled` is derived by trigger and is never client-writable.
+ */
+export interface OutreachRole {
+  id: string;
+  outreach_id: string;
+  category: VolunteerCategory;
+  role_type: OutreachRoleType;
+  /** Minimum acceptable experience — a FLOOR, not an exact match. Null = any level. */
+  min_experience_level: ExperienceLevel | null;
+  /** Null inherits the outreach's `required_skills`. */
+  required_skills: string[] | null;
+  slots_total: number;
+  slots_filled: number;
+  created_at: string;
+}
+
 export interface Outreach {
   id: string;
   organisation_id: string;
@@ -178,6 +202,15 @@ export interface Application {
   id: string;
   outreach_id: string;
   volunteer_id: string;
+  /**
+   * Which role of a multi-role outreach this application is for.
+   *
+   * NULL in single-role mode, and NULL for every application made before
+   * multi-role existed — so it is nullable permanently and every read path
+   * must handle null. Settable on INSERT only: an accepted volunteer must not
+   * be able to move themselves into a different role's slot afterwards.
+   */
+  outreach_role_id: string | null;
   type: ApplicationType;
   status: ApplicationStatus;
   match_score: number | null;

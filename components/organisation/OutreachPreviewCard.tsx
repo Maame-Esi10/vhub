@@ -16,6 +16,17 @@ export function OutreachPreviewCard({ state }: OutreachPreviewCardProps) {
   const categoryLabel = VOLUNTEER_CATEGORIES.find((c) => c.value === state.requiredCategory)?.label;
   const roleTypeLabel = ROLE_TYPES.find((r) => r.value === state.roleType)?.label;
 
+  // Multi-role: the breakdown replaces the single category/role-type pair,
+  // because in that mode neither has a single answer.
+  const roleSummary = state.roles.length
+    ? state.roles
+        .map(
+          (role) =>
+            `${role.slotsTotal} ${VOLUNTEER_CATEGORIES.find((c) => c.value === role.category)?.label ?? role.category}`
+        )
+        .join(' · ')
+    : null;
+
   return (
     <View style={styles.card}>
       {/*
@@ -57,10 +68,28 @@ export function OutreachPreviewCard({ state }: OutreachPreviewCardProps) {
 
         {state.description ? <Text style={styles.description}>{state.description}</Text> : null}
 
+        {roleSummary ? (
+          <View style={styles.roleSummaryRow}>
+            <MaterialCommunityIcons name="account-group-outline" size={14} color={colors.primary} />
+            <Text style={styles.roleSummaryText}>{roleSummary}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.tagsRow}>
-          {roleTypeLabel ? <Badge label={roleTypeLabel} tone="neutral" /> : null}
-          {categoryLabel ? <Badge label={categoryLabel} tone="neutral" /> : null}
-          <Badge label={`${state.slotsTotal} slot${state.slotsTotal === 1 ? '' : 's'}`} tone="neutral" />
+          {roleSummary ? null : roleTypeLabel ? <Badge label={roleTypeLabel} tone="neutral" /> : null}
+          {roleSummary ? null : categoryLabel ? <Badge label={categoryLabel} tone="neutral" /> : null}
+          <Badge
+            label={`${
+              roleSummary
+                ? state.roles.reduce((sum, role) => sum + role.slotsTotal, 0)
+                : state.slotsTotal
+            } slot${
+              (roleSummary ? state.roles.reduce((sum, r) => sum + r.slotsTotal, 0) : state.slotsTotal) === 1
+                ? ''
+                : 's'
+            }`}
+            tone="neutral"
+          />
         </View>
 
         {state.requiredSkills.length > 0 ? (
@@ -128,6 +157,18 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: colors.textSecondary,
     marginTop: spacing.sm,
+  },
+  roleSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.base,
+  },
+  roleSummaryText: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textPrimary,
   },
   tagsRow: {
     flexDirection: 'row',

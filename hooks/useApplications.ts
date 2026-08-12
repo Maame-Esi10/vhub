@@ -360,6 +360,16 @@ export interface CreateApplicationParams {
   type: ApplicationType;
   /** Statement of intent from the Full Application form. Null for quick joins. */
   motivation?: string | null;
+  /**
+   * Which role of a multi-role outreach this is for. Null in single-role mode.
+   *
+   * Sent on INSERT only — the grant list deliberately excludes it from UPDATE,
+   * so an accepted volunteer cannot move themselves into another role's slot.
+   * That is also why the reactivation branch below does NOT set it: a
+   * withdrawn application that is being revived keeps the role it was made
+   * for.
+   */
+  outreachRoleId?: string | null;
 }
 
 /**
@@ -428,6 +438,7 @@ export function useCreateApplication() {
               volunteer_id: params.volunteerId,
               type: params.type,
               motivation,
+              outreach_role_id: params.outreachRoleId ?? null,
             })
             .select()
             .single();

@@ -1,5 +1,14 @@
-import type { OutreachRoleType } from '@/types/database';
+import type { ExperienceLevel, OutreachRoleType, VolunteerCategory } from '@/types/database';
 import { isTimeAfter, isTodayOrFutureDate, parseClockTime } from '@/components/ui';
+
+/** One per-category role slot as the wizard holds it, before it has a database id. */
+export interface RoleDraft {
+  category: VolunteerCategory;
+  roleType: OutreachRoleType;
+  /** Null means any level. A FLOOR, not an exact match. */
+  minExperienceLevel: ExperienceLevel | null;
+  slotsTotal: number;
+}
 
 /**
  * Local Create Outreach wizard state. Field values are kept as plain strings
@@ -19,6 +28,17 @@ export interface OutreachWizardState {
   requiredCategory: string | null;
   roleType: OutreachRoleType | null;
   slotsTotal: number;
+  /**
+   * Per-category role slots. EMPTY means single-role mode, where
+   * requiredCategory / roleType / slotsTotal above describe the requirement —
+   * the same "presence of rows, and nothing else" rule the database uses, so
+   * the form and the schema agree on what mode means.
+   *
+   * In multi-role mode `slotsTotal` is NOT sent on submit: the database derives
+   * the outreach total as the sum of its roles, and a client value would be
+   * overwritten by the trigger.
+   */
+  roles: RoleDraft[];
   /**
    * Cloudinary URL of the flyer, or null. Uploaded as soon as it is picked
    * rather than held as a local file and sent on submit: the wizard has four
@@ -42,6 +62,7 @@ export const INITIAL_WIZARD_STATE: OutreachWizardState = {
   requiredCategory: null,
   roleType: null,
   slotsTotal: 5,
+  roles: [],
   flyerUrl: null,
 };
 

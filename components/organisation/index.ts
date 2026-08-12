@@ -4,6 +4,8 @@ export { OutreachPicker } from './OutreachPicker';
 export type { OutreachPickerProps } from './OutreachPicker';
 export { ApplicantCard } from './ApplicantCard';
 export type { ApplicantCardProps } from './ApplicantCard';
+export { RoleBuilder } from './RoleBuilder';
+export type { RoleBuilderProps } from './RoleBuilder';
 export { RosterSummaryCard } from './RosterSummaryCard';
 export type { RosterSummaryCardProps } from './RosterSummaryCard';
 export { AttendanceRow } from './AttendanceRow';
@@ -17,4 +19,4 @@ export {
   validateWizard,
   hasWizardErrors,
 } from './outreachWizard';
-export type { OutreachWizardState, WizardFieldError } from './outreachWizard';
+export type { OutreachWizardState, WizardFieldError, RoleDraft } from './outreachWizard';
