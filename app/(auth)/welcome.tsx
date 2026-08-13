@@ -16,7 +16,7 @@ import {
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button } from '@/components/ui';
+import { Button, SplashView } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { useSignOut } from '@/hooks';
@@ -229,14 +229,21 @@ export default function Welcome() {
   );
 
   if (!imagesReady) {
-    // Same background and brand mark as the carousel itself, so this reads as
-    // the splash still settling rather than as a separate loading screen.
+    /*
+      The SAME splash the root layout shows, not a second one of its own.
+
+      This used to draw its own logo + wordmark screen, which meant the app put
+      up two differently composed branded screens back to back — the wordmark
+      splash while fonts and the session resolved, then this one while the
+      carousel prefetched. Rendering the one component means the splash simply
+      stays up until the carousel is genuinely ready, which is how it always
+      read in the comment here and never did on a device.
+    */
     return (
-      <View style={[styles.container, styles.preloadCenter]}>
+      <>
         <StatusBar style="light" />
-        <Image source={LOGO} style={{ width: logoSize, height: logoSize }} resizeMode="contain" />
-        <Text style={styles.wordmark}>V-HUB</Text>
-      </View>
+        <SplashView />
+      </>
     );
   }
 
@@ -423,11 +430,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.heroBackground,
-  },
-  preloadCenter: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
   },
   list: {
     flex: 1,

@@ -1230,3 +1230,116 @@ slots or rescheduling: staffing levels are a clinical judgement it is not
 qualified to make, and an app that encouraged organisations to trim targets to
 match turnout would make the shortfall it is measuring disappear from its own
 data."
+
+---
+
+## Three organisation-side UI defects (2026-08-13)
+
+Reported together after an EAS build; the causes were unrelated, which is worth
+recording because two of them are the same class of mistake — a change
+evaluated only on the screen it was made for.
+
+**1. The Applicant Vetting outreach chips filled a third of the screen.**
+React Native gives every `ScrollView` an internal base style, and for
+`horizontal` that base is `{ flexGrow: 1, flexShrink: 1, flexDirection: 'row' }`.
+Placed directly in a column-flex screen, the picker therefore grew into all the
+vertical space the applicant list was not using, and the content container's
+default `alignItems: 'stretch'` stretched each chip to that height. Nothing
+about the chips themselves had changed. The trigger was the earlier fix that
+removed the wrapping `View` so the scroll track could reach the screen edge:
+the wrapper had an auto height, so there had been nothing for `flexGrow` to
+grow into. Fixed by pinning the ScrollView to its content height
+(`flexGrow: 0`) rather than by reinstating the wrapper, which would bring the
+clipping back.
+
+**2. The organisation's event cards had no visual treatment.** Not a
+regression — no redesign ever touched them. `components/organisation/OutreachCard.tsx`
+has two commits in its whole history: the Phase 2 commit that created it and
+the under-subscription banner. It was written before the volunteer feed card's
+flyer-band treatment existed and was never brought along, so it stayed a flat
+`colors.surface` block. It is now built from the same parts as
+`components/volunteer/OutreachFeedCard.tsx` — a `FlyerBackground` band carrying
+the status and title in white, over a bordered white body.
+
+**3. Flyers appeared nowhere.** Two causes stacked. On the organisation side
+the card never rendered one: the flyer commit covered the volunteer feed card,
+the volunteer detail hero and the wizard preview, and the organisation card was
+not in scope (the organisation's own event-detail hero got one later, with the
+management screen). Everywhere else the rendering is correct but conditional —
+`FlyerBackground` falls back to the solid navy band when `flyer_url` is null,
+and every outreach created before flyers existed has a null. The fallback is
+indistinguishable from the pre-flyer design, so "no flyer uploaded" and "the
+feature is broken" look identical on a device. The data path itself is sound:
+`flyer_url` is in both grant lists, the insert sends it, and every read uses
+`select('*')`.
+
+**Splash screens.** The app showed two branded loading screens back to back:
+the root layout's wordmark splash while fonts and the session resolved, then a
+second, differently composed logo screen on `welcome` while the carousel
+images prefetched. Both are now one component, `components/ui/SplashView.tsx`,
+with the logo mark restored above the wordmark, so the splash simply stays up
+until the carousel is ready instead of appearing to restart.
+
+---
+
+## Organisation navigation hierarchy and roster ownership (2026-08-13)
+
+**The loop.** Dashboard card → Manage event → Applicants → "Manage this event"
+→ Manage event. Each screen advertised the other as a destination, so neither
+read as the parent and an organiser could bounce indefinitely.
+
+The management screen is the parent of an event; its applicants are a child of
+it. The "Manage this event" row is gone and an up arrow sits in Applicant
+Vetting's header instead. The distinction is not cosmetic: a content row
+labelled with a destination reads as going *deeper*, an arrow in the header
+reads as going *up*, and only one of those establishes a hierarchy.
+
+**Why the up arrow is conditional, and why history could not decide it.**
+Applicant Vetting has two entry points: the management screen, and the
+APPLICANTS tab in the bottom bar. On the tab it is a root — an up arrow there
+would point at a screen the organiser has never opened. But the answer cannot
+be read from navigation history, because every organisation route lives in one
+`Tabs` navigator (`outreach/[id]`, `checkin/[id]` and `attendance/[id]` are
+`href: null` tab screens, not stack screens). A tab jump is not a stack push,
+which is why the management screen's own back control is a
+`router.replace('/dashboard')` rather than a `router.back()`.
+
+Two exact signals decide it instead: the `outreachId` param, which only the
+management screen sends, and the navigator's `tabPress` event, which only fires
+when the bar is actually tapped. They are mutually exclusive.
+
+**The arrow targets the SELECTED outreach, not the one arrived from.** "Up" is
+a claim about hierarchy, not about history — the parent of these applicants is
+this event. Retargeting keeps it truthful when the organiser switches events
+with the chips, and stops the control vanishing and reappearing as they do.
+
+**Roster ownership.** The roster appeared on both screens and would have
+drifted. The split follows what each screen is *for*:
+
+- **Manage event owns the summary** — the fill bar, "X of Y filled", the
+  confirmed volunteers' avatars, and the under-subscription line. Facts about
+  the event, no controls.
+- **Applicant Vetting owns the decision surface** — per-role slot progress,
+  pending and waitlisted counts, skill coverage, and the batch accept button.
+  Every one of those is either an input to a decision or the decision itself,
+  and this is where the organiser acts.
+
+The Pending/Accepted/Waitlisted tally was therefore removed from Manage event.
+Beyond the duplication, in multi-role mode it was a single blended total across
+every role, which is actively misleading: "4 pending" reads as progress when it
+is four nurses and no doctors, and the overview cannot break that down without
+becoming the applicant screen. The one figure that *is* actionable from an
+overview — how many are waiting for a decision — remains on the Applicants row,
+i.e. on the link that resolves it.
+
+The two screens now also read different sources and so cannot disagree: Manage
+event renders the trigger-maintained `slots_filled`/`slots_total` columns,
+while Applicant Vetting derives its per-role figures from the applications. In
+multi-role mode the event total is the sum of the roles by the same trigger, so
+they agree by construction rather than by two code paths staying in step.
+
+**Outreach editing is now blocking a shipped feature.** Flyers can only be set
+at creation time, so the events that predate the feature can never have one —
+they will show the navy fallback band permanently. This is the second thing
+editing gates (the first being ordinary corrections to a posted event), and it
+strengthens the case for building it before more features accumulate behind it.

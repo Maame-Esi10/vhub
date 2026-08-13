@@ -59,6 +59,8 @@ export { MultiSelectField } from './MultiSelectField';
 export type { MultiSelectFieldProps, MultiSelectSection } from './MultiSelectField';
 export { FlyerBackground } from './FlyerBackground';
 export type { FlyerBackgroundProps } from './FlyerBackground';
+export { SplashView } from './SplashView';
+export type { SplashViewProps } from './SplashView';
 export { VScoreBadge } from './VScoreBadge';
 export type { VScoreBadgeProps } from './VScoreBadge';
 // getVScoreBand / VScoreBand live in lib/vscore.ts (the band + score-math home

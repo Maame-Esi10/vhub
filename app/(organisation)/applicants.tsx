@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   ConfirmDialog,
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { ApplicantCard, OutreachPicker, RosterSummaryCard } from '@/components/organisation';
-import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 import {
   useBatchDecideApplications,
   useOrganisationOutreaches,
@@ -44,6 +44,7 @@ const FILTERS: FilterChipOption<StatusFilter>[] = [
 
 export default function Applicants() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{ outreachId?: string }>();
   const organisationId = useAuthStore((s) => s.user)?.id;
 
@@ -55,18 +56,48 @@ export default function Applicants() {
   const [selectedOutreachId, setSelectedOutreachId] = useState<string | undefined>(routeOutreachId);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
+  /*
+    THIS SCREEN HAS TWO ENTRY POINTS, and the header differs between them.
+
+    Reached from an event's management screen it is that event's CHILD, so it
+    shows an up arrow back to the parent. Reached from the APPLICANTS tab in the
+    bottom bar it is a root, where an up arrow would point at a screen the
+    organiser has never seen — and where the outreach chips are the way to
+    choose an event instead.
+
+    `enteredFromEvent` records which it was. It cannot be read off the param,
+    which is cleared immediately below; and it cannot be read off navigation
+    history, because every organisation route lives in ONE Tabs navigator — a
+    tab jump is not a stack push, which is why nothing here can rely on
+    router.back(). The two signals used instead are exact and mutually
+    exclusive: the param arrives only from the management screen, and tabPress
+    fires only when the bar is actually tapped.
+  */
+  const [enteredFromEvent, setEnteredFromEvent] = useState(!!routeOutreachId);
+
   // This is a tab, so it stays mounted after the first visit and the useState
   // initialiser above only ever sees the first outreachId param. Adopt the
-  // param whenever the dashboard sends one, then clear it: without the clear,
-  // re-tapping the same card after the org had manually picked a different
-  // outreach here would leave the param unchanged, the effect wouldn't fire,
-  // and the tab would open on the wrong outreach.
+  // param whenever the management screen sends one, then clear it: without the
+  // clear, re-opening the same event after the org had manually picked a
+  // different outreach here would leave the param unchanged, the effect
+  // wouldn't fire, and the tab would open on the wrong outreach.
   useEffect(() => {
     if (routeOutreachId) {
       setSelectedOutreachId(routeOutreachId);
+      setEnteredFromEvent(true);
       router.setParams({ outreachId: '' });
     }
   }, [routeOutreachId, router]);
+
+  useEffect(() => {
+    // 'tabPress' is emitted by the bottom-tab navigator this screen belongs to.
+    // useNavigation()'s default generic doesn't list it, so the cast narrows to
+    // the listener signature only rather than reaching for `any`.
+    const tabNavigation = navigation as unknown as {
+      addListener: (event: 'tabPress', callback: () => void) => () => void;
+    };
+    return tabNavigation.addListener('tabPress', () => setEnteredFromEvent(false));
+  }, [navigation]);
 
   useEffect(() => {
     if (!selectedOutreachId && outreaches.length > 0) {
@@ -247,10 +278,34 @@ export default function Applicants() {
     updateStatus.mutate({ applicationId: application.id, outreachId: selectedOutreachId, status });
   }
 
+  /*
+    The up arrow targets the CURRENTLY SELECTED outreach, not the one the
+    organiser arrived from. "Up" is a statement about hierarchy — the parent of
+    these applicants is this event — not about history; retargeting it keeps it
+    truthful if they switch events with the chips, and stops the control
+    appearing and disappearing as they do.
+  */
+  const header = (
+    <View style={styles.header}>
+      {enteredFromEvent && selectedOutreachId ? (
+        <Pressable
+          onPress={() => router.replace(`/(organisation)/outreach/${selectedOutreachId}`)}
+          accessibilityRole="button"
+          accessibilityLabel="Back to manage event"
+          hitSlop={8}
+          style={styles.backButton}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={22} color={colors.textPrimary} />
+        </Pressable>
+      ) : null}
+      <Text style={styles.title}>Applicant Vetting</Text>
+    </View>
+  );
+
   if (outreachesQuery.isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <Text style={styles.title}>Applicant Vetting</Text>
+        {header}
         <ListSkeleton rows={3} rowHeight={160} />
       </SafeAreaView>
     );
@@ -272,7 +327,7 @@ export default function Applicants() {
   if (outreaches.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <Text style={styles.title}>Applicant Vetting</Text>
+        {header}
         <EmptyState
           icon="clipboard-list-outline"
           title="No outreaches yet"
@@ -286,7 +341,7 @@ export default function Applicants() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={styles.title}>Applicant Vetting</Text>
+      {header}
 
       {/*
         Fixed header: the title and the outreach selector. The selector is
@@ -369,19 +424,15 @@ export default function Applicants() {
           */
           ListHeaderComponent={
             <View style={styles.listHeader}>
-              {/* Back to the event itself — its details, check-in code and attendance. */}
-              {selectedOutreach ? (
-                <Pressable
-                  onPress={() => router.push(`/(organisation)/outreach/${selectedOutreach.id}`)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Manage ${selectedOutreach.title}`}
-                  style={({ pressed }) => [styles.manageRow, pressed && styles.manageRowPressed]}
-                >
-                  <MaterialCommunityIcons name="calendar-check-outline" size={18} color={colors.primary} />
-                  <Text style={styles.manageText}>Manage this event</Text>
-                  <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textSecondary} />
-                </Pressable>
-              ) : null}
+              {/*
+                A "Manage this event" row USED to sit here, as a way into the
+                event's own screen. It was removed because it closed a loop:
+                the management screen already has an Applicants row pointing
+                the other way, so the two screens each advertised the other as
+                a destination and neither read as the parent. The management
+                screen is the parent; the up arrow in this screen's header is
+                the single way back to it.
+              */}
 
               {/*
                 Draft outreaches are excluded: an unpublished event has no
@@ -504,13 +555,24 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  title: {
-    fontFamily: fontFamily.bold,
-    fontSize: 18,
-    color: colors.textPrimary,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.base,
     paddingBottom: spacing.md,
+  },
+  backButton: {
+    // Matches the management screen's back arrow, so "up" looks the same in
+    // both directions of this pair.
+    marginLeft: -spacing.xs,
+  },
+  title: {
+    flex: 1,
+    fontFamily: fontFamily.bold,
+    fontSize: 18,
+    color: colors.textPrimary,
   },
   /*
     One rule owns the gap between every section in the scrolling header, so the
@@ -522,26 +584,6 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
-  },
-  manageRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: 48,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  manageText: {
-    flex: 1,
-    fontFamily: fontFamily.semiBold,
-    fontSize: 13,
-    color: colors.textPrimary,
-  },
-  manageRowPressed: {
-    opacity: 0.85,
   },
   roleHeading: {
     flexDirection: 'row',

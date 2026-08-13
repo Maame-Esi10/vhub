@@ -61,15 +61,13 @@ export default function OrganisationOutreachDetail() {
   const applicationsQuery = useOutreachApplications(id);
   const applications = useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
 
-  const counts = useMemo(() => {
-    const tally = { pending: 0, accepted: 0, waitlisted: 0, rejected: 0, cancelled: 0 };
-    for (const application of applications) {
-      if (application.status in tally) {
-        tally[application.status as keyof typeof tally] += 1;
-      }
-    }
-    return tally;
-  }, [applications]);
+  // Only the pending count survives here, as the Applicants row's subtitle. The
+  // full per-status tally moved to Applicant Vetting with the rest of the
+  // decision surface — see the Roster comment below.
+  const pendingCount = useMemo(
+    () => applications.filter((a) => a.status === 'pending').length,
+    [applications]
+  );
 
   const acceptedVolunteers = useMemo(
     () => applications.filter((a) => a.status === 'accepted'),
@@ -172,7 +170,29 @@ export default function OrganisationOutreachDetail() {
           ) : null}
         </View>
 
-        {/* ---------- Roster ---------- */}
+        {/* ---------- Roster ----------
+
+            THE SUMMARY ONLY. How full the event is, who is confirmed, and
+            whether it is short. Everything that is an input to a DECISION —
+            per-role slot progress, pending and waitlisted counts, skill
+            coverage, the batch accept button — lives on Applicant Vetting,
+            because that is the screen where the organiser acts on it.
+
+            The Pending/Accepted/Waitlisted tally that used to sit here was
+            removed for two reasons. It duplicated Applicant Vetting's roster
+            card, so the two would drift; and in multi-role mode it was a
+            single blended total across every role, which is actively
+            misleading — "4 pending" reads as progress when it is four nurses
+            and no doctors, and this screen has no way to break that down
+            without becoming the applicant screen. The one figure that IS
+            actionable from an overview, how many are waiting for a decision,
+            is on the Applicants row below: on the link that resolves it.
+
+            The two screens now also read different sources, so they cannot
+            disagree. This bar comes from the trigger-maintained
+            slots_filled/slots_total columns; Applicant Vetting derives its
+            per-role figures from the applications themselves.
+        */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.cardTitle}>Roster</Text>
@@ -190,12 +210,6 @@ export default function OrganisationOutreachDetail() {
                 },
               ]}
             />
-          </View>
-
-          <View style={styles.tallyRow}>
-            <Tally label="Pending" value={counts.pending} />
-            <Tally label="Accepted" value={counts.accepted} />
-            <Tally label="Waitlisted" value={counts.waitlisted} />
           </View>
 
           {/*
@@ -239,8 +253,8 @@ export default function OrganisationOutreachDetail() {
           icon="account-multiple-outline"
           title="Applicants"
           meta={
-            counts.pending > 0
-              ? `${counts.pending} waiting for a decision`
+            pendingCount > 0
+              ? `${pendingCount} waiting for a decision`
               : 'Review and decide who gets a place'
           }
           onPress={() =>
@@ -306,15 +320,6 @@ function DetailRow({
         <Text style={styles.detailLabel}>{label}</Text>
         <Text style={styles.detailText}>{children}</Text>
       </View>
-    </View>
-  );
-}
-
-function Tally({ label, value }: { label: string; value: number }) {
-  return (
-    <View style={styles.tally}>
-      <Text style={styles.tallyValue}>{value}</Text>
-      <Text style={styles.tallyLabel}>{label}</Text>
     </View>
   );
 }
@@ -427,24 +432,6 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: radius.pill,
     backgroundColor: colors.primary,
-  },
-  tallyRow: {
-    flexDirection: 'row',
-    gap: spacing.base,
-  },
-  tally: {
-    flex: 1,
-  },
-  tallyValue: {
-    fontFamily: fontFamily.bold,
-    fontSize: 20,
-    color: colors.textPrimary,
-  },
-  tallyLabel: {
-    fontFamily: fontFamily.regular,
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
   },
   shortfall: {
     flexDirection: 'row',

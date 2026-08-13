@@ -25,11 +25,10 @@ export function getLogoSize(variant: LogoVariant, screenWidth: number): number {
   return Math.min(max, Math.max(min, screenWidth * WIDTH_RATIO[variant]));
 }
 
-// Responsive size for the "V-HUB" splash wordmark, now the primary visual
-// anchor on the splash screen (the logo mark was removed from that screen).
-// Same clamp pattern as getLogoSize, sized in px so it stays legible on the
-// smallest supported phone widths (~320-360dp) without relying solely on
-// adjustsFontSizeToFit as a safety net.
+// Responsive size for the "V-HUB" splash wordmark, which sits under the `hero`
+// logo mark on the splash screen. Same clamp pattern as getLogoSize, sized in
+// px so it stays legible on the smallest supported phone widths (~320-360dp)
+// without relying solely on adjustsFontSizeToFit as a safety net.
 const WORDMARK_WIDTH_RATIO = 0.11;
 const WORDMARK_CLAMP: [min: number, max: number] = [26, 40];
 

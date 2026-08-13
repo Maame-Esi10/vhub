@@ -1,6 +1,6 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Badge, daysUntilEvent, formatEventDate, formatEventTimeRange } from '@/components/ui';
+import { Badge, FlyerBackground, daysUntilEvent, formatEventDate, formatEventTimeRange } from '@/components/ui';
 import { UNDER_SUBSCRIPTION_STAGES, isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -29,7 +29,19 @@ export interface OutreachCardProps {
   quickActionPending?: boolean;
 }
 
-/** Dashboard "deployment queue" row: title, status, date/location, slots, pending applicant count. */
+/**
+ * Dashboard "deployment queue" card: flyer band with the title and status, then
+ * date, location, slots and the pending applicant count.
+ *
+ * This card is now built from the SAME parts as the volunteer feed card
+ * (components/volunteer/OutreachFeedCard.tsx): a FlyerBackground header band
+ * carrying white type, over a bordered white body. It previously rendered as a
+ * flat grey `colors.surface` block with no image and no border — not a
+ * regression, but a gap: it was written in Phase 2 before the feed card's
+ * treatment existed, and when flyers were added the organisation side was never
+ * brought along. An organisation looking at its own event should see the event
+ * as volunteers see it, flyer included.
+ */
 export function OutreachCard({ outreach, onPress, quickAction, quickActionPending }: OutreachCardProps) {
   const location = [outreach.district, outreach.region].filter(Boolean).join(', ');
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
@@ -54,96 +66,92 @@ export function OutreachCard({ outreach, onPress, quickAction, quickActionPendin
       slotsTotal: outreach.slots_total,
     });
 
+  const remaining = placesRemaining({
+    slotsFilled: outreach.slots_filled,
+    slotsTotal: outreach.slots_total,
+  });
+
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`View applicants for ${outreach.title}`}
-      style={styles.card}
+      accessibilityLabel={`Manage ${outreach.title}`}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
-      <View style={styles.headerRow}>
-        <Text style={styles.title} numberOfLines={1}>
-          {outreach.title}
-        </Text>
-        <Badge label={STATUS_LABEL[outreach.status]} tone={STATUS_TONE[outreach.status]} />
-      </View>
+      <FlyerBackground uri={outreach.flyer_url} style={styles.header}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerTop}>
+            <Badge label={STATUS_LABEL[outreach.status]} tone={STATUS_TONE[outreach.status]} />
+            {pending > 0 ? (
+              <View style={styles.pendingPill}>
+                <Text style={styles.pendingText}>
+                  {pending} pending
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={styles.title} numberOfLines={2}>
+            {outreach.title}
+          </Text>
+        </View>
+      </FlyerBackground>
 
-      <View style={styles.metaRow}>
-        <MaterialCommunityIcons name="calendar" size={14} color={colors.textSecondary} />
-        <Text style={styles.metaText}>
-          {formatEventDate(outreach.date)}
-          {timeRange ? ` · ${timeRange}` : ''}
-        </Text>
-      </View>
-
-      {location ? (
+      <View style={styles.body}>
         <View style={styles.metaRow}>
-          <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textSecondary} />
+          <MaterialCommunityIcons name="calendar" size={14} color={colors.textSecondary} />
           <Text style={styles.metaText} numberOfLines={1}>
-            {location}
-          </Text>
-        </View>
-      ) : null}
-
-      {isShort ? (
-        <View style={styles.shortfall}>
-          <MaterialCommunityIcons name="account-alert-outline" size={14} color={colors.warning} />
-          <Text style={styles.shortfallText}>
-            {daysOut === 0
-              ? 'Today'
-              : daysOut === 1
-                ? 'Tomorrow'
-                : `${daysOut} days to go`}
-            {' · '}
-            {placesRemaining({
-              slotsFilled: outreach.slots_filled,
-              slotsTotal: outreach.slots_total,
-            })}{' '}
-            {placesRemaining({
-              slotsFilled: outreach.slots_filled,
-              slotsTotal: outreach.slots_total,
-            }) === 1
-              ? 'place'
-              : 'places'}{' '}
-            still open
-          </Text>
-        </View>
-      ) : null}
-
-      <View style={styles.footerRow}>
-        <View style={styles.slotsPill}>
-          <MaterialCommunityIcons name="account-group" size={14} color={colors.textSecondary} />
-          <Text style={styles.slotsText}>
-            {outreach.slots_filled}/{outreach.slots_total} filled
+            {formatEventDate(outreach.date)}
+            {timeRange ? ` · ${timeRange}` : ''}
           </Text>
         </View>
 
-        {pending > 0 ? (
-          <View style={styles.pendingPill}>
-            <Text style={styles.pendingText}>{pending} pending</Text>
+        {location ? (
+          <View style={styles.metaRow}>
+            <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.metaText} numberOfLines={1}>
+              {location}
+            </Text>
           </View>
         ) : null}
 
-        <View style={styles.spacer} />
+        {isShort ? (
+          <View style={styles.shortfall}>
+            <MaterialCommunityIcons name="account-alert-outline" size={14} color={colors.warning} />
+            <Text style={styles.shortfallText}>
+              {daysOut === 0 ? 'Today' : daysOut === 1 ? 'Tomorrow' : `${daysOut} days to go`}
+              {' · '}
+              {remaining} {remaining === 1 ? 'place' : 'places'} still open
+            </Text>
+          </View>
+        ) : null}
 
-        {quickAction ? (
-          <Pressable
-            onPress={quickAction.onPress}
-            disabled={quickActionPending}
-            accessibilityRole="button"
-            accessibilityLabel={`${quickAction.label} ${outreach.title}`}
-            style={[styles.quickAction, quickActionPending && styles.quickActionDisabled]}
-            hitSlop={4}
-          >
-            {quickActionPending ? (
-              <ActivityIndicator size="small" color={colors.navy} />
-            ) : (
-              <Text style={styles.quickActionText}>{quickAction.label}</Text>
-            )}
-          </Pressable>
-        ) : (
-          <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-        )}
+        <View style={styles.footer}>
+          <View style={styles.slots}>
+            <MaterialCommunityIcons name="account-group" size={16} color={colors.primary} />
+            <Text style={styles.slotsText}>
+              {outreach.slots_filled}/{outreach.slots_total} filled
+            </Text>
+          </View>
+
+          {quickAction ? (
+            <Pressable
+              onPress={quickAction.onPress}
+              disabled={quickActionPending}
+              accessibilityRole="button"
+              accessibilityLabel={`${quickAction.label} ${outreach.title}`}
+              style={[styles.quickAction, quickActionPending && styles.quickActionDisabled]}
+              hitSlop={4}
+            >
+              {quickActionPending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.quickActionText}>{quickAction.label}</Text>
+              )}
+            </Pressable>
+          ) : (
+            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+          )}
+        </View>
       </View>
     </Pressable>
   );
@@ -151,24 +159,73 @@ export function OutreachCard({ outreach, onPress, quickAction, quickActionPendin
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.base,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
     marginBottom: spacing.base,
-    minHeight: 44,
   },
-  headerRow: {
+  pressed: {
+    opacity: 0.85,
+  },
+  // A MINIMUM height, not a fixed one, so the band is identical on every card
+  // whether or not a flyer was uploaded and the queue keeps its rhythm as
+  // images arrive — while still growing for a two-line title. Shorter than the
+  // volunteer feed card's 132: this is a working list an organiser scans, not
+  // a discovery surface.
+  header: {
+    minHeight: 108,
+    justifyContent: 'flex-end',
+  },
+  headerContent: {
+    padding: spacing.base,
+    gap: spacing.sm,
+  },
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  title: {
+    fontFamily: fontFamily.bold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors.white,
+  },
+  pendingPill: {
+    borderWidth: 1,
+    borderColor: colors.white,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  pendingText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
+    color: colors.white,
+  },
+  body: {
+    padding: spacing.base,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  metaText: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    flexShrink: 1,
   },
   shortfall: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     marginTop: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.surfaceSubtle,
@@ -179,58 +236,28 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textSecondary,
   },
-  title: {
-    flex: 1,
-    fontFamily: fontFamily.semiBold,
-    fontSize: 15,
-    color: colors.textPrimary,
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginTop: spacing.base,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  metaRow: {
+  slots: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    marginTop: spacing.xs,
-  },
-  metaText: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    color: colors.textSecondary,
-    flexShrink: 1,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.sm,
-    gap: spacing.sm,
-  },
-  slotsPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
   },
   slotsText: {
-    fontFamily: fontFamily.medium,
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  pendingPill: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  pendingText: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 11,
-    color: colors.primary,
-  },
-  spacer: {
-    flex: 1,
+    fontSize: 13,
+    color: colors.textPrimary,
   },
   quickAction: {
-    minHeight: 44,
+    minHeight: 40,
     justifyContent: 'center',
     paddingHorizontal: spacing.base,
     borderRadius: radius.pill,
