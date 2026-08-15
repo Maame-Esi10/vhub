@@ -82,6 +82,7 @@ export default function EditOutreach() {
   const [errors, setErrors] = useState<WizardFieldError>({});
   const [slotsFloorError, setSlotsFloorError] = useState<string | null>(null);
   const [roleWarning, setRoleWarning] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const outreach = outreachQuery.data;
   const storedRoles = useMemo(() => rolesQuery.data ?? [], [rolesQuery.data]);
@@ -273,17 +274,48 @@ export default function EditOutreach() {
       return;
     }
 
-    save();
+    void save();
   }
 
-  function save() {
+  /**
+   * ROLES ARE WRITTEN FIRST, DELIBERATELY.
+   *
+   * The details and the roles live in different tables, and supabase-js cannot
+   * span them in one transaction, so a save is two requests and the order
+   * decides what a failure leaves behind. It used to write the details first,
+   * which produced the worst possible outcome: the details committed, the role
+   * write failed, and the outreach was left describing one thing and staffed
+   * as another.
+   *
+   * The role write is by far the more failure-prone of the two — it is a
+   * delete-then-insert across a table with a unique index and three triggers,
+   * and it is where the enum-cast bug struck. The details write is a plain
+   * UPDATE of columns that are already valid on screen. Doing the fragile one
+   * first means the common failure now leaves NOTHING written, and the form
+   * keeps every change so it can simply be saved again.
+   *
+   * This narrows the window; it does not close it. Two gaps remain and both
+   * need one server-side transaction to fix properly — see docs/REPORT_NOTES.md:
+   * roles can still succeed and then the details fail, and the role rewrite is
+   * itself a delete followed by an insert, so a failure between them loses the
+   * roles. Both are gone once this moves behind a single RPC.
+   */
+  async function save() {
     if (!state || !outreach || !organisationId) return;
     setRoleWarning(false);
+    setSaveError(null);
 
     const usesRoles = state.roles.length > 0;
 
-    updateOutreach.mutate(
-      {
+    try {
+      // Only when they actually differ. An unchanged list would otherwise be
+      // deleted and reinserted on every save, dropping the role link off every
+      // application for no reason at all.
+      if (roleListChanged) {
+        await replaceRoles.mutateAsync({ outreachId: outreach.id, roles: state.roles });
+      }
+
+      await updateOutreach.mutateAsync({
         outreachId: outreach.id,
         organisationId,
         title: state.title.trim(),
@@ -303,38 +335,27 @@ export default function EditOutreach() {
         roleType: usesRoles ? null : state.roleType,
         ...(usesRoles ? {} : { slotsTotal: state.slotsTotal }),
         flyerUrl: state.flyerUrl,
-      },
-      {
-        onSuccess: async () => {
-          // Only when they actually differ. An unchanged list would otherwise
-          // be deleted and reinserted on every save, which would drop the role
-          // link off every application for no reason at all.
-          if (roleListChanged) {
-            try {
-              await replaceRoles.mutateAsync({ outreachId: outreach.id, roles: state.roles });
-            } catch {
-              // Surfaced, not swallowed: the outreach body saved but the
-              // staffing did not, and those two disagreeing is exactly the
-              // state the organisation needs to know about.
-              return;
-            }
-          }
-          router.replace(`/(organisation)/outreach/${outreach.id}`);
-        },
-      }
-    );
+      });
+
+      // Confirmation belongs on the destination, not here: the organisation
+      // asked to be returned to the event, and a message on the screen they
+      // just left would be gone before they read it.
+      router.replace({
+        pathname: '/(organisation)/outreach/[id]',
+        params: { id: outreach.id, saved: '1' },
+      });
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : 'Could not save your changes. Please try again.'
+      );
+    }
   }
 
   const saving = updateOutreach.isPending || replaceRoles.isPending;
-  const saveError = updateOutreach.isError
-    ? updateOutreach.error instanceof Error
-      ? updateOutreach.error.message
-      : 'Could not save your changes. Please try again.'
-    : replaceRoles.isError
-      ? replaceRoles.error instanceof Error
-        ? `The details saved, but the roles did not: ${replaceRoles.error.message}`
-        : 'The details saved, but the roles did not. Try saving again.'
-      : null;
+  // One line for both refusals — the floor check and the database — because
+  // from the organisation's side they are the same event: the save did not
+  // happen, and here is why.
+  const blockingMessage = saveError ?? slotsFloorError;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -612,11 +633,30 @@ export default function EditOutreach() {
             )}
           </View>
 
-          {slotsFloorError ? <Text style={styles.saveError}>{slotsFloorError}</Text> : null}
-          {saveError ? <Text style={styles.saveError}>{saveError}</Text> : null}
         </ScrollView>
 
+        {/*
+          THE FAILURE SITS ON THE BUTTON THAT CAUSED IT.
+
+          This was red text at the bottom of a long scrolling form, which is
+          the one place it could be missed — the organisation taps Save, the
+          message renders above the fold they are not looking at, and nothing
+          about the screen says the save did not happen. In the footer it is
+          pinned, it cannot scroll away, and it is impossible to reach for
+          Save again without reading it.
+        */}
         <View style={styles.footer}>
+          {blockingMessage ? (
+            <View style={styles.errorBanner}>
+              <MaterialCommunityIcons name="alert-circle" size={18} color={colors.danger} />
+              <View style={styles.errorTextBlock}>
+                <Text style={styles.errorTitle}>Not saved</Text>
+                <Text style={styles.errorBody}>{blockingMessage}</Text>
+                <Text style={styles.errorHint}>Your changes are still here — fix this and save again.</Text>
+              </View>
+            </View>
+          ) : null}
+
           <Button
             title={saving ? 'Saving...' : 'Save changes'}
             onPress={attemptSave}
@@ -637,7 +677,7 @@ export default function EditOutreach() {
         cancelLabel="Go back"
         tone="destructive"
         busy={saving}
-        onConfirm={save}
+        onConfirm={() => void save()}
         onCancel={() => setRoleWarning(false)}
       />
     </SafeAreaView>
@@ -781,17 +821,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
-  saveError: {
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-    color: colors.danger,
-    marginTop: spacing.lg,
-    textAlign: 'center',
-  },
   footer: {
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.base,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    gap: spacing.base,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    padding: spacing.base,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: colors.surface,
+  },
+  errorTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  errorTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 13,
+    color: colors.danger,
+  },
+  errorBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.textPrimary,
+  },
+  errorHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
   },
 });

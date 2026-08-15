@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -52,8 +52,21 @@ const STATUS_LABEL: Record<OutreachStatus, string> = {
  */
 export default function OrganisationOutreachDetail() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, saved } = useLocalSearchParams<{ id: string; saved?: string }>();
   const organisationId = useAuthStore((s) => s.user)?.id;
+
+  // Set by Edit event on a successful save. The confirmation belongs here
+  // rather than on the form, because the form is gone by the time it would be
+  // read — "it saved" and "you are back on the event" are one moment.
+  const [savedNotice, setSavedNotice] = useState(saved === '1');
+  useEffect(() => {
+    if (saved !== '1') return;
+    setSavedNotice(true);
+    // Cleared so it does not reappear on every later visit to this screen.
+    router.setParams({ saved: '' });
+    const timer = setTimeout(() => setSavedNotice(false), 4000);
+    return () => clearTimeout(timer);
+  }, [saved, router]);
 
   const outreachQuery = useOutreach(id);
   const outreach = outreachQuery.data;
@@ -145,6 +158,13 @@ export default function OrganisationOutreachDetail() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {savedNotice ? (
+          <View style={styles.savedNotice}>
+            <MaterialCommunityIcons name="check-circle" size={16} color={colors.success} />
+            <Text style={styles.savedNoticeText}>Your changes have been saved.</Text>
+          </View>
+        ) : null}
+
         <FlyerBackground uri={outreach.flyer_url} style={styles.hero}>
           <View style={styles.heroContent}>
             <Badge label={STATUS_LABEL[outreach.status]} tone={STATUS_TONE[outreach.status]} />
@@ -395,6 +415,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xxl,
     gap: spacing.base,
+  },
+  savedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  savedNoticeText: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textPrimary,
   },
   hero: {
     borderRadius: radius.lg,

@@ -12,7 +12,7 @@ import {
 } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { ApplicantCard, OutreachPicker, RosterSummaryCard } from '@/components/organisation';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
   useBatchDecideApplications,
   useOrganisationOutreaches,
@@ -350,12 +350,32 @@ export default function Applicants() {
         moved into the list's own header (see listHeader below) because a
         screen that pins six stacked sections leaves a phone with barely a
         applicant visible.
+
+        THE CHIPS ARE ONLY SHOWN WHEN THERE IS A CHOICE LEFT TO MAKE. Arriving
+        from an event's management screen, the choice has already been made —
+        offering every other event alongside it is not navigation, it is an
+        invitation to wander off the event being worked on, and it reads as
+        though the screen had not registered which one was opened. Opening the
+        Applicants TAB directly is the case the chips exist for: nothing has
+        been chosen, and they are how an event gets picked.
+
+        `enteredFromEvent` is the same signal that decides the back arrow, so
+        the two controls can never disagree about which mode the screen is in.
       */}
-      <OutreachPicker
-        outreaches={outreaches}
-        selectedId={selectedOutreachId}
-        onSelect={(id) => setSelectedOutreachId(id)}
-      />
+      {enteredFromEvent && selectedOutreach ? (
+        <View style={styles.scopedEvent}>
+          <MaterialCommunityIcons name="calendar-check" size={15} color={colors.textSecondary} />
+          <Text style={styles.scopedEventText} numberOfLines={1}>
+            {selectedOutreach.title}
+          </Text>
+        </View>
+      ) : (
+        <OutreachPicker
+          outreaches={outreaches}
+          selectedId={selectedOutreachId}
+          onSelect={(id) => setSelectedOutreachId(id)}
+        />
+      )}
 
       <ConfirmDialog
         visible={confirming !== null}
@@ -572,6 +592,28 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: fontFamily.bold,
     fontSize: 18,
+    color: colors.textPrimary,
+  },
+  /*
+    Stands in for the chip row when the screen is scoped to one event, and
+    takes the same vertical space so the list below does not jump between the
+    two modes.
+  */
+  scopedEvent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.base,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  scopedEventText: {
+    flex: 1,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
     color: colors.textPrimary,
   },
   /*

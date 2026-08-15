@@ -124,7 +124,7 @@ export default function OrganisationAttendance() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Mark attendance" fallback="/(organisation)/applicants" />
+        <ScreenHeader title="Mark attendance" fallback={`/(organisation)/outreach/${id}`} />
         <ListSkeleton rows={5} rowHeight={72} />
       </SafeAreaView>
     );
@@ -133,7 +133,7 @@ export default function OrganisationAttendance() {
   if (isError) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Mark attendance" fallback="/(organisation)/applicants" />
+        <ScreenHeader title="Mark attendance" fallback={`/(organisation)/outreach/${id}`} />
         <View style={styles.centerFill}>
           <ErrorState
             message={
@@ -158,7 +158,7 @@ export default function OrganisationAttendance() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Mark attendance" fallback="/(organisation)/applicants" />
+      <ScreenHeader title="Mark attendance" fallback={`/(organisation)/outreach/${id}`} />
 
       <View style={styles.summary}>
         <Text style={styles.title} numberOfLines={2}>
@@ -242,7 +242,7 @@ export default function OrganisationAttendance() {
           <Button
             title="Done"
             variant="solid"
-            onPress={() => router.replace('/(organisation)/applicants')}
+            onPress={() => router.replace(`/(organisation)/outreach/${id}`)}
             style={styles.footerButton}
           />
         </View>

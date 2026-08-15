@@ -55,7 +55,7 @@ export default function OrganisationCheckinQr() {
   if (outreachQuery.isLoading || codeQuery.isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Check-in code" fallback="/(organisation)/dashboard" />
+        <ScreenHeader title="Check-in code" fallback={`/(organisation)/outreach/${id}`} />
         <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} />
         </View>
@@ -66,7 +66,7 @@ export default function OrganisationCheckinQr() {
   if (outreachQuery.isError || codeQuery.isError || !outreach || !codeQuery.data) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Check-in code" fallback="/(organisation)/dashboard" />
+        <ScreenHeader title="Check-in code" fallback={`/(organisation)/outreach/${id}`} />
         <ErrorState
           message={
             outreachQuery.error?.message ??
@@ -98,7 +98,7 @@ export default function OrganisationCheckinQr() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Check-in code" fallback="/(organisation)/dashboard" />
+      <ScreenHeader title="Check-in code" fallback={`/(organisation)/outreach/${id}`} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>{outreach.title}</Text>
