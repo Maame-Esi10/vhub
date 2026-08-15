@@ -1343,3 +1343,50 @@ at creation time, so the events that predate the feature can never have one —
 they will show the navy fallback band permanently. This is the second thing
 editing gates (the first being ordinary corrections to a posted event), and it
 strengthens the case for building it before more features accumulate behind it.
+
+## Outreach editing (built 2026-08-15)
+
+The gap this closes is recorded directly above: an organisation could only
+close an outreach it had mistyped, and because a flyer could only be attached
+at creation, every event posted before flyers shipped was stuck on the navy
+fallback band permanently.
+
+**One scroll, not a wizard.** Create Outreach is four steps because the
+organisation is composing something out of nothing and the steps pace that.
+Editing has the opposite shape: they arrive already knowing the single thing
+they want to change, so four steps to reach it would be worse than the
+X-to-close they had before. The edit screen is one scroll with three labelled
+sections, each independently editable.
+
+**A past date is only an error if it was changed.** `validateWizard` refuses a
+date behind today, which is right for creation — an event in the past is
+meaningless. Applied unchanged to editing it would have made the screen useless
+for exactly the events that need it most: the pre-flyer outreaches, whose own
+dates have passed. `validateOutreachEdit` therefore drops the past-date error
+when the date is untouched, and keeps it when the organisation actually tries
+to reschedule into the past. Rescheduling backwards is the rule that matters;
+"your event has already happened" is not an error, it is a fact about the row.
+
+**Places can rise but never fall below the accepted.** `slots_filled <=
+slots_total` is a check constraint, so cutting places below the volunteers
+already accepted is refused by the database with a constraint violation that
+explains nothing. The form catches it first, per role in multi-role mode, in a
+sentence naming the role — and removing a role that still has accepted people
+in it is refused outright rather than silently orphaning them.
+
+**Roles are only rewritten when they actually differ.**
+`useReplaceOutreachRoles` is a delete-then-insert, which sets
+`applications.outreach_role_id` to NULL for anyone whose role disappeared. That
+is acceptable on a draft and destructive on a live event, and it would have
+fired on *every* save — including saves that only fixed a typo in the title.
+`rolesChanged` compares the two lists order-insensitively (the list is re-sorted
+on read, so a reorder is not a change) and the rewrite is skipped when they
+match. When they genuinely differ and people have already applied, a
+confirmation dialog states what will happen to those applications before
+anything is written.
+
+**The mode toggle restores rather than reseeds.** Toggling to "Specific roles"
+in the create wizard seeds a default nurse role, which is a sensible starting
+point for a blank form. In the editor it restores the roles already stored, so
+toggling away and back does not overwrite a real staffing plan with a stranger's
+default.

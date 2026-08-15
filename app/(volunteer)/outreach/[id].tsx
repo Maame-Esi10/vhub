@@ -15,6 +15,7 @@ import {
   isUpcomingEvent,
 } from '@/components/ui';
 import { FullApplicationSheet, MatchScoreBadge, RolePicker, WithdrawSheet } from '@/components/volunteer';
+import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
   useCancelApplication,
@@ -59,6 +60,12 @@ export default function OutreachDetail() {
   const roles = rolesQuery.data ?? [];
   const usesRoles = roles.length > 0;
   const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? null;
+  // Same lookup RolePicker uses, so the gate names the role by the label the
+  // volunteer just tapped rather than a raw category value.
+  const selectedRoleLabel = selectedRole
+    ? VOLUNTEER_CATEGORIES.find((c) => c.value === selectedRole.category)?.label ??
+      selectedRole.category
+    : null;
 
   const outreach = outreachQuery.data;
   const application = myApplicationQuery.data ?? null;
@@ -314,9 +321,17 @@ export default function OutreachDetail() {
             <MaterialCommunityIcons name="shield-alert-outline" size={20} color={colors.warning} />
             <View style={styles.gateText}>
               <Text style={styles.gateTitle}>Verification required</Text>
+              {/*
+                On a multi-role event the gate is raised by the ROLE that was
+                tapped, so the copy has to name that role. Saying "this is a
+                clinical outreach" contradicted the app one tap later, when
+                choosing the support role on the same event let the volunteer
+                straight through -- the event had not changed, only the role.
+              */}
               <Text style={styles.gateBody}>
-                This is a clinical outreach, so you need a verified profile before you can apply.
-                Support-role events are open to you now.
+                {selectedRoleLabel
+                  ? `The ${selectedRoleLabel} role is clinical, so you need a verified profile to apply for it. Any support roles on this outreach are open to you now.`
+                  : 'This is a clinical outreach, so you need a verified profile before you can apply. Support-role events are open to you now.'}
               </Text>
               {/*
                 Deliberately NOT linking to (auth)/verify-identity. That screen

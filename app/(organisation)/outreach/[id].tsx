@@ -263,6 +263,19 @@ export default function OrganisationOutreachDetail() {
         />
 
         {/*
+          Offered on EVERY status, past events included. A finished outreach is
+          still worth correcting — and until editing existed a flyer could only
+          be attached at creation, so every outreach posted before flyers
+          shipped was stuck on the navy fallback band with no way to fix it.
+        */}
+        <ActionRow
+          icon="pencil-outline"
+          title="Edit event details"
+          meta="Change the title, time, place, flyer or who you need."
+          onPress={() => router.push(`/(organisation)/edit-outreach/${outreach.id}`)}
+        />
+
+        {/*
           The check-in QR's permanent home. Hidden for drafts: an unpublished
           outreach has no accepted volunteers, so nobody could scan it.
         */}

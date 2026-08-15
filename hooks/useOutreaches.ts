@@ -402,6 +402,109 @@ export function useCreateOutreach() {
   });
 }
 
+/**
+ * The editable body of an outreach. Everything here is in `outreaches`' UPDATE
+ * grant list (supabase/schema.sql); nothing derived is present.
+ *
+ * `slotsTotal` is OPTIONAL and must be omitted in multi-role mode, where the
+ * outreach total is the sum of its roles and is maintained by trigger. Sending
+ * a client value there is not merely redundant — it is a second source of truth
+ * that the trigger overwrites, so the organisation would see its number change
+ * by itself. `slots_filled`, `status`, `organisation_id` and the check-in
+ * anchor are absent for the same reason they are absent from the grant list.
+ */
+export interface UpdateOutreachParams {
+  outreachId: string;
+  /** Only used to invalidate the right list cache; RLS is what actually authorises the write. */
+  organisationId: string;
+  title: string;
+  description: string | null;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  region: string | null;
+  district: string | null;
+  locationName: string | null;
+  requiredSkills: string[];
+  requiredCategory: string | null;
+  roleType: OutreachRoleType | null;
+  slotsTotal?: number;
+  flyerUrl: string | null;
+}
+
+/**
+ * Edits a posted outreach.
+ *
+ * Until this existed an organisation could only close an outreach it had
+ * mistyped, and — because a flyer can only be attached at creation — every
+ * outreach posted before flyers shipped was permanently stuck on the navy
+ * fallback band with no way to add one.
+ */
+export function useUpdateOutreach() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: UpdateOutreachParams): Promise<Outreach> => {
+      const patch: Record<string, unknown> = {
+        title: params.title,
+        description: params.description,
+        date: params.date,
+        start_time: params.startTime,
+        end_time: params.endTime,
+        region: params.region,
+        district: params.district,
+        location_name: params.locationName,
+        required_skills: params.requiredSkills,
+        required_category: params.requiredCategory,
+        role_type: params.roleType,
+        flyer_url: params.flyerUrl,
+      };
+
+      // Present only in single-role mode — see the note on the params type.
+      if (params.slotsTotal !== undefined) {
+        patch.slots_total = params.slotsTotal;
+      }
+
+      const { data, error } = await supabase
+        .from('outreaches')
+        .update(patch)
+        .eq('id', params.outreachId)
+        .select()
+        .single();
+
+      if (error || !data) {
+        throw new Error(updateOutreachMessage((error as PostgrestError | null)?.message ?? ''));
+      }
+
+      return data as Outreach;
+    },
+    onSuccess: (outreach, params) => {
+      queryClient.invalidateQueries({
+        queryKey: outreachKeys.byOrganisation(params.organisationId),
+      });
+      queryClient.invalidateQueries({ queryKey: outreachKeys.detail(outreach.id) });
+      // The edit can move an outreach in or out of the volunteer feed — a
+      // changed date, region or skill set all change how it ranks, and the
+      // ranked feed caches for five minutes. Drop the whole outreach cache
+      // rather than guessing which slices moved.
+      queryClient.invalidateQueries({ queryKey: outreachKeys.all });
+    },
+  });
+}
+
+/**
+ * The one database refusal an organisation can actually trigger from this form
+ * is the `slots_filled <= slots_total` check, by cutting places below the
+ * number already accepted. The form prevents it, but a stale screen could
+ * still reach it, and "violates check constraint" explains nothing.
+ */
+function updateOutreachMessage(message: string): string {
+  if (message.includes('slots_filled_le_total') || message.includes('slots_filled')) {
+    return 'You have fewer places than volunteers already accepted. Raise the number of places, or reject someone first.';
+  }
+  return message || 'Could not save your changes. Please try again.';
+}
+
 export interface UpdateOutreachStatusParams {
   outreachId: string;
   organisationId: string;

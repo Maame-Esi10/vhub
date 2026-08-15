@@ -17,6 +17,9 @@ export type { OutreachPreviewCardProps } from './OutreachPreviewCard';
 export {
   INITIAL_WIZARD_STATE,
   validateWizard,
+  validateOutreachEdit,
   hasWizardErrors,
+  wizardStateFromOutreach,
+  rolesChanged,
 } from './outreachWizard';
 export type { OutreachWizardState, WizardFieldError, RoleDraft } from './outreachWizard';
