@@ -1,13 +1,13 @@
 # Multi-role outreaches — plan and SQL
 
-**Status: APPROVED 2026-08-11. Foundation built; screens outstanding.**
+**Status: APPROVED 2026-08-11. Built and deployed; device test outstanding.**
 
 | Piece | State |
 |---|---|
-| Migration (`supabase/migrations/20260811_multi_role_outreaches.sql`) | Written, **not yet run** |
+| Migration (`supabase/migrations/20260811_multi_role_outreaches.sql`) | **Run 2026-08-13** (role_rows 0, total_outreaches 4) |
 | Pure scorer (`lib/matching/multiRole.ts`) + 21 unit tests | Built, passing |
-| `/api/match` role-aware scoring | Not started |
-| Screens (wizard role builder, detail apply-per-role, applicant grouping) | Not started |
+| `/api/match` role-aware scoring | Built, **deployed 2026-08-15** |
+| Screens (wizard role builder, detail apply-per-role, applicant grouping) | Built, device test pending |
 
 **One change from the original proposal, at the owner's push-back.** The
 uniqueness rule was `unique (outreach_id, category)`, which permanently ruled

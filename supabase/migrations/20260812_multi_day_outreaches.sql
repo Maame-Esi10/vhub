@@ -1,8 +1,9 @@
 -- ============================================================
 -- Multi-day outreaches — days, commitments, and per-day attendance.
 --
--- NOT YET RUN. Land this AFTER the multi-role screens are device-tested, so
--- the two slot models are not both in flight at once.
+-- RUN 2026-08-15. Verification returned outreaches 4 / outreach_days 4,
+-- applications 2 / application_days 2, attendance_without_day 0 — every count
+-- lined up, so the n=1 backfill is complete and the constraint swap is safe.
 --
 -- RUN IT AS ONE PASTE. The whole file is a single transaction — it contains no
 -- transaction control of its own, so the Supabase editor's own transaction
@@ -273,7 +274,9 @@ begin
      and rel.relname = 'attendance'
      and con.contype = 'u'
      and (
-       select array_agg(att.attname order by att.attname)
+       -- attname is `name`, not `text`, and Postgres has no name[] = text[] operator.
+       -- Cast inside the aggregate so both sides of the comparison are text[].
+       select array_agg(att.attname::text order by att.attname::text)
          from unnest(con.conkey) as k(attnum)
          join pg_attribute att on att.attrelid = con.conrelid and att.attnum = k.attnum
      ) = array['outreach_id', 'volunteer_id']
