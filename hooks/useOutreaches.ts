@@ -505,6 +505,95 @@ function updateOutreachMessage(message: string): string {
   return message || 'Could not save your changes. Please try again.';
 }
 
+export interface SaveOutreachParams extends UpdateOutreachParams {
+  /**
+   * `null` leaves the roles untouched — the common save, where only the details
+   * changed. An ARRAY replaces them wholesale, and an EMPTY array is how an
+   * outreach returns to single-role storage.
+   */
+  roles: {
+    category: string;
+    roleType: OutreachRoleType;
+    minExperienceLevel: string | null;
+    slotsTotal: number;
+  }[] | null;
+}
+
+/**
+ * Saves the details AND the roles in ONE transaction.
+ *
+ * `useUpdateOutreach` + `useReplaceOutreachRoles` were two or three separate
+ * requests, and every request is its own transaction, so a failure between them
+ * left the outreach describing one thing and staffed as another — the reported
+ * "The details saved, but the roles did not". Writing the fragile one first
+ * narrowed that window but could not close it, and the role rewrite is itself a
+ * delete followed by an insert, so a failure between THOSE lost the roles
+ * outright.
+ *
+ * `save_outreach()` is a plpgsql function, and a function body is a single
+ * transaction: the details update, the role delete and the role insert either
+ * all commit or all roll back. It is SECURITY INVOKER, so RLS and every
+ * column-level GRANT still apply exactly as they do to a direct call — it buys
+ * atomicity, not privilege.
+ */
+export function useSaveOutreach() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: SaveOutreachParams): Promise<Outreach> => {
+      const { data, error } = await supabase.rpc('save_outreach', {
+        p_outreach_id: params.outreachId,
+        p_title: params.title,
+        p_description: params.description,
+        p_date: params.date,
+        p_start_time: params.startTime,
+        p_end_time: params.endTime,
+        p_region: params.region,
+        p_district: params.district,
+        p_location_name: params.locationName,
+        p_required_skills: params.requiredSkills,
+        p_required_category: params.requiredCategory,
+        p_role_type: params.roleType,
+        // Undefined means multi-role, where the total is the sum of the roles
+        // and is maintained by trigger; the function reads null as "leave it".
+        p_slots_total: params.slotsTotal ?? null,
+        p_flyer_url: params.flyerUrl,
+        p_roles: params.roles
+          ? params.roles.map((role) => ({
+              category: role.category,
+              role_type: role.roleType,
+              min_experience_level: role.minExperienceLevel,
+              slots_total: role.slotsTotal,
+            }))
+          : null,
+      });
+
+      if (error || !data) {
+        throw new Error(updateOutreachMessage(error?.message ?? ''));
+      }
+
+      return data as Outreach;
+    },
+    onSuccess: (outreach, params) => {
+      queryClient.invalidateQueries({
+        queryKey: outreachKeys.byOrganisation(params.organisationId),
+      });
+      queryClient.invalidateQueries({ queryKey: outreachRoleKeysAll });
+      // A changed date, region or skill set all change how this ranks, and the
+      // ranked feed caches for five minutes. Drop the whole outreach cache
+      // rather than guessing which slices moved.
+      queryClient.invalidateQueries({ queryKey: outreachKeys.all });
+    },
+  });
+}
+
+/**
+ * Imported as a literal rather than from `useOutreachRoles` to keep the
+ * dependency one-way: that module already imports `outreachKeys` from here,
+ * and importing back would make the two files circular.
+ */
+const outreachRoleKeysAll = ['outreach-roles'] as const;
+
 export interface UpdateOutreachStatusParams {
   outreachId: string;
   organisationId: string;

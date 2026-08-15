@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import type { LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,7 +20,6 @@ import {
   Input,
   ListSkeleton,
   MultiSelectField,
-  NumberStepper,
   SelectField,
 } from '@/components/ui';
 // Imported directly, not via the barrel: this pulls in a native module, and
@@ -30,7 +30,9 @@ import type { SelectOption } from '@/components/ui';
 import {
   RoleBuilder,
   hasWizardErrors,
+  roleKey,
   rolesChanged,
+  toStoragePayload,
   validateOutreachEdit,
   wizardStateFromOutreach,
 } from '@/components/organisation';
@@ -38,13 +40,12 @@ import type { OutreachWizardState, WizardFieldError } from '@/components/organis
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { SKILL_CATEGORIES } from '@/constants/skills';
-import { ROLE_TYPES, VOLUNTEER_CATEGORIES } from '@/constants/categories';
+import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import {
   useOutreach,
   useOutreachApplications,
   useOutreachRoles,
-  useReplaceOutreachRoles,
-  useUpdateOutreach,
+  useSaveOutreach,
 } from '@/hooks';
 // Direct import, not the hooks barrel: this reaches the native picker
 // modules. See the note in lib/cloudinary.ts.
@@ -67,15 +68,14 @@ const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({ title: c.name, data: c.ski
  */
 export default function EditOutreach() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, section } = useLocalSearchParams<{ id: string; section?: string }>();
   const outreachId = typeof id === 'string' ? id : undefined;
   const organisationId = useAuthStore((s) => s.user)?.id;
 
   const outreachQuery = useOutreach(outreachId);
   const rolesQuery = useOutreachRoles(outreachId);
   const applicationsQuery = useOutreachApplications(outreachId);
-  const updateOutreach = useUpdateOutreach();
-  const replaceRoles = useReplaceOutreachRoles();
+  const saveOutreach = useSaveOutreach();
   const flyerUpload = useFlyerUpload();
 
   const [state, setState] = useState<OutreachWizardState | null>(null);
@@ -84,14 +84,36 @@ export default function EditOutreach() {
   const [roleWarning, setRoleWarning] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  /*
+    DEEP LINKS INTO A SECTION.
+
+    Reaching one field used to mean opening the editor at the top and scrolling
+    past everything else. The rows on Manage event that DISPLAY the date and the
+    place now open this screen at the section that owns them, so the tap that
+    says "this is wrong" lands on the control that fixes it.
+
+    Offsets are measured rather than guessed: the sections are different heights
+    on different phones, and a hard-coded scroll position would be wrong on all
+    but one of them.
+  */
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionOffsets = useRef<Record<string, number>>({});
+  const scrolledToSection = useRef(false);
+
+  function rememberSection(name: string) {
+    return (event: LayoutChangeEvent) => {
+      sectionOffsets.current[name] = event.nativeEvent.layout.y;
+    };
+  }
+
   const outreach = outreachQuery.data;
   const storedRoles = useMemo(() => rolesQuery.data ?? [], [rolesQuery.data]);
 
   // Hydrate once both queries have answered. Roles resolving to an empty array
-  // is a real answer (single-role mode), so the form must wait for the query
-  // to SETTLE rather than for the array to be non-empty — hydrating early
-  // would open a multi-role outreach on the "Any volunteers" side and quietly
-  // delete its roles on save.
+  // is a real answer — single-role storage — so the form must wait for the
+  // query to SETTLE rather than for the array to be non-empty; hydrating early
+  // would build the list from the outreach columns and then overwrite the real
+  // roles with it on save.
   const ready = !!outreach && !rolesQuery.isPending;
   useEffect(() => {
     if (!ready || state !== null || !outreach) return;
@@ -118,10 +140,23 @@ export default function EditOutreach() {
   const filledByRoleKey = useMemo(() => {
     const map = new Map<string, number>();
     for (const role of storedRoles) {
-      map.set(`${role.category}|${role.min_experience_level ?? 'any'}`, role.slots_filled);
+      map.set(
+        roleKey({ category: role.category, minExperienceLevel: role.min_experience_level }),
+        role.slots_filled
+      );
     }
     return map;
   }, [storedRoles]);
+
+  // Runs after layout, so the offsets exist. Once only: a later re-render must
+  // not yank the organisation back up mid-edit.
+  useEffect(() => {
+    if (!section || scrolledToSection.current || !state) return;
+    const y = sectionOffsets.current[section];
+    if (y === undefined) return;
+    scrolledToSection.current = true;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: false });
+  }, [section, state]);
 
   const liveApplicationCount = (applicationsQuery.data ?? []).filter(
     (application) => application.status !== 'cancelled'
@@ -192,26 +227,31 @@ export default function EditOutreach() {
     );
   }
 
-  const usingRoles = state.roles.length > 0;
   const districtOptions: SelectOption[] =
     GHANA_REGIONS.find((r) => r.name === state.region)?.districts.map((d) => ({
       value: d,
       label: d,
     })) ?? [];
 
-  const roleListChanged = rolesChanged(storedRoleDrafts, state.roles);
-  const totalFromRoles = state.roles.reduce((sum, role) => sum + role.slotsTotal, 0);
+  // The list is compared in STORAGE terms, not form terms: a single role with
+  // no experience floor is not an outreach_roles row at all, so a form showing
+  // one role and a database holding none are in agreement, not conflict.
+  const payload = toStoragePayload(state);
+  const roleListChanged = rolesChanged(storedRoleDrafts, payload.roles);
 
   /**
    * Places can never fall below the volunteers already accepted — the database
-   * enforces `slots_filled <= slots_total` as a check constraint, and in
-   * multi-role mode the same rule applies per role. Caught here so the
+   * enforces `slots_filled <= slots_total` as a check constraint, and where
+   * there are role rows the same rule applies per role. Caught here so the
    * organisation gets a sentence naming the role rather than a constraint
    * violation on save.
    */
   function findSlotsFloorProblem(form: OutreachWizardState): string | null {
-    if (form.roles.length === 0) {
-      if (form.slotsTotal < outreach!.slots_filled) {
+    const shape = toStoragePayload(form);
+
+    // Single-role storage: one total, checked against the outreach's own.
+    if (shape.roles.length === 0) {
+      if (shape.slotsTotal < outreach!.slots_filled) {
         return `You have already accepted ${outreach!.slots_filled} volunteer${
           outreach!.slots_filled === 1 ? '' : 's'
         }, so you cannot drop below ${outreach!.slots_filled} place${
@@ -221,8 +261,8 @@ export default function EditOutreach() {
       return null;
     }
 
-    for (const role of form.roles) {
-      const filled = filledByRoleKey.get(`${role.category}|${role.minExperienceLevel ?? 'any'}`) ?? 0;
+    for (const role of shape.roles) {
+      const filled = filledByRoleKey.get(roleKey(role)) ?? 0;
       if (role.slotsTotal < filled) {
         const label =
           VOLUNTEER_CATEGORIES.find((c) => c.value === role.category)?.label ?? role.category;
@@ -232,12 +272,12 @@ export default function EditOutreach() {
       }
     }
 
-    // A role that has been REMOVED entirely, but had people in it. The
-    // delete-then-insert rewrite would orphan their role link, so it is worth
-    // naming rather than letting the confirmation dialog cover it vaguely.
+    // A role REMOVED entirely, but with people in it. The rewrite would orphan
+    // their role link, so it is worth naming rather than letting the
+    // confirmation dialog cover it vaguely.
     for (const role of storedRoles) {
       if (role.slots_filled === 0) continue;
-      const stillThere = form.roles.some(
+      const stillThere = shape.roles.some(
         (draft) =>
           draft.category === role.category &&
           (draft.minExperienceLevel ?? 'any') === (role.min_experience_level ?? 'any')
@@ -278,44 +318,29 @@ export default function EditOutreach() {
   }
 
   /**
-   * ROLES ARE WRITTEN FIRST, DELIBERATELY.
+   * ONE TRANSACTION, VIA save_outreach().
    *
-   * The details and the roles live in different tables, and supabase-js cannot
-   * span them in one transaction, so a save is two requests and the order
-   * decides what a failure leaves behind. It used to write the details first,
-   * which produced the worst possible outcome: the details committed, the role
-   * write failed, and the outreach was left describing one thing and staffed
-   * as another.
+   * The details and the roles live in different tables and supabase-js cannot
+   * span them, so this used to be two or three separate requests — and every
+   * request is its own transaction. A failure between them left the outreach
+   * describing one thing and staffed as another, which is exactly what the
+   * enum-cast bug produced. Writing the fragile one first narrowed the window;
+   * it could not close it, and the role rewrite is itself a delete followed by
+   * an insert, so a failure between THOSE lost the roles outright.
    *
-   * The role write is by far the more failure-prone of the two — it is a
-   * delete-then-insert across a table with a unique index and three triggers,
-   * and it is where the enum-cast bug struck. The details write is a plain
-   * UPDATE of columns that are already valid on screen. Doing the fragile one
-   * first means the common failure now leaves NOTHING written, and the form
-   * keeps every change so it can simply be saved again.
-   *
-   * This narrows the window; it does not close it. Two gaps remain and both
-   * need one server-side transaction to fix properly — see docs/REPORT_NOTES.md:
-   * roles can still succeed and then the details fail, and the role rewrite is
-   * itself a delete followed by an insert, so a failure between them loses the
-   * roles. Both are gone once this moves behind a single RPC.
+   * A plpgsql function body IS a transaction. The details update, the role
+   * delete and the role insert now either all commit or all roll back, and the
+   * screen keeps every change either way.
    */
   async function save() {
     if (!state || !outreach || !organisationId) return;
     setRoleWarning(false);
     setSaveError(null);
 
-    const usesRoles = state.roles.length > 0;
+    const shape = toStoragePayload(state);
 
     try {
-      // Only when they actually differ. An unchanged list would otherwise be
-      // deleted and reinserted on every save, dropping the role link off every
-      // application for no reason at all.
-      if (roleListChanged) {
-        await replaceRoles.mutateAsync({ outreachId: outreach.id, roles: state.roles });
-      }
-
-      await updateOutreach.mutateAsync({
+      await saveOutreach.mutateAsync({
         outreachId: outreach.id,
         organisationId,
         title: state.title.trim(),
@@ -327,14 +352,17 @@ export default function EditOutreach() {
         district: state.district,
         locationName: state.locationName.trim() ? state.locationName.trim() : null,
         requiredSkills: state.requiredSkills,
-        // Derived in multi-role mode, exactly as on create: role_type
-        // summarises to 'clinical' if any role is, the total is the sum of the
-        // roles, and both are maintained by trigger. required_category has no
-        // single answer once there are several.
-        requiredCategory: usesRoles ? null : state.requiredCategory,
-        roleType: usesRoles ? null : state.roleType,
-        ...(usesRoles ? {} : { slotsTotal: state.slotsTotal }),
+        requiredCategory: shape.requiredCategory,
+        roleType: shape.roleType,
         flyerUrl: state.flyerUrl,
+        // Omitted where there are role rows: the total is their sum and is
+        // maintained by trigger, so a client value would be overwritten.
+        ...(shape.roles.length > 0 ? {} : { slotsTotal: shape.slotsTotal }),
+        // null leaves the roles untouched entirely — the common save, where
+        // only the details changed. Passing the list when nothing changed
+        // would delete and reinsert rows for no reason, dropping the role link
+        // off every application that pointed at them.
+        roles: roleListChanged ? shape.roles : null,
       });
 
       // Confirmation belongs on the destination, not here: the organisation
@@ -351,7 +379,7 @@ export default function EditOutreach() {
     }
   }
 
-  const saving = updateOutreach.isPending || replaceRoles.isPending;
+  const saving = saveOutreach.isPending;
   // One line for both refusals — the floor check and the database — because
   // from the organisation's side they are the same event: the save did not
   // happen, and here is why.
@@ -377,12 +405,15 @@ export default function EditOutreach() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           style={styles.flex}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
           {/* ---------- Details ---------- */}
-          <Text style={styles.sectionLabel}>DETAILS</Text>
+          <Text style={styles.sectionLabel} onLayout={rememberSection('details')}>
+            DETAILS
+          </Text>
           <View style={styles.section}>
             <Input
               label="Campaign Title"
@@ -442,7 +473,9 @@ export default function EditOutreach() {
           </View>
 
           {/* ---------- Where and when ---------- */}
-          <Text style={styles.sectionLabel}>WHERE &amp; WHEN</Text>
+          <Text style={styles.sectionLabel} onLayout={rememberSection('when')}>
+            WHERE &amp; WHEN
+          </Text>
           <View style={styles.section}>
             <SelectField
               label="Region"
@@ -510,7 +543,9 @@ export default function EditOutreach() {
           </View>
 
           {/* ---------- Who they need ---------- */}
-          <Text style={styles.sectionLabel}>WHO YOU NEED</Text>
+          <Text style={styles.sectionLabel} onLayout={rememberSection('who')}>
+            WHO YOU NEED
+          </Text>
           <View style={styles.section}>
             <MultiSelectField
               label="Required Skills"
@@ -520,117 +555,25 @@ export default function EditOutreach() {
               onChange={(next) => update('requiredSkills', next)}
             />
 
-            <Text style={styles.chipLabel}>Who do you need?</Text>
-            <View style={styles.chipRow}>
-              <Pressable
-                onPress={() => update('roles', [])}
-                accessibilityRole="button"
-                accessibilityLabel="Any volunteers"
-                accessibilityState={{ selected: !usingRoles }}
-                style={[styles.chip, !usingRoles && styles.chipSelected]}
-              >
-                <Text style={[styles.chipText, !usingRoles && styles.chipTextSelected]}>
-                  Any volunteers
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() =>
-                  update(
-                    'roles',
-                    // Restores what was there if they toggled away by accident,
-                    // rather than seeding a stranger's default over their real
-                    // staffing plan.
-                    storedRoleDrafts.length > 0
-                      ? storedRoleDrafts
-                      : [
-                          {
-                            category: 'nurse',
-                            roleType: 'clinical',
-                            minExperienceLevel: null,
-                            slotsTotal: 2,
-                          },
-                        ]
-                  )
-                }
-                accessibilityRole="button"
-                accessibilityLabel="Specific roles"
-                accessibilityState={{ selected: usingRoles }}
-                style={[styles.chip, usingRoles && styles.chipSelected]}
-              >
-                <Text style={[styles.chipText, usingRoles && styles.chipTextSelected]}>
-                  Specific roles
-                </Text>
-              </Pressable>
-            </View>
-
-            {usingRoles ? (
-              <>
-                <RoleBuilder roles={state.roles} onChange={(roles) => update('roles', roles)} />
-                <Text style={styles.derivedNote}>
-                  This event will hold {totalFromRoles} {totalFromRoles === 1 ? 'place' : 'places'} in
-                  total, added up from the roles above.
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.chipLabel}>Required Category</Text>
-                <View style={styles.chipRow}>
-                  {VOLUNTEER_CATEGORIES.map((option) => {
-                    const selected = state.requiredCategory === option.value;
-                    return (
-                      <Pressable
-                        key={option.value}
-                        onPress={() => update('requiredCategory', selected ? null : option.value)}
-                        accessibilityRole="button"
-                        accessibilityLabel={option.label}
-                        accessibilityState={{ selected }}
-                        style={[styles.chip, selected && styles.chipSelected]}
-                      >
-                        <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <Text style={styles.chipLabel}>Role Type</Text>
-                <View style={styles.chipRow}>
-                  {ROLE_TYPES.map((option) => {
-                    const selected = state.roleType === option.value;
-                    return (
-                      <Pressable
-                        key={option.value}
-                        onPress={() => update('roleType', selected ? null : option.value)}
-                        accessibilityRole="button"
-                        accessibilityLabel={option.label}
-                        accessibilityState={{ selected }}
-                        style={[styles.chip, selected && styles.chipSelected]}
-                      >
-                        <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <NumberStepper
-                  label="How many volunteers?"
-                  value={state.slotsTotal}
-                  onChange={(value) => update('slotsTotal', value)}
-                  min={Math.max(1, outreach.slots_filled)}
-                  max={500}
-                  error={errors.slotsTotal}
-                />
-                {outreach.slots_filled > 0 ? (
-                  <Text style={styles.derivedNote}>
-                    {outreach.slots_filled} {outreach.slots_filled === 1 ? 'place is' : 'places are'}{' '}
-                    already taken by accepted volunteers.
-                  </Text>
-                ) : null}
-              </>
-            )}
+            {/*
+              ONE LIST, NO MODE. The "Any volunteers / Specific roles" toggle
+              that used to sit here was the database's two storage shapes shown
+              to the organisation as a choice they had to make. Needing one kind
+              of volunteer is the one-role case; `toStoragePayload` decides
+              which shape to write, and this screen never has to know.
+            */}
+            <RoleBuilder
+              roles={state.roles}
+              onChange={(roles) => update('roles', roles)}
+              filledByKey={filledByRoleKey}
+            />
+            {errors.roles ? <Text style={styles.fieldError}>{errors.roles}</Text> : null}
+            {payload.roles.length === 0 && outreach.slots_filled > 0 ? (
+              <Text style={styles.derivedNote}>
+                {outreach.slots_filled} {outreach.slots_filled === 1 ? 'place is' : 'places are'}{' '}
+                already taken by accepted volunteers.
+              </Text>
+            ) : null}
           </View>
 
         </ScrollView>
@@ -815,6 +758,11 @@ const styles = StyleSheet.create({
   },
   chipTextSelected: {
     color: colors.white,
+  },
+  fieldError: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.danger,
   },
   derivedNote: {
     fontFamily: fontFamily.regular,

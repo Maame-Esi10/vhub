@@ -13,19 +13,27 @@ export interface OutreachPreviewCardProps {
 export function OutreachPreviewCard({ state }: OutreachPreviewCardProps) {
   const location = [state.locationName, state.district, state.region].filter(Boolean).join(', ');
   const timeRange = formatEventTimeRange(state.startTime || null, state.endTime || null);
-  const categoryLabel = VOLUNTEER_CATEGORIES.find((c) => c.value === state.requiredCategory)?.label;
-  const roleTypeLabel = ROLE_TYPES.find((r) => r.value === state.roleType)?.label;
+  const only = state.roles.length === 1 ? state.roles[0] : undefined;
+  const totalSlots = state.roles.reduce((sum, role) => sum + role.slotsTotal, 0);
 
-  // Multi-role: the breakdown replaces the single category/role-type pair,
-  // because in that mode neither has a single answer.
-  const roleSummary = state.roles.length
-    ? state.roles
+  // One role reads as a pair of badges, the way every outreach preview always
+  // has. Several read as a breakdown, because neither the category nor the
+  // role type has a single answer then.
+  const categoryLabel = only
+    ? (VOLUNTEER_CATEGORIES.find((c) => c.value === only.category)?.label ?? 'Any profession')
+    : null;
+  const roleTypeLabel = only
+    ? (ROLE_TYPES.find((r) => r.value === only.roleType)?.label ?? null)
+    : null;
+
+  const roleSummary = only
+    ? null
+    : state.roles
         .map(
           (role) =>
-            `${role.slotsTotal} ${VOLUNTEER_CATEGORIES.find((c) => c.value === role.category)?.label ?? role.category}`
+            `${role.slotsTotal} ${VOLUNTEER_CATEGORIES.find((c) => c.value === role.category)?.label ?? 'volunteers'}`
         )
-        .join(' · ')
-    : null;
+        .join(' · ');
 
   return (
     <View style={styles.card}>
@@ -76,20 +84,9 @@ export function OutreachPreviewCard({ state }: OutreachPreviewCardProps) {
         ) : null}
 
         <View style={styles.tagsRow}>
-          {roleSummary ? null : roleTypeLabel ? <Badge label={roleTypeLabel} tone="neutral" /> : null}
-          {roleSummary ? null : categoryLabel ? <Badge label={categoryLabel} tone="neutral" /> : null}
-          <Badge
-            label={`${
-              roleSummary
-                ? state.roles.reduce((sum, role) => sum + role.slotsTotal, 0)
-                : state.slotsTotal
-            } slot${
-              (roleSummary ? state.roles.reduce((sum, r) => sum + r.slotsTotal, 0) : state.slotsTotal) === 1
-                ? ''
-                : 's'
-            }`}
-            tone="neutral"
-          />
+          {roleTypeLabel ? <Badge label={roleTypeLabel} tone="neutral" /> : null}
+          {categoryLabel ? <Badge label={categoryLabel} tone="neutral" /> : null}
+          <Badge label={`${totalSlots} slot${totalSlots === 1 ? '' : 's'}`} tone="neutral" />
         </View>
 
         {state.requiredSkills.length > 0 ? (

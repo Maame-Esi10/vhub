@@ -1390,3 +1390,91 @@ in the create wizard seeds a default nurse role, which is a sensible starting
 point for a blank form. In the editor it restores the roles already stored, so
 toggling away and back does not overwrite a real staffing plan with a stranger's
 default.
+
+## The staffing modes collapse into one list (2026-08-15)
+
+An outreach's staffing was described two ways: "Any volunteers", which wrote
+`required_category` / `role_type` / `slots_total` on the outreach itself, and
+"Specific roles", which wrote `outreach_roles` rows and let triggers derive the
+outreach's own columns. The organisation chose between them with a toggle.
+
+**That toggle was a storage detail wearing a user interface.** The database
+distinguishes the two shapes by the presence of child rows, which is the right
+way for the database to do it; surfacing it as a choice made the organisation
+learn a distinction that exists for the schema's benefit, not theirs. Needing
+one kind of volunteer is not a different mode from needing three. It is the
+one-role case.
+
+The form now holds one list. Adding a profession is a button, not a mode. The
+two storage shapes are unchanged and the mapping between them lives in exactly
+one function, `toStoragePayload`: a single role with no experience floor writes
+the outreach's own columns and no child rows; anything else — two roles, or one
+role carrying a floor, which single-role storage cannot express — writes
+`outreach_roles`.
+
+**Storage was deliberately NOT collapsed.** Doing so needs every existing
+outreach backfilled into a role row, and that hands `slots_total` to the
+triggers for events that never opted in and switches scoring from
+`computeLayer1MatchScore` to the max-across-roles path for every row on the
+platform. It would move live scores to tidy up an internal seam. Nothing was
+backfilled and no score moved.
+
+**"Any profession" survived the collapse.** `required_category = null` has
+always been expressible and had to remain so, which is why a `RoleDraft` may
+carry a null category even though `outreach_roles.category` is NOT NULL. A
+category-less role is only representable as the single role of an outreach, so
+the form offers "Any profession" on the first role and withdraws it the moment
+a second exists — the point at which the database genuinely cannot store it.
+
+## role_type could be null, and null failed open (2026-08-15)
+
+Editing an outreach into multi-role mode wrote `role_type = NULL` on purpose,
+because the trigger derives it from the roles. When the role write failed on the
+enum-cast bug, the trigger never ran and the NULL stayed.
+
+Every reader compares `role_type = 'clinical'`, and NULL is not equal to
+anything, so an outreach with no role type was treated as a SUPPORT event by
+both the app and `application_role_is_clinical()`. **An unverified volunteer
+could submit a full application to it.** The ambiguous state failed open, which
+is the wrong direction for a gate. It was also invisible to a feed filtered by
+either role type, since it matched neither.
+
+Three changes rather than a repaired row. The gate now treats an unresolvable
+role type as clinical, so a null arriving by any future route fails CLOSED. The
+column is NOT NULL, with no default — a default of 'support' would recreate the
+fail-open state and a default of 'clinical' would hide the omission behind a
+value nobody chose, so a write that forgets the column now fails loudly. And the
+client stopped writing null at all: it sends the summary it can compute from the
+roles it is about to write, and the trigger re-derives the authoritative value
+immediately afterwards. Same answer, no window in which it is missing.
+
+The one existing null was repaired to 'clinical' rather than 'support' for the
+same reason the gate now does: guessing 'support' would silently open a
+possibly-clinical event, while guessing 'clinical' costs one visible correction.
+
+## The edit is atomic now (2026-08-15)
+
+`save_outreach()` is a plpgsql function, and a function body is a transaction.
+The details update, the role delete and the role insert either all commit or all
+roll back. Ordering the client's writes so the fragile one went first had
+narrowed the window but could not close it, and the role rewrite is itself a
+delete followed by an insert — a failure between those lost the roles outright,
+which is how an outreach being edited when the enum bug struck ended up with no
+roles at all.
+
+It is SECURITY INVOKER, not DEFINER. It runs with the caller's privileges, so
+RLS and every column-level GRANT apply exactly as they do to a direct PostgREST
+call. A definer function would have handed any authenticated user the ability to
+rewrite another organisation's event. The parameters are explicit and typed
+rather than a jsonb patch, so the column list is fixed and cannot be widened by
+a crafted payload into the columns the GRANTs withhold.
+
+## An outreach with a history cannot be deleted (2026-08-15)
+
+`outreaches_delete_own` let an organisation delete any of its own outreaches,
+and applications, attendance and reviews all cascade from it. A delete therefore
+destroyed volunteers' application history and the event records their V-Score is
+derived from — records that are not the organisation's to erase. A BEFORE DELETE
+trigger now refuses when any of the three exist. Enforced in the database rather
+than the screen, because RLS already permits the delete and a client is not the
+right place to hold that line.

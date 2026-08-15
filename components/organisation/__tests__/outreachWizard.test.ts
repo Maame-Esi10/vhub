@@ -1,6 +1,8 @@
 import {
   INITIAL_WIZARD_STATE,
   rolesChanged,
+  toStoragePayload,
+  validateRoles,
   validateOutreachEdit,
   validateWizard,
   wizardStateFromOutreach,
@@ -68,15 +70,33 @@ describe('wizardStateFromOutreach', () => {
     expect(state.endTime).toBe('15:30');
   });
 
-  it('opens on single-role mode when there are no role rows', () => {
+  it('turns single-role storage into a one-role list', () => {
     const state = wizardStateFromOutreach(row, []);
 
-    expect(state.roles).toEqual([]);
-    expect(state.requiredCategory).toBe('nurse');
-    expect(state.slotsTotal).toBe(8);
+    // The form has no modes: an outreach with no child rows still arrives as
+    // a list, so "add another role" works on it without any conversion step.
+    expect(state.roles).toHaveLength(1);
+    expect(state.roles[0]).toEqual({
+      category: 'nurse',
+      roleType: 'clinical',
+      minExperienceLevel: null,
+      slotsTotal: 8,
+    });
   });
 
-  it('opens on multi-role mode when role rows exist', () => {
+  it('reads a category outside the vocabulary as no category at all', () => {
+    const state = wizardStateFromOutreach({ ...row, required_category: 'wizard' }, []);
+
+    expect(state.roles[0]?.category).toBeNull();
+  });
+
+  it('falls back to clinical when an old row has no role type, so the gate fails closed', () => {
+    const state = wizardStateFromOutreach({ ...row, role_type: null }, []);
+
+    expect(state.roles[0]?.roleType).toBe('clinical');
+  });
+
+  it('uses the role rows when there are any', () => {
     const state = wizardStateFromOutreach(row, [
       {
         category: 'nurse',
@@ -147,8 +167,133 @@ describe('rolesChanged', () => {
     expect(rolesChanged([nurse, student], [nurse])).toBe(true);
   });
 
-  it('notices the switch to and from single-role mode', () => {
+  it('notices a list appearing or disappearing entirely', () => {
+    // Compared in STORAGE terms: [] is an outreach with no child rows, so
+    // this is the move between the two shapes.
     expect(rolesChanged([], [nurse])).toBe(true);
     expect(rolesChanged([nurse], [])).toBe(true);
+  });
+});
+
+describe('toStoragePayload — the one place that knows there are two shapes', () => {
+  const nurse: RoleDraft = {
+    category: 'nurse',
+    roleType: 'clinical',
+    minExperienceLevel: null,
+    slotsTotal: 2,
+  };
+
+  it('writes a lone role the way every outreach has always been written', () => {
+    const payload = toStoragePayload(stateWith({ roles: [nurse] }));
+
+    // No child rows: the outreach's own columns carry the requirement, so
+    // nothing about an ordinary single-category event moves.
+    expect(payload.roles).toEqual([]);
+    expect(payload.requiredCategory).toBe('nurse');
+    expect(payload.roleType).toBe('clinical');
+    expect(payload.slotsTotal).toBe(2);
+  });
+
+  it('keeps "any profession" expressible, as a lone role with no category', () => {
+    const payload = toStoragePayload(
+      stateWith({ roles: [{ ...nurse, category: null, roleType: 'support' }] })
+    );
+
+    expect(payload.requiredCategory).toBeNull();
+    expect(payload.roles).toEqual([]);
+  });
+
+  it('uses child rows once there are two roles', () => {
+    const payload = toStoragePayload(
+      stateWith({
+        roles: [
+          nurse,
+          { category: 'student', roleType: 'support', minExperienceLevel: null, slotsTotal: 4 },
+        ],
+      })
+    );
+
+    expect(payload.roles).toHaveLength(2);
+    // No single answer once there are several.
+    expect(payload.requiredCategory).toBeNull();
+    expect(payload.slotsTotal).toBe(6);
+  });
+
+  it('uses a child row for a lone role with an experience floor', () => {
+    // Single-role storage has nowhere to put a floor, so this shape has to
+    // become a row even though there is only one of it.
+    const payload = toStoragePayload(
+      stateWith({ roles: [{ ...nurse, minExperienceLevel: 'experienced' }] })
+    );
+
+    expect(payload.roles).toHaveLength(1);
+    expect(payload.requiredCategory).toBeNull();
+  });
+
+  it('summarises role type to clinical if ANY role is', () => {
+    const payload = toStoragePayload(
+      stateWith({
+        roles: [
+          { category: 'student', roleType: 'support', minExperienceLevel: null, slotsTotal: 6 },
+          nurse,
+        ],
+      })
+    );
+
+    expect(payload.roleType).toBe('clinical');
+  });
+
+  it('never returns a null role type', () => {
+    // A null one is read as "support" by every verification gate in the app,
+    // so an outreach that lost it quietly stopped requiring verification.
+    for (const roles of [
+      [nurse],
+      [{ ...nurse, category: null, roleType: 'support' as const }],
+      [nurse, { ...nurse, category: 'student' as const }],
+    ]) {
+      expect(toStoragePayload(stateWith({ roles })).roleType).not.toBeNull();
+    }
+  });
+});
+
+describe('validateRoles', () => {
+  const nurse: RoleDraft = {
+    category: 'nurse',
+    roleType: 'clinical',
+    minExperienceLevel: null,
+    slotsTotal: 2,
+  };
+
+  it('accepts a lone role with no category — that is "anyone"', () => {
+    expect(validateRoles([{ ...nurse, category: null }])).toBeNull();
+  });
+
+  it('requires a category once a second role exists', () => {
+    // Two roles become outreach_roles rows, where category is NOT NULL, so
+    // "anyone" stops being storable rather than merely unusual.
+    expect(validateRoles([nurse, { ...nurse, category: null }])).toContain('profession');
+  });
+
+  it('requires a category before an experience floor can be set', () => {
+    expect(
+      validateRoles([{ ...nurse, category: null, minExperienceLevel: 'experienced' }])
+    ).toContain('profession');
+  });
+
+  it('rejects two roles with the same profession and level', () => {
+    expect(validateRoles([nurse, { ...nurse, slotsTotal: 9 }])).toContain('same profession');
+  });
+
+  it('allows the same profession at different levels', () => {
+    // "1 experienced nurse to lead, 4 nurses of any level" — the pairing the
+    // unique index includes experience for.
+    expect(
+      validateRoles([nurse, { ...nurse, minExperienceLevel: 'experienced', slotsTotal: 1 }])
+    ).toBeNull();
+  });
+
+  it('rejects an empty list and a role with no places', () => {
+    expect(validateRoles([])).not.toBeNull();
+    expect(validateRoles([{ ...nurse, slotsTotal: 0 }])).not.toBeNull();
   });
 });

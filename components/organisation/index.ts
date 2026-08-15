@@ -4,7 +4,7 @@ export { OutreachPicker } from './OutreachPicker';
 export type { OutreachPickerProps } from './OutreachPicker';
 export { ApplicantCard } from './ApplicantCard';
 export type { ApplicantCardProps } from './ApplicantCard';
-export { RoleBuilder } from './RoleBuilder';
+export { RoleBuilder, roleKey } from './RoleBuilder';
 export type { RoleBuilderProps } from './RoleBuilder';
 export { RosterSummaryCard } from './RosterSummaryCard';
 export type { RosterSummaryCardProps } from './RosterSummaryCard';
@@ -16,10 +16,18 @@ export { OutreachPreviewCard } from './OutreachPreviewCard';
 export type { OutreachPreviewCardProps } from './OutreachPreviewCard';
 export {
   INITIAL_WIZARD_STATE,
+  INITIAL_ROLE,
   validateWizard,
+  validateRoles,
   validateOutreachEdit,
   hasWizardErrors,
   wizardStateFromOutreach,
+  toStoragePayload,
   rolesChanged,
 } from './outreachWizard';
-export type { OutreachWizardState, WizardFieldError, RoleDraft } from './outreachWizard';
+export type {
+  OutreachWizardState,
+  WizardFieldError,
+  RoleDraft,
+  OutreachStoragePayload,
+} from './outreachWizard';

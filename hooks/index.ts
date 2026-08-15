@@ -39,6 +39,7 @@ export {
   useRankedFeed,
   usePublicOrganisationOutreaches,
   useCreateOutreach,
+  useSaveOutreach,
   useUpdateOutreach,
   useUpdateOutreachStatus,
 } from './useOutreaches';
@@ -51,6 +52,7 @@ export type {
   RankedFeedItem,
   FeedFilters,
   CreateOutreachParams,
+  SaveOutreachParams,
   UpdateOutreachParams,
   UpdateOutreachStatusParams,
 } from './useOutreaches';

@@ -174,12 +174,30 @@ export default function OrganisationOutreachDetail() {
 
         {/* ---------- When and where ---------- */}
         <View style={styles.card}>
-          <DetailRow icon="calendar" label="DATE">
+          {/*
+            The rows that DISPLAY the date and the place also open the editor
+            at the section that owns them. Seeing a wrong time and having to
+            find the pencil, then scroll past two sections to reach it, was the
+            long way round to the shortest edit there is.
+          */}
+          <DetailRow
+            icon="calendar"
+            label="DATE"
+            onPress={() =>
+              router.push(`/(organisation)/edit-outreach/${outreach.id}?section=when`)
+            }
+          >
             {formatEventDate(outreach.date)}
             {timeRange ? ` · ${timeRange}` : ''}
           </DetailRow>
           {place ? (
-            <DetailRow icon="map-marker-outline" label="LOCATION">
+            <DetailRow
+              icon="map-marker-outline"
+              label="LOCATION"
+              onPress={() =>
+                router.push(`/(organisation)/edit-outreach/${outreach.id}?section=when`)
+              }
+            >
               {place}
             </DetailRow>
           ) : null}
@@ -339,13 +357,16 @@ function DetailRow({
   icon,
   label,
   children,
+  onPress,
 }: {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
   children: React.ReactNode;
+  /** Makes the row a shortcut into the editor. Omitted, it stays plain text. */
+  onPress?: () => void;
 }) {
-  return (
-    <View style={styles.detailRow}>
+  const body = (
+    <>
       <View style={styles.detailIconColumn}>
         <MaterialCommunityIcons name={icon} size={16} color={colors.textSecondary} />
       </View>
@@ -353,7 +374,25 @@ function DetailRow({
         <Text style={styles.detailLabel}>{label}</Text>
         <Text style={styles.detailText}>{children}</Text>
       </View>
-    </View>
+      {onPress ? (
+        <MaterialCommunityIcons name="pencil-outline" size={15} color={colors.textSecondary} />
+      ) : null}
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={styles.detailRow}>{body}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Edit ${label.toLowerCase()}`}
+      style={({ pressed }) => [styles.detailRow, pressed && styles.pressed]}
+    >
+      {body}
+    </Pressable>
   );
 }
 

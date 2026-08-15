@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NumberStepper } from '@/components/ui';
@@ -10,235 +9,257 @@ import type { ExperienceLevel, OutreachRoleType, VolunteerCategory } from '@/typ
 export interface RoleBuilderProps {
   roles: RoleDraft[];
   onChange: (roles: RoleDraft[]) => void;
+  /**
+   * Places already taken, keyed `category|experience` ('any' for either when
+   * unset). A role's places can be raised but never cut below the volunteers
+   * already accepted into it. Omitted while creating, where nothing is filled.
+   */
+  filledByKey?: Map<string, number>;
 }
 
-const ANY_LEVEL = 'any' as const;
+const ANY = 'any' as const;
+
+/** The key used by the uniqueness rule, the database's unique index, and `filledByKey`. */
+export function roleKey(role: Pick<RoleDraft, 'category' | 'minExperienceLevel'>): string {
+  return `${role.category ?? ANY}|${role.minExperienceLevel ?? ANY}`;
+}
 
 /**
- * Builds the per-category role slots of a multi-role outreach — "2 doctors,
- * 3 nurses, 5 students".
+ * The outreach's staffing, as one list of roles.
  *
- * The uniqueness rule is enforced HERE as well as in the database, because the
- * database's answer is a unique-violation error and this one is a disabled
- * button with a reason. The key is (category, experience level), so "1
- * experienced nurse" and "4 nurses of any level" are two legitimate rows — that
- * pairing is exactly why the constraint includes experience.
+ * THERE IS NO MODE HERE ANY MORE. This used to sit behind an "Any volunteers /
+ * Specific roles" toggle, with a separate set of controls on the other side
+ * doing almost the same job — two ways to describe one thing, and a concept
+ * the organisation had to learn before they could describe either. Needing one
+ * kind of volunteer is now simply a list with one role in it, and needing
+ * three is the same list with three.
  *
- * Total slots are shown but never entered: the outreach's total is the sum of
- * its roles and is derived by trigger, so a separate total field would be a
- * second source of truth that the database would silently overwrite.
+ * Every role is edited in place. The old version could only add a role or
+ * change its slot count; changing a category meant deleting the role and
+ * building it again from a separate "Add a role" form.
+ *
+ * The uniqueness rule is enforced here as well as in the database, because the
+ * database's answer is a unique-violation error and this one is an inline
+ * sentence. The key is (category, experience level), so "1 experienced nurse"
+ * and "4 nurses of any level" remain two legitimate roles — that pairing is
+ * exactly why the constraint includes experience.
+ *
+ * The total is shown but never entered: it is the sum of the roles, derived by
+ * trigger in the database, so a separate total field would be a second source
+ * of truth the database would overwrite.
  */
-export function RoleBuilder({ roles, onChange }: RoleBuilderProps) {
-  const [adding, setAdding] = useState(false);
-  const [category, setCategory] = useState<VolunteerCategory | null>(null);
-  const [roleType, setRoleType] = useState<OutreachRoleType>('support');
-  const [minLevel, setMinLevel] = useState<ExperienceLevel | typeof ANY_LEVEL>(ANY_LEVEL);
-  const [slots, setSlots] = useState(2);
-
+export function RoleBuilder({ roles, onChange, filledByKey }: RoleBuilderProps) {
   const totalSlots = roles.reduce((sum, role) => sum + role.slotsTotal, 0);
+  const multiple = roles.length > 1;
 
-  const duplicate =
-    category !== null &&
-    roles.some(
-      (role) =>
-        role.category === category &&
-        (role.minExperienceLevel ?? ANY_LEVEL) === minLevel
-    );
-
-  function resetForm() {
-    setAdding(false);
-    setCategory(null);
-    setRoleType('support');
-    setMinLevel(ANY_LEVEL);
-    setSlots(2);
-  }
-
-  function addRole() {
-    if (!category || duplicate) return;
-    onChange([
-      ...roles,
-      {
-        category,
-        roleType,
-        minExperienceLevel: minLevel === ANY_LEVEL ? null : minLevel,
-        slotsTotal: slots,
-      },
-    ]);
-    resetForm();
-  }
-
-  function updateSlots(index: number, value: number) {
-    onChange(roles.map((role, i) => (i === index ? { ...role, slotsTotal: value } : role)));
+  function updateRole(index: number, patch: Partial<RoleDraft>) {
+    onChange(roles.map((role, i) => (i === index ? { ...role, ...patch } : role)));
   }
 
   function removeRole(index: number) {
     onChange(roles.filter((_, i) => i !== index));
   }
 
+  function addRole() {
+    // Seeded from nothing in particular: a support role of any level, which is
+    // the least presumptuous starting point. The organisation picks the
+    // profession, which is the field they came here to set.
+    onChange([
+      ...roles,
+      { category: null, roleType: 'support', minExperienceLevel: null, slotsTotal: 2 },
+    ]);
+  }
+
+  /** Is this role a duplicate of an earlier one? Only the later one is flagged. */
+  function duplicateOf(index: number): boolean {
+    const role = roles[index];
+    if (!role) return false;
+    return roles.slice(0, index).some((earlier) => roleKey(earlier) === roleKey(role));
+  }
+
   return (
     <View style={styles.wrap}>
       {roles.map((role, index) => {
-        const categoryLabel =
-          VOLUNTEER_CATEGORIES.find((c) => c.value === role.category)?.label ?? role.category;
-        const levelLabel = role.minExperienceLevel
-          ? `${EXPERIENCE_LEVELS.find((e) => e.value === role.minExperienceLevel)?.label ?? role.minExperienceLevel} or above`
-          : 'Any level';
+        const filled = filledByKey?.get(roleKey(role)) ?? 0;
+        const duplicate = duplicateOf(index);
 
         return (
-          <View key={`${role.category}-${role.minExperienceLevel ?? ANY_LEVEL}`} style={styles.roleCard}>
+          <View key={index} style={styles.roleCard}>
             <View style={styles.roleHeader}>
-              <View style={styles.roleTitleBlock}>
-                <Text style={styles.roleTitle}>{categoryLabel}</Text>
-                <Text style={styles.roleMeta}>
-                  {role.roleType === 'clinical' ? 'Clinical' : 'Support'} · {levelLabel}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => removeRole(index)}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove the ${categoryLabel} role`}
-                hitSlop={10}
-              >
-                <MaterialCommunityIcons name="close" size={18} color={colors.textSecondary} />
-              </Pressable>
+              <Text style={styles.roleIndex}>
+                {multiple ? `Role ${index + 1}` : 'Who do you need?'}
+              </Text>
+              {/*
+                A role can only be removed while there is another one to fall
+                back on. An outreach with no roles at all cannot be saved, and
+                removing the last one would leave the form in a state whose
+                only exit is an error message.
+              */}
+              {multiple ? (
+                <Pressable
+                  onPress={() => removeRole(index)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove role ${index + 1}`}
+                  hitSlop={10}
+                >
+                  <MaterialCommunityIcons name="close" size={18} color={colors.textSecondary} />
+                </Pressable>
+              ) : null}
             </View>
+
+            <Text style={styles.fieldLabel}>Profession</Text>
+            <View style={styles.chipRow}>
+              {/*
+                "Any profession" is only offered while this is the ONLY role.
+                It maps to `required_category = null` on the outreach itself,
+                which has no equivalent once there are child rows to write —
+                so offering it on a second role would be offering something the
+                database cannot store.
+              */}
+              {!multiple ? (
+                <Chip
+                  label="Any profession"
+                  selected={role.category === null}
+                  onPress={() => updateRole(index, { category: null, minExperienceLevel: null })}
+                />
+              ) : null}
+              {VOLUNTEER_CATEGORIES.map((option) => (
+                <Chip
+                  key={option.value}
+                  label={option.label}
+                  selected={role.category === option.value}
+                  onPress={() =>
+                    updateRole(index, {
+                      category: option.value as VolunteerCategory,
+                    })
+                  }
+                />
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>Role type</Text>
+            <View style={styles.chipRow}>
+              {ROLE_TYPES.map((option) => (
+                <Chip
+                  key={option.value}
+                  label={option.label}
+                  selected={role.roleType === option.value}
+                  onPress={() => updateRole(index, { roleType: option.value as OutreachRoleType })}
+                />
+              ))}
+            </View>
+
+            {/*
+              Hidden for a category-less single role: an experience floor has
+              to live on an outreach_roles row, and that row needs a category.
+              Offering it here would let the form reach a state validateRoles
+              then refuses.
+            */}
+            {role.category ? (
+              <>
+                <Text style={styles.fieldLabel}>Minimum experience</Text>
+                <View style={styles.chipRow}>
+                  <Chip
+                    label="Any level"
+                    selected={role.minExperienceLevel === null}
+                    onPress={() => updateRole(index, { minExperienceLevel: null })}
+                  />
+                  {EXPERIENCE_LEVELS.map((option) => (
+                    <Chip
+                      key={option.value}
+                      label={`${option.label} or above`}
+                      selected={role.minExperienceLevel === option.value}
+                      onPress={() =>
+                        updateRole(index, { minExperienceLevel: option.value as ExperienceLevel })
+                      }
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
 
             <NumberStepper
               label="Volunteers needed"
               value={role.slotsTotal}
-              onChange={(value) => updateSlots(index, value)}
-              min={1}
+              onChange={(value) => updateRole(index, { slotsTotal: value })}
+              min={Math.max(1, filled)}
               max={500}
             />
 
+            {filled > 0 ? (
+              <Text style={styles.note}>
+                {filled} {filled === 1 ? 'place is' : 'places are'} already taken, so this cannot go
+                lower.
+              </Text>
+            ) : null}
+
+            {duplicate ? (
+              <Text style={styles.problem}>
+                This is the same profession and experience level as a role above. Change one of
+                them, or combine the two.
+              </Text>
+            ) : null}
+
             {/*
-              Stated per role, because the verification gate is now per role:
-              a clinical role needs a verified volunteer, a support role on the
+              Stated per role, because the verification gate is per role: a
+              clinical role needs a verified volunteer, a support role on the
               same event does not.
             */}
             {role.roleType === 'clinical' ? (
               <View style={styles.gateNote}>
-                <MaterialCommunityIcons name="shield-check-outline" size={13} color={colors.textSecondary} />
-                <Text style={styles.gateNoteText}>Only verified volunteers can apply for this role.</Text>
+                <MaterialCommunityIcons
+                  name="shield-check-outline"
+                  size={13}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.gateNoteText}>
+                  Only verified volunteers can apply for this role.
+                </Text>
               </View>
             ) : null}
           </View>
         );
       })}
 
-      {roles.length > 0 ? (
+      {multiple ? (
         <Text style={styles.total}>
-          {totalSlots} {totalSlots === 1 ? 'volunteer' : 'volunteers'} across {roles.length}{' '}
-          {roles.length === 1 ? 'role' : 'roles'}
+          {totalSlots} {totalSlots === 1 ? 'volunteer' : 'volunteers'} across {roles.length} roles.
+          The event total is added up from these.
         </Text>
       ) : null}
 
-      {adding ? (
-        <View style={styles.addCard}>
-          <Text style={styles.addTitle}>Add a role</Text>
-
-          <Text style={styles.fieldLabel}>Category</Text>
-          <View style={styles.chipRow}>
-            {VOLUNTEER_CATEGORIES.map((option) => {
-              const selected = category === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  onPress={() => setCategory(selected ? null : option.value)}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ selected }}
-                  style={[styles.chip, selected && styles.chipSelected]}
-                >
-                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={styles.fieldLabel}>Role type</Text>
-          <View style={styles.chipRow}>
-            {ROLE_TYPES.map((option) => {
-              const selected = roleType === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  onPress={() => setRoleType(option.value)}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ selected }}
-                  style={[styles.chip, selected && styles.chipSelected]}
-                >
-                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={styles.fieldLabel}>Minimum experience</Text>
-          <View style={styles.chipRow}>
-            {([{ value: ANY_LEVEL, label: 'Any level' }, ...EXPERIENCE_LEVELS] as const).map((option) => {
-              const selected = minLevel === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  onPress={() => setMinLevel(option.value as ExperienceLevel | typeof ANY_LEVEL)}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ selected }}
-                  style={[styles.chip, selected && styles.chipSelected]}
-                >
-                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <NumberStepper label="Volunteers needed" value={slots} onChange={setSlots} min={1} max={500} />
-
-          {duplicate ? (
-            <Text style={styles.duplicate}>
-              You already have this category at this experience level. Change the level, or edit the
-              existing role instead.
-            </Text>
-          ) : null}
-
-          <View style={styles.addActions}>
-            <Pressable
-              onPress={resetForm}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel adding a role"
-              style={[styles.actionButton, styles.cancelButton]}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              onPress={addRole}
-              disabled={!category || duplicate}
-              accessibilityRole="button"
-              accessibilityLabel="Add this role"
-              style={[
-                styles.actionButton,
-                styles.confirmButton,
-                (!category || duplicate) && styles.actionDisabled,
-              ]}
-            >
-              <Text style={styles.confirmText}>Add role</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <Pressable
-          onPress={() => setAdding(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Add a role"
-          style={({ pressed }) => [styles.addRow, pressed && styles.pressed]}
-        >
-          <MaterialCommunityIcons name="plus" size={18} color={colors.primary} />
-          <Text style={styles.addRowText}>{roles.length === 0 ? 'Add a role' : 'Add another role'}</Text>
-        </Pressable>
-      )}
+      <Pressable
+        onPress={addRole}
+        accessibilityRole="button"
+        accessibilityLabel="Add another role"
+        style={({ pressed }) => [styles.addRow, pressed && styles.pressed]}
+      >
+        <MaterialCommunityIcons name="plus" size={18} color={colors.primary} />
+        <Text style={styles.addRowText}>Add another role</Text>
+      </Pressable>
     </View>
+  );
+}
+
+function Chip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      style={[styles.chip, selected && styles.chipSelected]}
+    >
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -256,48 +277,12 @@ const styles = StyleSheet.create({
   },
   roleHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  roleTitleBlock: {
+  roleIndex: {
     flex: 1,
-  },
-  roleTitle: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  roleMeta: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  gateNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  gateNoteText: {
-    flex: 1,
-    fontFamily: fontFamily.regular,
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  total: {
-    fontFamily: fontFamily.medium,
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  addCard: {
-    padding: spacing.base,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.md,
-  },
-  addTitle: {
     fontFamily: fontFamily.semiBold,
     fontSize: 14,
     color: colors.textPrimary,
@@ -335,41 +320,31 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: colors.white,
   },
-  duplicate: {
+  gateNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  gateNoteText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  note: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  problem: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
     color: colors.danger,
   },
-  addActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  actionButton: {
-    flex: 1,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.pill,
-  },
-  actionDisabled: {
-    opacity: 0.5,
-  },
-  cancelButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  cancelText: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 13,
-    color: colors.textPrimary,
-  },
-  confirmButton: {
-    backgroundColor: colors.navy,
-  },
-  confirmText: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 13,
-    color: colors.white,
+  total: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   addRow: {
     flexDirection: 'row',
