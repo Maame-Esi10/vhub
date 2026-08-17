@@ -171,12 +171,12 @@ export default function Applications() {
               application={item.application}
               organisationLogoUrl={
                 item.application.outreach?.organisation
-                  ? organisationLogos.data?.get(item.application.outreach.organisation.id)
+                  ? organisationLogos.data?.[item.application.outreach.organisation.id]
                   : null
               }
               onPress={() => router.push(`/(volunteer)/outreach/${item.application.outreach_id}?from=/(volunteer)/applications`)}
               onWithdraw={() => setWithdrawing(item.application)}
-              waitlistPosition={waitlistPositions.data?.get(item.application.id)}
+              waitlistPosition={waitlistPositions.data?.[item.application.id]}
             />
           )
         }

@@ -8,6 +8,7 @@ import {
   Badge,
   ConfirmDialog,
   ErrorState,
+  Toast,
   FlyerBackground,
   ListSkeleton,
   daysUntilEvent,
@@ -88,8 +89,6 @@ export default function OrganisationOutreachDetail() {
     if (!created) return;
     setCreatedFor(created);
     router.setParams({ created: '' });
-    const timer = setTimeout(() => setCreatedFor(null), 6000);
-    return () => clearTimeout(timer);
   }, [created, router]);
 
   useEffect(() => {
@@ -98,8 +97,6 @@ export default function OrganisationOutreachDetail() {
     // Cleared immediately so a re-render, a refetch or a later visit cannot
     // resurrect it from the URL.
     router.setParams({ saved: '' });
-    const timer = setTimeout(() => setSavedFor(null), 4000);
-    return () => clearTimeout(timer);
   }, [saved, router]);
 
   // Belt and braces: even if the timer has not fired, the banner is only ever
@@ -265,22 +262,6 @@ export default function OrganisationOutreachDetail() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {createdNotice ? (
-          <View style={styles.savedNotice}>
-            <MaterialCommunityIcons name="check-circle" size={16} color={colors.success} />
-            <Text style={styles.savedNoticeText}>
-              {outreach.status === 'draft'
-                ? 'Saved as a draft. Publish it when you are ready.'
-                : 'Published. Volunteers can find this outreach now.'}
-            </Text>
-          </View>
-        ) : savedNotice ? (
-          <View style={styles.savedNotice}>
-            <MaterialCommunityIcons name="check-circle" size={16} color={colors.success} />
-            <Text style={styles.savedNoticeText}>Your changes have been saved.</Text>
-          </View>
-        ) : null}
-
         <FlyerBackground uri={outreach.flyer_url} style={styles.hero}>
           <View style={styles.heroContent}>
             <Badge label={STATUS_LABEL[outreach.status]} tone={STATUS_TONE[outreach.status]} />
@@ -451,7 +432,7 @@ export default function OrganisationOutreachDetail() {
           <ActionRow
             icon="clipboard-check-outline"
             title="Mark attendance"
-            meta="Everyone counts as present — flag only the no-shows."
+            meta="Everyone counts as present. Flag only the no-shows."
             onPress={() => router.push(`/(organisation)/attendance/${outreach.id}`)}
           />
         ) : null}
@@ -537,16 +518,14 @@ export default function OrganisationOutreachDetail() {
             {!canDelete && !untouched && !isCancelled ? (
               <Text style={styles.dangerNote}>
                 {applications.length} {applications.length === 1 ? 'person has' : 'people have'}{' '}
-                applied to this event, so it can no longer be deleted — their applications, and any
-                attendance or reviews, are part of their record rather than yours to remove.
-                {canCancel ? '' : ' It has also already taken place, so there is nothing left to cancel.'}
+                applied, so this event cannot be deleted. Their records are not yours to remove.
               </Text>
             ) : null}
 
             {canDelete && !canCancel ? (
               <Text style={styles.dangerNote}>
-                This event has already taken place, so there is nothing left to cancel — but nobody
-                applied, so it can still be removed.
+                This event has already taken place, so there is nothing to cancel. Nobody applied,
+                so it can still be deleted.
               </Text>
             ) : null}
           </>
@@ -554,6 +533,28 @@ export default function OrganisationOutreachDetail() {
 
         {lifecycleError ? <Text style={styles.dangerError}>{lifecycleError}</Text> : null}
       </ScrollView>
+
+      {/*
+        Over the screen, not in it. An inline confirmation card pushed the whole
+        event down when it appeared and back up when it went, and read as part
+        of the event rather than as a reply to what the organisation had just
+        done.
+      */}
+      <Toast
+        message={
+          createdNotice
+            ? outreach.status === 'draft'
+              ? 'Saved as a draft. Publish it when you are ready.'
+              : 'Published. Volunteers can find this outreach now.'
+            : savedNotice
+              ? 'Your changes have been saved.'
+              : null
+        }
+        onDismiss={() => {
+          setCreatedFor(null);
+          setSavedFor(null);
+        }}
+      />
 
       <ConfirmDialog
         visible={confirming === 'completed'}

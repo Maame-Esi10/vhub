@@ -84,7 +84,7 @@ export default function Feed() {
   const feedRoles = useOutreachRolesForMany(visibleOutreachIds);
 
   function roleSummaryFor(outreachId: string): string | null {
-    const roles = feedRoles.data?.get(outreachId);
+    const roles = feedRoles.data?.[outreachId];
     if (!roles?.length) return null;
     return roles
       .map(
@@ -213,7 +213,7 @@ export default function Feed() {
             outreach={item.outreach}
             organisationLogoUrl={
               item.outreach.organisation
-                ? organisationLogos.data?.get(item.outreach.organisation.id)
+                ? organisationLogos.data?.[item.outreach.organisation.id]
                 : null
             }
             matchScore={item.matchScore}
@@ -238,7 +238,7 @@ export default function Feed() {
             <EmptyState
               icon="calendar-search"
               title="No open outreaches yet"
-              message="Organisations haven't published any outreaches you can join. Check back soon — new events appear here as soon as they open."
+              message="Organisations haven't published any outreaches you can join. Check back soon. New events appear here as soon as they open."
             />
           )
         }

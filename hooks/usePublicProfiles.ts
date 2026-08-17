@@ -61,6 +61,16 @@ export function usePublicOrganisationProfile(organisationId: string | undefined)
 }
 
 /**
+ * Keyed by id as a PLAIN OBJECT, never a Map.
+ *
+ * React Query's cache is persisted to device storage (PersistQueryClientProvider
+ * in app/_layout.tsx), which serialises it as JSON. `JSON.stringify(new Map())`
+ * is `{}` — a Map's contents are simply dropped — so on any restored cache the
+ * data came back as an empty object with no `.get` method, and every caller
+ * crashed with "undefined is not a function". A plain object survives the round
+ * trip intact, which is the only shape that can be trusted here.
+ */
+/**
  * Organisation logos for MANY outreaches at once, keyed by organisation id.
  *
  * WHY THIS EXISTS AT ALL. An outreach embeds `organisation_profiles`, and the
@@ -87,7 +97,7 @@ export function useOrganisationLogos(organisationIds: readonly (string | null | 
     enabled: ids.length > 0,
     // Logos change about never, and this runs alongside every list screen.
     staleTime: 10 * 60 * 1000,
-    queryFn: async (): Promise<Map<string, string | null>> => {
+    queryFn: async (): Promise<Record<string, string | null>> => {
       const { data, error } = await supabase
         .from('public_organisation_profiles')
         .select('id, avatar_url')
@@ -97,9 +107,9 @@ export function useOrganisationLogos(organisationIds: readonly (string | null | 
         throw new Error(error.message || 'Could not load organisation logos.');
       }
 
-      const byId = new Map<string, string | null>();
+      const byId: Record<string, string | null> = {};
       for (const row of (data ?? []) as { id: string; avatar_url: string | null }[]) {
-        byId.set(row.id, row.avatar_url);
+        byId[row.id] = row.avatar_url;
       }
       return byId;
     },

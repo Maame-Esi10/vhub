@@ -38,7 +38,7 @@ export function ReviewSummaryCard({ summary }: ReviewSummaryCardProps) {
       <View style={styles.card}>
         <Text style={styles.title}>Review summary</Text>
         <Text style={styles.empty}>
-          No reviews yet. New volunteers start without a record — that is not a bad one.
+          No reviews yet. New volunteers start without a record. That is not a bad one.
         </Text>
       </View>
     );

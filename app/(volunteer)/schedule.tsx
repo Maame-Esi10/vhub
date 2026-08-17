@@ -297,7 +297,7 @@ export default function Schedule() {
                       */}
                       <Avatar
                         name={outreach.organisation.org_name}
-                        uri={organisationLogos.data?.get(outreach.organisation.id)}
+                        uri={organisationLogos.data?.[outreach.organisation.id]}
                         size={18}
                       />
                     </View>

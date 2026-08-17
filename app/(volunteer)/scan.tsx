@@ -197,7 +197,7 @@ export default function VolunteerScanCheckin() {
 
       <Text style={styles.footnote}>
         V-HUB checks your location once, at the moment you scan, to confirm you are at the event. It
-        is never stored and you are never tracked — and if location is off or unavailable, you are
+        is never stored and you are never tracked. If location is off or unavailable, you are
         still checked in.
       </Text>
     </Shell>

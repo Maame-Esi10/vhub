@@ -57,7 +57,7 @@ export function GalleryEditor({
       </View>
 
       <Text style={styles.hint}>
-        The event&rsquo;s poster and any other images you want volunteers to see — uploaded whole,
+        The event&rsquo;s poster and any other images you want volunteers to see, uploaded whole and
         not cropped, so a portrait flyer stays readable. The first one leads.
         {savesImmediately ? ' Changes here save straight away.' : ''}
       </Text>

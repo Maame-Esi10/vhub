@@ -55,7 +55,7 @@ export default function OrganisationAttendance() {
   const resolve = useResolveAttendance();
 
   const attendanceByVolunteer = useMemo(
-    () => attendanceQuery.data ?? new Map<string, Attendance>(),
+    () => attendanceQuery.data ?? ({} as Record<string, Attendance>),
     [attendanceQuery.data]
   );
 
@@ -82,7 +82,7 @@ export default function OrganisationAttendance() {
     let checkedIn = 0;
 
     for (const application of roster) {
-      const attendance = attendanceByVolunteer.get(application.volunteer_id);
+      const attendance = attendanceByVolunteer[application.volunteer_id];
       if (isPresent(attendance)) present += 1;
       else absent += 1;
       if (attendance?.checked_in_at) checkedIn += 1;
@@ -197,13 +197,13 @@ export default function OrganisationAttendance() {
               name={volunteer?.profile?.full_name ?? 'Volunteer'}
               avatarUrl={volunteer?.profile?.avatar_url ?? null}
               category={volunteer?.category ?? null}
-              attendance={attendanceByVolunteer.get(application.volunteer_id)}
+              attendance={attendanceByVolunteer[application.volunteer_id]}
               isPending={
                 resolve.isPending && resolve.variables?.volunteerId === application.volunteer_id
               }
               onToggle={() => {
                 if (!id) return;
-                const attendance = attendanceByVolunteer.get(application.volunteer_id);
+                const attendance = attendanceByVolunteer[application.volunteer_id];
                 resolve.mutate({
                   outreachId: id,
                   volunteerId: application.volunteer_id,

@@ -153,7 +153,7 @@ export default function OrganisationCheckinQr() {
                     // opened this screen the night before would otherwise
                     // believe the location check was running when it was not.
                     'This outreach was marked on a different day, so it will not be used. Tap below once you are at the venue today.'
-                  : 'Volunteers can still check in — they will simply all be recorded as present without a location check.'}
+                  : 'Volunteers can still check in. They will simply all be recorded as present without a location check.'}
             </Text>
           </View>
         </View>
@@ -181,7 +181,7 @@ export default function OrganisationCheckinQr() {
               <Text style={styles.resultWarnText}>
                 Saved, but it will not be used. A venue only counts on the day of the event, and
                 this outreach is on {formatEventDate(outreach.date)}. Come back and tap this again
-                when you are at the venue on the day — until then everyone who scans is still
+                when you are at the venue on the day. Until then everyone who scans is still
                 checked in, just without the location check.
               </Text>
             </View>
@@ -204,7 +204,7 @@ export default function OrganisationCheckinQr() {
 
         <Text style={styles.footnote}>
           Marking the venue reads your location once, from this device, and stores only the
-          venue&apos;s position — never a volunteer&apos;s. It counts on the day of the event only.
+          venue&apos;s position, never a volunteer&apos;s. It counts on the day of the event only.
         </Text>
       </ScrollView>
 
@@ -220,7 +220,7 @@ export default function OrganisationCheckinQr() {
         title="Use this spot as the venue?"
         message={
           `V-HUB will read this phone's location once and save it as the venue for "${outreach.title}". ` +
-          'Volunteers who scan nearby are then confirmed as on site. Only do this while you are actually at the venue, on the day of the event — a location saved on any other day is ignored.'
+          'Volunteers who scan nearby are then confirmed as on site. Only do this while you are actually at the venue, on the day of the event. A location saved on any other day is ignored.'
         }
         confirmLabel="Yes, I'm at the venue"
         cancelLabel="Not yet"

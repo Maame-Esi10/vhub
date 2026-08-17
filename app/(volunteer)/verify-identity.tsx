@@ -144,7 +144,7 @@ export default function VolunteerVerifyIdentity() {
           <>
             <Text style={styles.body}>
               Upload your licence, degree certificate or council registration as a PDF or photo.
-              A person on the V-HUB team reviews it — Ghana has no public licensing-registry API,
+              A person on the V-HUB team reviews it, because Ghana has no public licensing-registry API,
               so a self-entered licence number would prove nothing.
             </Text>
 

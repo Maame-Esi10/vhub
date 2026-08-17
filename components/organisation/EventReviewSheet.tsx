@@ -239,7 +239,7 @@ export function EventReviewSheet({
             <View style={styles.impactNote}>
               <MaterialCommunityIcons name="information-outline" size={16} color={colors.textSecondary} />
               <Text style={styles.impactNoteText}>
-                Submitting blends this event into the volunteer&apos;s V-Score — the new score keeps 70%
+                Submitting blends this event into the volunteer&apos;s V-Score. The new score keeps 70%
                 of their history and 30% of how today went.
               </Text>
             </View>
@@ -251,7 +251,7 @@ export function EventReviewSheet({
             {missingRatings ? (
               <Text style={styles.requiredHint}>
                 {reliability === null && showClinicalScore && clinical === null
-                  ? 'Give both ratings to submit — they are what move the volunteer’s V-Score.'
+                  ? 'Give both ratings to submit. They are what move the volunteer’s V-Score.'
                   : reliability === null
                     ? 'Give a reliability rating to submit.'
                     : 'Give a clinical rating to submit.'}

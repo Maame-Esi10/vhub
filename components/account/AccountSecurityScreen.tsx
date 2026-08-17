@@ -187,7 +187,7 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
 
           <EditSectionCard icon="email-outline" title="LOGIN EMAIL">
             <Text style={styles.currentLabel}>You sign in as</Text>
-            <Text style={styles.currentValue}>{user?.email ?? '—'}</Text>
+            <Text style={styles.currentValue}>{user?.email ?? 'Not set'}</Text>
 
             {pendingEmail ? (
               <View style={styles.pending}>
@@ -200,7 +200,7 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
                   <Text style={styles.pendingText}>
                     Waiting on confirmation for{' '}
                     <Text style={styles.pendingEmail}>{pendingEmail}</Text>. Open the link we sent
-                    to that address — and the one sent to {user?.email} — to finish. Until then you
+                    to that address, and the one sent to {user?.email}, to finish. Until then you
                     keep signing in with your current email.
                   </Text>
                   <Pressable
@@ -218,7 +218,7 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
 
             {emailSent && !pendingEmail ? (
               <Text style={styles.success}>
-                Check your inbox — we have sent the confirmation link.
+                Check your inbox. We have sent the confirmation link.
               </Text>
             ) : null}
 

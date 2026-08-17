@@ -56,7 +56,7 @@ export function useOutreachRolesForMany(outreachIds: readonly string[]) {
   return useQuery({
     queryKey: [...outreachRoleKeys.all, 'many', key] as const,
     enabled: outreachIds.length > 0,
-    queryFn: async (): Promise<Map<string, OutreachRole[]>> => {
+    queryFn: async (): Promise<Record<string, OutreachRole[]>> => {
       const { data, error } = await supabase
         .from('outreach_roles')
         .select('*')
@@ -68,9 +68,9 @@ export function useOutreachRolesForMany(outreachIds: readonly string[]) {
         throw new Error(error.message || 'Could not load outreach roles.');
       }
 
-      const byOutreach = new Map<string, OutreachRole[]>();
+      const byOutreach: Record<string, OutreachRole[]> = {};
       for (const row of (data ?? []) as OutreachRole[]) {
-        byOutreach.set(row.outreach_id, [...(byOutreach.get(row.outreach_id) ?? []), row]);
+        byOutreach[row.outreach_id] = [...(byOutreach[row.outreach_id] ?? []), row];
       }
       return byOutreach;
     },

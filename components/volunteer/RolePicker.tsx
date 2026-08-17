@@ -87,7 +87,7 @@ export function RolePicker({
               <View style={styles.note}>
                 <MaterialCommunityIcons name="shield-alert-outline" size={13} color={colors.warning} />
                 <Text style={styles.noteText}>
-                  This is a clinical role — verify your identity to apply for it.
+                  This is a clinical role. Verify your identity to apply for it.
                 </Text>
               </View>
             ) : null}
@@ -97,7 +97,7 @@ export function RolePicker({
                 <MaterialCommunityIcons name="information-outline" size={13} color={colors.textSecondary} />
                 <Text style={styles.noteText}>
                   The organisation is asking for more experience than your profile shows. You can
-                  still apply — they decide.
+                  still apply. They decide.
                 </Text>
               </View>
             ) : null}

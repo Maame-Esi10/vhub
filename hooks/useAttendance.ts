@@ -86,7 +86,7 @@ export function useMyAttendance(outreachId: string | undefined, volunteerId: str
 /**
  * Every attendance row for one outreach, keyed by volunteer id.
  *
- * A Map rather than an array because the caller joins it against the accepted
+ * Keyed by volunteer id rather than an array because the caller joins it against the accepted
  * applicants: the roster is the list of people, and attendance is what is
  * KNOWN about each of them so far. Most will have no row at all — that is not
  * a gap to fill in, it is the ordinary state of someone who has not scanned,
@@ -99,7 +99,7 @@ export function useOutreachAttendance(outreachId: string | undefined) {
   return useQuery({
     queryKey: attendanceKeys.byOutreach(outreachId ?? 'unknown'),
     enabled: !!outreachId,
-    queryFn: async (): Promise<Map<string, Attendance>> => {
+    queryFn: async (): Promise<Record<string, Attendance>> => {
       const { data, error } = await supabase
         .from('attendance')
         .select('*')
@@ -109,9 +109,9 @@ export function useOutreachAttendance(outreachId: string | undefined) {
         throw new Error(error.message || 'Could not load attendance for this outreach.');
       }
 
-      const byVolunteer = new Map<string, Attendance>();
+      const byVolunteer: Record<string, Attendance> = {};
       for (const row of (data ?? []) as Attendance[]) {
-        byVolunteer.set(row.volunteer_id, row);
+        byVolunteer[row.volunteer_id] = row;
       }
       return byVolunteer;
     },

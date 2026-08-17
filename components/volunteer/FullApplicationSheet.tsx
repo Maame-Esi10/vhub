@@ -125,7 +125,7 @@ export function FullApplicationSheet({
                 </View>
               ) : (
                 <Text style={styles.noSkills}>
-                  None of your saved skills match what this outreach asks for. You can still apply —
+                  None of your saved skills match what this outreach asks for. You can still apply,
                   add skills from your profile to strengthen future applications.
                 </Text>
               )}

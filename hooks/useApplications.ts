@@ -338,16 +338,16 @@ export function useMyWaitlistPositions(volunteerId: string | undefined) {
     queryKey: [...applicationKeys.all, 'waitlist-positions', volunteerId ?? 'unknown'] as const,
     enabled: !!volunteerId,
     staleTime: 30_000,
-    queryFn: async (): Promise<Map<string, WaitlistPosition>> => {
+    queryFn: async (): Promise<Record<string, WaitlistPosition>> => {
       try {
         const { positions } = await fetchWaitlistPositions();
-        return new Map(positions.map((p) => [p.applicationId, p]));
+        return Object.fromEntries(positions.map((p) => [p.applicationId, p]));
       } catch (error) {
         console.warn(
           '[applications] could not load waitlist positions:',
           error instanceof Error ? error.message : error
         );
-        return new Map();
+        return {};
       }
     },
   });

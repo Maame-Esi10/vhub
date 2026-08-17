@@ -85,7 +85,7 @@ export default function VolunteerFeedback() {
               </View>
               <Text style={styles.introBody}>
                 Everything organisations have written about your work. Organisations you apply to in
-                future see only your averages and how often each remark comes up — never a single
+                future see only your averages and how often each remark comes up, never a single
                 review, and never these notes.
               </Text>
             </View>

@@ -1702,3 +1702,23 @@ pointing at an image that no longer exists. The gallery makes the same trade.
 The volunteer screen gained the same Remove control at the same time. The two
 screens are the same control over the same column, and only one of them having a
 way to undo is a difference nobody could have explained later.
+
+## A Map cannot survive a persisted cache (2026-08-19)
+
+Five React Query hooks returned their data as a JavaScript `Map`, which is a
+lookup structure with a `.get()` method. The app persists its query cache to
+device storage through `PersistQueryClientProvider`, and that persistence works
+by serialising the cache as JSON. `JSON.stringify(new Map())` produces `{}`: a
+Map's contents are silently dropped, and what comes back on restore is a plain
+empty object with no `.get` method at all.
+
+The consequence was a crash, `TypeError: undefined is not a function`, the first
+time a restored cache met a `.get()` call. It surfaced on the feed because the
+organisation-logo lookup was the newest of the five and sits on the most-visited
+screen, but the same latent fault was in the outreach roles lookup, the
+attendance lookup, the reviews lookup and the waitlist positions lookup. Two of
+those had been shipped for weeks.
+
+All five now return a plain object keyed by id, which is exactly what JSON round
+trips without loss. The rule this leaves behind: **anything that becomes React
+Query data in this app must be JSON-safe.** Map, Set and Date all fail that test.

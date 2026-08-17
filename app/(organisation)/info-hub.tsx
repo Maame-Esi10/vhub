@@ -88,8 +88,8 @@ export default function OrganisationInfoHub() {
 
           <InfoSubheading>Why two volunteers can word the same skill differently</InfoSubheading>
           <InfoBody>
-            V-HUB also checks whether differently-worded skills mean the same thing — &quot;venipuncture&quot;
-            and &quot;blood draw&quot;, for instance — so a good candidate isn&apos;t missed on vocabulary alone.
+            V-HUB also checks whether differently-worded skills mean the same thing, so &quot;venipuncture&quot;
+            and &quot;blood draw&quot; both count, and a good candidate is not missed on vocabulary alone.
             If that check is ever unavailable, matching quietly falls back to exact skill overlap
             and keeps working; it never blocks an application.
           </InfoBody>
@@ -115,7 +115,7 @@ export default function OrganisationInfoHub() {
             If you mark an outreach as a <Text style={styles.strong}>clinical</Text> role, only
             volunteers who have completed identity verification can submit a Full Application to
             it. Support-role outreaches never require verification. This is enforced by the
-            database, not just the app — an unverified volunteer cannot get into a clinical
+            database, not just the app. An unverified volunteer cannot get into a clinical
             outreach by any route.
           </InfoBody>
           <InfoCallout>
@@ -131,12 +131,12 @@ export default function OrganisationInfoHub() {
         >
           <InfoBody>
             Every volunteer carries a V-Score out of 100. It is a reliability signal built from
-            what they have actually done on past outreaches — attendance, and the reliability and
+            what they have actually done on past outreaches: attendance, and the reliability and
             clinical ratings organisations gave them afterwards.
           </InfoBody>
           <InfoBody>
             Everyone starts at {NEW_VOLUNTEER_V_SCORE}. A new volunteer with no history is not a
-            risky one — they simply have no record yet.
+            risky one. They simply have no record yet.
           </InfoBody>
 
           <InfoSubheading>The bands</InfoSubheading>
@@ -150,7 +150,7 @@ export default function OrganisationInfoHub() {
 
           <InfoCallout icon="alert-outline">
             A V-Score measures showing up and following through. It is not a measure of clinical
-            competence, and it should never be the only thing you decide on — read the profile and
+            competence, and it should never be the only thing you decide on. Read the profile and
             the application too.
           </InfoCallout>
         </InfoSection>
@@ -166,7 +166,7 @@ export default function OrganisationInfoHub() {
           </InfoBody>
           <InfoBody>
             That review is what moves their V-Score. The new score is mostly their existing history
-            with your review blended in, so one event nudges a score rather than replacing it — a
+            with your review blended in, so one event nudges a score rather than replacing it. A
             single bad day doesn&apos;t destroy a good record, and one good day doesn&apos;t erase a poor
             one.
           </InfoBody>

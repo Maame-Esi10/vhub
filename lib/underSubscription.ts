@@ -136,5 +136,5 @@ export function volunteerShortfallMessage({
 }: Omit<ShortfallCopyParams, 'volunteersNotified'> & { matchScore: number }): string {
   const remaining = placesRemaining({ slotsFilled, slotsTotal });
   const when = daysOut === 1 ? 'tomorrow' : `in ${daysOut} days`;
-  return `${outreachTitle} still has ${remaining} ${remaining === 1 ? 'place' : 'places'} open ${when} — ${Math.round(matchScore)}% match for your profile.`;
+  return `${outreachTitle} still has ${remaining} ${remaining === 1 ? 'place' : 'places'} open ${when}. ${Math.round(matchScore)}% match for your profile.`;
 }

@@ -25,7 +25,7 @@ export function useOutreachReviews(outreachId: string | undefined) {
   return useQuery({
     queryKey: eventReviewKeys.byOutreach(outreachId ?? 'unknown'),
     enabled: !!outreachId,
-    queryFn: async (): Promise<Map<string, EventReview>> => {
+    queryFn: async (): Promise<Record<string, EventReview>> => {
       const { data, error } = await supabase
         .from('event_reviews')
         .select('*')
@@ -35,9 +35,9 @@ export function useOutreachReviews(outreachId: string | undefined) {
         throw new Error(error.message || 'Could not load reviews for this outreach.');
       }
 
-      const byVolunteer = new Map<string, EventReview>();
+      const byVolunteer: Record<string, EventReview> = {};
       for (const review of (data ?? []) as EventReview[]) {
-        byVolunteer.set(review.volunteer_id, review);
+        byVolunteer[review.volunteer_id] = review;
       }
       return byVolunteer;
     },

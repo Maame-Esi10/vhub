@@ -77,7 +77,7 @@ export default function VolunteerProfile() {
         <View style={styles.rowText}>
           <Text style={styles.rowTitle}>My Feedback</Text>
           <Text style={styles.rowBody}>
-            Everything organisations have said about your work, in full — including their notes.
+            Everything organisations have said about your work, in full, including their notes.
           </Text>
         </View>
         <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />

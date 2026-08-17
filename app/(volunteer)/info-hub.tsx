@@ -36,7 +36,7 @@ export default function InfoHub() {
         <Text style={styles.title}>How V-HUB works</Text>
         <Text style={styles.intro}>
           Two numbers shape what you see and who you get matched with. Neither is a judgement of you
-          as a person — here is exactly what each one measures.
+          as a person. Here is exactly what each one measures.
         </Text>
 
         <Section
@@ -62,7 +62,7 @@ export default function InfoHub() {
           <WeightRow
             label="Profession"
             weight={LAYER1_WEIGHTS.category}
-            detail="Full points if the role asks for your profession, half if it asks for a closely related one — a nurse counts partly towards a midwife role, for example."
+            detail="Full points if the role asks for your profession, half if it asks for a closely related one. A nurse counts partly towards a midwife role, for example."
           />
           <WeightRow
             label="Location"
@@ -85,7 +85,7 @@ export default function InfoHub() {
             <Text style={styles.calloutText}>
               Skills are also compared for meaning, not just spelling. If you wrote “blood draw” and
               an event asks for “venipuncture”, that still counts as a match. When that comparison
-              isn&apos;t available, V-HUB falls back to exact wording — your feed is always ranked,
+              isn&apos;t available, V-HUB falls back to exact wording, so your feed is always ranked,
               never blank.
             </Text>
           </View>
@@ -113,7 +113,7 @@ export default function InfoHub() {
           </Text>
           <Text style={styles.body}>
             Everyone starts at {NEW_VOLUNTEER_V_SCORE}. After each event you work, the organisation
-            reviews you on whether you showed up, how reliable you were, and — for clinical roles —
+            reviews you on whether you showed up, how reliable you were, and for clinical roles,
             the quality of your clinical work. That result is blended in gently: your new score keeps
             70% of your existing record and 30% of the latest event, so one bad day never wipes out
             months of good work, and one great day doesn&apos;t hide a poor track record.
@@ -128,7 +128,7 @@ export default function InfoHub() {
           <PenaltyRow
             label="Not showing up"
             points={V_SCORE_PENALTIES.no_show}
-            detail="Accepting a place and then not arriving. This is the one that hurts — an organisation planned staffing around you."
+            detail="Accepting a place and then not arriving. This is the one that hurts. An organisation planned staffing around you."
           />
           <PenaltyRow
             label="Withdrawing late"
@@ -138,7 +138,7 @@ export default function InfoHub() {
           <PenaltyRow
             label="Withdrawing in good time"
             points={V_SCORE_PENALTIES.on_time_cancellation}
-            detail="Pulling out more than 24 hours ahead. Small, deliberately — plans change, and telling someone early is the responsible thing to do."
+            detail="Pulling out more than 24 hours ahead. Small, deliberately. Plans change, and telling someone early is the responsible thing to do."
           />
 
           <View style={styles.callout}>

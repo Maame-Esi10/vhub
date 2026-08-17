@@ -45,7 +45,12 @@ export interface OutreachCardProps {
  * as volunteers see it, flyer included.
  */
 export function OutreachCard({ outreach, onPress, quickAction, quickActionPending }: OutreachCardProps) {
-  const location = [outreach.district, outreach.region].filter(Boolean).join(', ');
+  // Venue first, for the same reason as the volunteer feed card: an
+  // organisation running several events at different sites recognises them by
+  // where they are, not by which district they fall in.
+  const location = outreach.location_name
+    ? outreach.location_name
+    : [outreach.district, outreach.region].filter(Boolean).join(', ');
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
   const pending = outreach.applicantCounts.pending;
 

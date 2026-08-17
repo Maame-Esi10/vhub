@@ -39,7 +39,7 @@ export function OfflineBanner() {
       ]}
     >
       <MaterialCommunityIcons name="cloud-off-outline" size={16} color={colors.white} />
-      <Text style={styles.label}>You&apos;re offline — showing saved data</Text>
+      <Text style={styles.label}>You&apos;re offline. Showing saved data</Text>
     </Pressable>
   );
 }

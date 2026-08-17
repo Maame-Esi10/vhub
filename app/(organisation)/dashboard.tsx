@@ -50,10 +50,34 @@ export default function Dashboard() {
     return { activePostings, drafts, totalApplicants, pendingReview };
   }, [outreaches]);
 
-  const filteredOutreaches = useMemo(
-    () => (statusFilter === 'all' ? outreaches : outreaches.filter((o) => o.status === statusFilter)),
-    [outreaches, statusFilter]
-  );
+  /*
+    OPEN EVENTS FIRST, because they are the ones that still need something from
+    the organisation: volunteers to accept, slots to fill, a date approaching.
+    Everything else is a record of work already done or not yet started, and
+    sorting by date alone buried the live events underneath finished ones.
+
+    Within a group the soonest event still leads, which is the order the query
+    already returns.
+  */
+  const STATUS_PRIORITY: Record<OutreachStatus, number> = {
+    open: 0,
+    draft: 1,
+    closed: 2,
+    completed: 3,
+    cancelled: 4,
+  };
+
+  const filteredOutreaches = useMemo(() => {
+    const visible =
+      statusFilter === 'all' ? outreaches : outreaches.filter((o) => o.status === statusFilter);
+
+    return [...visible].sort(
+      (a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]
+    );
+    // STATUS_PRIORITY is a module-level constant in spirit; it is declared here
+    // only to sit beside the comment that explains it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outreaches, statusFilter]);
 
   // The card now opens the event's own management screen rather than jumping
   // straight to its applicants. Applicants are one thing an organiser does with
@@ -114,7 +138,7 @@ export default function Dashboard() {
         />
       </View>
 
-      <Text style={styles.sectionTitle}>Deployment Queue</Text>
+      <Text style={styles.sectionTitle}>Your Events</Text>
       <FilterChips options={FILTERS} value={statusFilter} onChange={setStatusFilter} />
     </View>
   );

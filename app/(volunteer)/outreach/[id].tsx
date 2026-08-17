@@ -40,7 +40,7 @@ const STATUS_MESSAGE: Record<ApplicationStatus, string> = {
   pending: "You've applied. The organisation is reviewing your application.",
   accepted: "You're in. This event is on your schedule.",
   rejected: 'You were not selected for this outreach.',
-  waitlisted: "You're on the waitlist — the organisation will be in touch if a slot frees up.",
+  waitlisted: "You're on the waitlist. The organisation will be in touch if a slot frees up.",
   not_selected: 'This event filled up before a place could be offered to you.',
   cancelled: 'You withdrew from this outreach.',
 };
@@ -334,7 +334,7 @@ export default function OutreachDetail() {
             </View>
             {matchingSkills.length === 0 ? (
               <Text style={styles.hint}>
-                None of your saved skills match this outreach yet — you can still apply.
+                None of your saved skills match this outreach yet. You can still apply.
               </Text>
             ) : null}
           </View>
@@ -346,14 +346,18 @@ export default function OutreachDetail() {
           gallery, and a permanent empty shell on every one of them would make
           the app look broken rather than look empty.
         */}
-        <GalleryStrip
-          title="Event gallery"
-          items={(imagesQuery.data ?? []).map((image) => ({
-            id: image.id,
-            url: image.url,
-            caption: image.caption,
-          }))}
-        />
+        {(imagesQuery.data ?? []).length > 0 ? (
+          <View style={styles.gallerySection}>
+            <GalleryStrip
+              title="Event gallery"
+              items={(imagesQuery.data ?? []).map((image) => ({
+                id: image.id,
+                url: image.url,
+                caption: image.caption,
+              }))}
+            />
+          </View>
+        ) : null}
 
         {usesRoles && !alreadyApplied ? (
           <RolePicker
@@ -599,6 +603,17 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
+  },
+  /*
+    The gallery sat flush against the skills note above it and the role picker
+    below, so three unrelated blocks read as one. An empty gallery renders
+    nothing at all, and an empty View with margins would leave a gap where the
+    section is absent, so the wrapper is only rendered when there is actually
+    something in it.
+  */
+  gallerySection: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
   },
   // Minimum height so the hero is the same size with or without a flyer, and
   // content bottom-aligned so the title sits over the darkest part of a

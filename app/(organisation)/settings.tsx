@@ -65,7 +65,7 @@ export default function OrganisationSettings() {
         <SettingsRow
           icon="shield-check-outline"
           label="Organisation Verification"
-          value={org ? (org.verified ? 'Verified' : 'Awaiting review') : '—'}
+          value={org ? (org.verified ? 'Verified' : 'Awaiting review') : 'Not set'}
         />
 
         <View style={styles.signOutBlock}>

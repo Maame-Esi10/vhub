@@ -395,7 +395,7 @@ export default function Applicants() {
                   ? `The next ${confirming.plan.waitlist.length} will be waitlisted and told their place in the queue.`
                   : null,
                 confirming.plan.leftPending.length > 0
-                  ? `${confirming.plan.leftPending.length} will stay pending — the waitlist is full.`
+                  ? `${confirming.plan.leftPending.length} will stay pending. The waitlist is full.`
                   : null,
                 'Nobody is rejected. You can still decide each applicant individually.',
               ]

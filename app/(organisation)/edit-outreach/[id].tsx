@@ -714,7 +714,7 @@ export default function EditOutreach() {
               <View style={styles.errorTextBlock}>
                 <Text style={styles.errorTitle}>Not saved</Text>
                 <Text style={styles.errorBody}>{blockingMessage}</Text>
-                <Text style={styles.errorHint}>Your changes are still here — fix this and save again.</Text>
+                <Text style={styles.errorHint}>Your changes are still here. Fix this and save again.</Text>
               </View>
             </View>
           ) : null}

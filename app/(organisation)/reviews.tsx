@@ -68,7 +68,7 @@ export default function Reviews() {
   const [reviewing, setReviewing] = useState<ApplicationWithVolunteer | null>(null);
 
   const reviews = reviewsQuery.data;
-  const reviewedCount = attendees.filter((a) => reviews?.has(a.volunteer_id)).length;
+  const reviewedCount = attendees.filter((a) => reviews?.[a.volunteer_id] !== undefined).length;
 
   function handleSubmit(draft: EventReviewDraft) {
     if (!selectedOutreachId || !reviewing?.volunteer) return;
@@ -177,7 +177,7 @@ export default function Reviews() {
           renderItem={({ item }) => (
             <AttendeeRow
               application={item}
-              review={reviews?.get(item.volunteer_id) ?? null}
+              review={reviews?.[item.volunteer_id] ?? null}
               onPress={() => setReviewing(item)}
               onViewProfile={
                 item.volunteer ? () => router.push(`/profile/volunteer/${item.volunteer!.id}`) : undefined
@@ -199,13 +199,13 @@ export default function Reviews() {
         volunteerName={reviewing?.volunteer?.profile?.full_name ?? 'This volunteer'}
         outreachTitle={selectedOutreach?.title ?? ''}
         showClinicalScore={selectedOutreach?.role_type === 'clinical'}
-        existingReview={reviewing ? (reviews?.get(reviewing.volunteer_id) ?? null) : null}
+        existingReview={reviewing ? (reviews?.[reviewing.volunteer_id] ?? null) : null}
         // Seeded from the attendance screen so the two cannot disagree about
         // the same event: someone already flagged absent opens as a no-show
         // rather than as "attended" waiting to be corrected.
         markedAbsent={
           reviewing
-            ? attendance?.get(reviewing.volunteer_id)?.organiser_status === 'absent'
+            ? attendance?.[reviewing.volunteer_id]?.organiser_status === 'absent'
             : undefined
         }
         isPending={submitReview.isPending}

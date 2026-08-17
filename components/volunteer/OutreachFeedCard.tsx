@@ -45,9 +45,13 @@ export function OutreachFeedCard({
 }: OutreachFeedCardProps) {
   const slotsLeft = Math.max(0, outreach.slots_total - outreach.slots_filled);
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
-  const place = [outreach.location_name, outreach.district ?? outreach.region]
-    .filter(Boolean)
-    .join(' · ');
+  // The VENUE leads, because it is the thing that tells a volunteer where to
+  // go. District and region only stand in when no venue was given: "Ayawaso
+  // West, Greater Accra" is an administrative area, not somewhere you can turn
+  // up to.
+  const place = outreach.location_name
+    ? outreach.location_name
+    : [outreach.district, outreach.region].filter(Boolean).join(', ');
 
   return (
     <Pressable
