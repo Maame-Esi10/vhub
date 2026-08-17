@@ -27,6 +27,9 @@ import { GHANA_REGION_NAMES, getDistrictsForRegion } from '@/constants/ghana-loc
 import { ORG_TYPES } from '@/constants/org-types';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useMyOrganisationProfile, useUpdateOrganisationProfile } from '@/hooks/useProfileEditor';
+// Direct import, not the hooks barrel: this reaches the native picker
+// modules. See the note in lib/cloudinary.ts.
+import { useAvatarUpload, useRemoveAvatar } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 
 const DESCRIPTION_MAX = 600;
@@ -60,7 +63,10 @@ export default function EditOrganisationProfile() {
   const [region, setRegion] = useState<string | null>(profile?.region ?? null);
   const [district, setDistrict] = useState<string | null>(profile?.district ?? null);
   const [discarding, setDiscarding] = useState(false);
-  const [photoNotice, setPhotoNotice] = useState(false);
+  const avatarUpload = useAvatarUpload();
+  const removeAvatar = useRemoveAvatar();
+  const [removingPhoto, setRemovingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [errors, setErrors] = useState<{
     fullName?: string;
     orgName?: string;
@@ -113,6 +119,15 @@ export default function EditOrganisationProfile() {
     contactEmail !== (org?.contact_email ?? '') ||
     contactPhone !== (org?.contact_phone ?? '') ||
     showGallery !== (org?.show_gallery ?? true);
+
+  function handlePickLogo() {
+    if (!user) return;
+    setPhotoError(null);
+    avatarUpload.mutate(user.id, {
+      // null means the picker was dismissed, which is not a failure.
+      onError: (error) => setPhotoError(error.message),
+    });
+  }
 
   async function handleSave() {
     const trimmedName = fullName.trim();
@@ -189,19 +204,51 @@ export default function EditOrganisationProfile() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            {/*
+              The logo is `profiles.avatar_url`, the same column a volunteer's
+              photo uses — an organisation account IS a profile, and the public
+              organisation view already publishes that column, so every screen
+              that shows a logo was reading it correctly before this control
+              existed. Only the picker was missing.
+            */}
             <View style={styles.avatarBlock}>
               <Pressable
-                onPress={() => setPhotoNotice(true)}
+                onPress={handlePickLogo}
+                disabled={avatarUpload.isPending || removeAvatar.isPending}
                 accessibilityRole="button"
-                accessibilityLabel="Update organisation logo"
+                accessibilityLabel={
+                  profile?.avatar_url ? 'Replace organisation logo' : 'Add an organisation logo'
+                }
+                accessibilityState={{ disabled: avatarUpload.isPending || removeAvatar.isPending }}
                 style={styles.avatarPress}
               >
                 <Avatar name={orgName || 'Organisation'} uri={profile?.avatar_url} size={96} />
                 <View style={styles.avatarBadge}>
-                  <MaterialCommunityIcons name="pencil" size={14} color={colors.white} />
+                  <MaterialCommunityIcons
+                    name={avatarUpload.isPending ? 'progress-upload' : 'pencil'}
+                    size={14}
+                    color={colors.white}
+                  />
                 </View>
               </Pressable>
-              <Text style={styles.avatarCaption}>Update Organisation Logo</Text>
+              <Text style={styles.avatarCaption}>
+                {avatarUpload.isPending
+                  ? 'Uploading...'
+                  : profile?.avatar_url
+                    ? 'Replace Organisation Logo'
+                    : 'Add Organisation Logo'}
+              </Text>
+              {profile?.avatar_url && !avatarUpload.isPending ? (
+                <Pressable
+                  onPress={() => setRemovingPhoto(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove organisation logo"
+                  hitSlop={8}
+                >
+                  <Text style={styles.avatarRemove}>Remove logo</Text>
+                </Pressable>
+              ) : null}
+              {photoError ? <Text style={styles.avatarError}>{photoError}</Text> : null}
             </View>
 
             <EditSectionCard icon="domain" title="ORGANISATION IDENTITY">
@@ -408,14 +455,26 @@ export default function EditOrganisationProfile() {
       />
 
       <ConfirmDialog
-        visible={photoNotice}
-        icon="camera-outline"
-        title="Logo upload coming soon"
-        message="Organisation logo uploads aren't switched on yet. Everything else on this screen saves normally."
-        confirmLabel="Got It"
-        cancelLabel="Close"
-        onConfirm={() => setPhotoNotice(false)}
-        onCancel={() => setPhotoNotice(false)}
+        visible={removingPhoto}
+        icon="trash-can-outline"
+        tone="destructive"
+        title="Remove your logo?"
+        message="Your organisation will show its initials instead, everywhere it appears. You can add a logo again at any time."
+        confirmLabel="Remove"
+        cancelLabel="Keep it"
+        busy={removeAvatar.isPending}
+        onConfirm={() => {
+          if (!user) return;
+          setPhotoError(null);
+          removeAvatar.mutate(user.id, {
+            onSuccess: () => setRemovingPhoto(false),
+            onError: (error) => {
+              setRemovingPhoto(false);
+              setPhotoError(error.message);
+            },
+          });
+        }}
+        onCancel={() => setRemovingPhoto(false)}
       />
     </SafeAreaView>
   );
@@ -457,6 +516,19 @@ const styles = StyleSheet.create({
     borderColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarRemove: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.danger,
+    marginTop: spacing.xs,
+  },
+  avatarError: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.danger,
+    marginTop: spacing.xs,
+    textAlign: 'center',
   },
   avatarCaption: {
     fontFamily: fontFamily.medium,

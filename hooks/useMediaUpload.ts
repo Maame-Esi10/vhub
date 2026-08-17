@@ -55,6 +55,38 @@ export function useAvatarUpload() {
 }
 
 /**
+ * Clears the profile photo (an organisation's logo is the same column).
+ *
+ * The Cloudinary asset is deliberately left behind. Destroying it needs the API
+ * secret and therefore a server round-trip, and an orphan on the free tier is
+ * cheap — whereas a delete that succeeds remotely and then fails to clear the
+ * row leaves the app pointing at an image that no longer exists. The gallery
+ * makes the same trade for the same reason.
+ */
+export function useRemoveAvatar() {
+  const setProfile = useAuthStore((state) => state.setProfile);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (userId: string): Promise<Profile> => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('id', userId)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message || 'Could not remove your photo.');
+      return data as Profile;
+    },
+    onSuccess: (updated) => {
+      setProfile(updated);
+      queryClient.invalidateQueries({ queryKey: profileEditorKeys.all });
+    },
+  });
+}
+
+/**
  * Picks and uploads a credential, then records it through
  * /api/verification-document — which is what advances verification_status to
  * 'documents_pending'. Neither column is client-writable, so this cannot be

@@ -15,6 +15,7 @@ import {
   useOutreachRoles,
   useOutreachRolesForMany,
   useRankedFeed,
+  useOrganisationLogos,
 } from '@/hooks';
 import type { RankedFeedItem } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
@@ -54,6 +55,18 @@ export default function Feed() {
   const feedQuery = useRankedFeed(filters);
   const feed = feedQuery.data;
   const items = feed?.items ?? [];
+
+  /*
+    Organisation logos for the whole list in one query. The logo lives on
+    `profiles.avatar_url`, which the outreach's embedded organisation row
+    cannot reach — `profiles` is row-scoped by RLS and would come back null for
+    any organisation this volunteer has never applied to. `public_organisation_profiles`
+    is the view that exists to expose an organisation's public face, so the ids
+    are collected here and looked up together rather than per card.
+  */
+  const organisationLogos = useOrganisationLogos(
+    items.map((item) => item.outreach.organisation?.id)
+  );
 
   // Shares the cached notifications list with the Notifications screen, so
   // opening it and marking things read clears this dot without a refetch.
@@ -198,6 +211,11 @@ export default function Feed() {
         renderItem={({ item }) => (
           <OutreachFeedCard
             outreach={item.outreach}
+            organisationLogoUrl={
+              item.outreach.organisation
+                ? organisationLogos.data?.get(item.outreach.organisation.id)
+                : null
+            }
             matchScore={item.matchScore}
             onPressScore={item.breakdown ? () => setBreakdownFor(item) : undefined}
             roleSummary={roleSummaryFor(item.outreach.id)}

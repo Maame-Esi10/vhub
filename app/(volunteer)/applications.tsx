@@ -6,7 +6,12 @@ import { EmptyState, ErrorState, FilterChips, ListSkeleton } from '@/components/
 import type { FilterChipOption } from '@/components/ui';
 import { VolunteerApplicationCard, WithdrawSheet } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
-import { useCancelApplication, useMyWaitlistPositions, useVolunteerApplications } from '@/hooks';
+import {
+  useCancelApplication,
+  useMyWaitlistPositions,
+  useOrganisationLogos,
+  useVolunteerApplications,
+} from '@/hooks';
 import type { VolunteerApplication } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
@@ -52,6 +57,11 @@ export default function Applications() {
   const applications = useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
 
   const [statusFilter, setStatusFilter] = useState<StatusGroup>('all');
+
+  // One lookup for the whole list — see useOrganisationLogos.
+  const organisationLogos = useOrganisationLogos(
+    applications.map((application) => application.outreach?.organisation?.id)
+  );
   const [withdrawing, setWithdrawing] = useState<VolunteerApplication | null>(null);
 
   const counts = useMemo(() => {
@@ -159,6 +169,11 @@ export default function Applications() {
           ) : (
             <VolunteerApplicationCard
               application={item.application}
+              organisationLogoUrl={
+                item.application.outreach?.organisation
+                  ? organisationLogos.data?.get(item.application.outreach.organisation.id)
+                  : null
+              }
               onPress={() => router.push(`/(volunteer)/outreach/${item.application.outreach_id}?from=/(volunteer)/applications`)}
               onWithdraw={() => setWithdrawing(item.application)}
               waitlistPosition={waitlistPositions.data?.get(item.application.id)}

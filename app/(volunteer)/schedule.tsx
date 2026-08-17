@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
+  Avatar,
   EmptyState,
   ErrorState,
   ListSkeleton,
@@ -14,7 +15,7 @@ import {
   msUntilEvent,
 } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { useVolunteerApplications } from '@/hooks';
+import { useOrganisationLogos, useVolunteerApplications } from '@/hooks';
 import type { VolunteerApplication } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -75,6 +76,12 @@ export default function Schedule() {
 
     return { upcoming: ahead, past: done };
   }, [accepted]);
+
+  // One lookup for every organisation on the schedule — see useOrganisationLogos
+  // for why the logo cannot come from the outreach embed.
+  const organisationLogos = useOrganisationLogos(
+    accepted.map((application) => application.outreach?.organisation?.id)
+  );
 
   const [showPast, setShowPast] = useState(false);
 
@@ -282,11 +289,16 @@ export default function Schedule() {
                 {outreach.organisation?.org_name ? (
                   <View style={styles.detailRow}>
                     <View style={styles.detailIconColumn}>
-                      <MaterialCommunityIcons
-                        name="office-building-outline"
-                        size={15}
-                        color={colors.textSecondary}
-                        style={styles.detailIcon}
+                      {/*
+                        The organisation's logo where the generic building icon
+                        used to be. It falls back to initials when there is no
+                        logo, so the rail is the same width either way and the
+                        rows below stay aligned.
+                      */}
+                      <Avatar
+                        name={outreach.organisation.org_name}
+                        uri={organisationLogos.data?.get(outreach.organisation.id)}
+                        size={18}
                       />
                     </View>
                     <Text style={styles.detailText} numberOfLines={2}>

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Badge, formatEventDate, formatEventTimeRange, isUpcomingEvent } from '@/components/ui';
+import { Avatar, Badge, formatEventDate, formatEventTimeRange, isUpcomingEvent } from '@/components/ui';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { VolunteerApplication } from '@/hooks';
@@ -28,6 +28,12 @@ export interface VolunteerApplicationCardProps {
   application: VolunteerApplication;
   onPress: () => void;
   onWithdraw: () => void;
+  /**
+   * The organisation's logo. Passed in because it lives on
+   * `profiles.avatar_url`, which the application's embedded outreach cannot
+   * reach; the screen looks them up for the whole list at once.
+   */
+  organisationLogoUrl?: string | null;
   /** Live queue place, for waitlisted applications only. Absent while it loads. */
   waitlistPosition?: { position: number; waitlistSize: number };
 }
@@ -43,6 +49,7 @@ export function VolunteerApplicationCard({
   onPress,
   onWithdraw,
   waitlistPosition,
+  organisationLogoUrl,
 }: VolunteerApplicationCardProps) {
   const outreach = application.outreach;
   const timeRange = outreach ? formatEventTimeRange(outreach.start_time, outreach.end_time) : null;
@@ -93,9 +100,16 @@ export function VolunteerApplicationCard({
         </Text>
       ) : null}
 
-      <Text style={styles.org} numberOfLines={1}>
-        {outreach?.organisation?.org_name ?? 'Unknown organisation'}
-      </Text>
+      <View style={styles.orgRow}>
+        <Avatar
+          name={outreach?.organisation?.org_name ?? 'Organisation'}
+          uri={organisationLogoUrl}
+          size={18}
+        />
+        <Text style={styles.org} numberOfLines={1}>
+          {outreach?.organisation?.org_name ?? 'Unknown organisation'}
+        </Text>
+      </View>
 
       {outreach ? (
         <View style={styles.metaRow}>
@@ -207,7 +221,13 @@ const styles = StyleSheet.create({
     color: colors.danger,
     marginTop: spacing.xs,
   },
+  orgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   org: {
+    flex: 1,
     fontFamily: fontFamily.regular,
     fontSize: 12,
     color: colors.textSecondary,

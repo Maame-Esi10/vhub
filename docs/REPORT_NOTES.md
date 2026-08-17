@@ -1668,3 +1668,37 @@ deliberate crop does.
 
 Turning cropping off is also what makes multi-selection possible: both platforms
 offer it only when `allowsEditing` is false.
+
+## The organisation logo, and where a logo actually lives (2026-08-17)
+
+An organisation's logo is `profiles.avatar_url` — the same column a volunteer's
+photo uses. That is not a shortcut: an organisation account IS a profile row
+with `role = 'organisation'`, and the public organisation view already published
+that column, so every screen that showed a logo had been reading the right place
+all along. Only the picker was missing, replaced by a "coming soon" dialog.
+
+**A separate `organisation_profiles.logo_url` was considered and rejected.** It
+would have needed a migration, a change to the public view, two more grant-list
+entries, and — worse — every render site would then have had to decide which of
+two columns to prefer. Two columns holding the same fact eventually disagree.
+
+**The interesting part was getting the logo onto list screens.** An outreach
+embeds `organisation_profiles`, and the logo is not there. The obvious fix,
+embedding the organisation's `profiles` row alongside, does not work: `profiles`
+is row-scoped by row-level security and comes back null for any organisation the
+volunteer has never applied to — a note already in `useOutreaches` warning
+against exactly that. So `useOrganisationLogos` looks the ids up together in
+`public_organisation_profiles`, the view that exists to expose an organisation's
+public face to every authenticated user. One query per screen rather than one
+per card: the feed renders up to fifty outreaches, and a per-card query would
+turn one screen into fifty round trips. The same shape as
+`useOutreachRolesForMany`, for the same reason.
+
+Removing a photo leaves the Cloudinary asset behind, deliberately. Destroying it
+needs the API secret and a server round-trip, and an orphan on the free tier is
+cheap — whereas a remote delete that then fails to clear the row leaves the app
+pointing at an image that no longer exists. The gallery makes the same trade.
+
+The volunteer screen gained the same Remove control at the same time. The two
+screens are the same control over the same column, and only one of them having a
+way to undo is a difference nobody could have explained later.

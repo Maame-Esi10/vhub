@@ -120,6 +120,7 @@ export {
   publicProfileKeys,
   usePublicVolunteerProfile,
   usePublicOrganisationProfile,
+  useOrganisationLogos,
 } from './usePublicProfiles';
 export {
   profileEditorKeys,

@@ -30,7 +30,7 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useUpdateVolunteerProfile } from '@/hooks/useProfileEditor';
 // Direct import, not the hooks barrel: this hook reaches the native picker
 // modules. See the note in lib/cloudinary.ts.
-import { useAvatarUpload } from '@/hooks/useMediaUpload';
+import { useAvatarUpload, useRemoveAvatar } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import type { ExperienceLevel, VolunteerCategory } from '@/types/database';
 
@@ -81,6 +81,11 @@ export default function EditVolunteerProfile() {
   // Avatar above the moment the store updates.
   const [photoNotice, setPhotoNotice] = useState(false);
   const avatarUpload = useAvatarUpload();
+  // Added for parity with the organisation screen: the two are the same
+  // control over the same column, and only one of them having a way to
+  // undo is the kind of difference nobody can explain later.
+  const removeAvatar = useRemoveAvatar();
+  const [removingPhoto, setRemovingPhoto] = useState(false);
 
   function handlePickAvatar() {
     if (!user) return;
@@ -183,6 +188,16 @@ export default function EditVolunteerProfile() {
             <Text style={styles.avatarCaption}>
               {avatarUpload.isPending ? 'Uploading...' : 'Update Profile Photo'}
             </Text>
+            {profile?.avatar_url && !avatarUpload.isPending ? (
+              <Pressable
+                onPress={() => setRemovingPhoto(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Remove profile photo"
+                hitSlop={8}
+              >
+                <Text style={styles.avatarRemove}>Remove photo</Text>
+              </Pressable>
+            ) : null}
           </View>
 
           <EditSectionCard icon="account-outline" title="BASIC DETAILS">
@@ -338,6 +353,22 @@ export default function EditVolunteerProfile() {
         onConfirm={() => setPhotoNotice(false)}
         onCancel={() => setPhotoNotice(false)}
       />
+
+      <ConfirmDialog
+        visible={removingPhoto}
+        icon="trash-can-outline"
+        tone="destructive"
+        title="Remove your photo?"
+        message="Your profile will show your initials instead. You can add a photo again at any time."
+        confirmLabel="Remove"
+        cancelLabel="Keep it"
+        busy={removeAvatar.isPending}
+        onConfirm={() => {
+          if (!user) return;
+          removeAvatar.mutate(user.id, { onSuccess: () => setRemovingPhoto(false) });
+        }}
+        onCancel={() => setRemovingPhoto(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -380,6 +411,12 @@ const styles = StyleSheet.create({
     borderColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarRemove: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.danger,
+    marginTop: spacing.xs,
   },
   avatarCaption: {
     fontFamily: fontFamily.medium,

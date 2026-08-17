@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
+  Avatar,
   Badge,
   Button,
   ConfirmDialog,
@@ -30,6 +31,7 @@ import {
   useOutreach,
   useOutreachImages,
   useOutreachRoles,
+  usePublicOrganisationProfile,
 } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
@@ -79,6 +81,9 @@ export default function OutreachDetail() {
 
   const outreach = outreachQuery.data;
   const application = myApplicationQuery.data ?? null;
+  // Only for the logo. The outreach embed already carries the name, type and
+  // verified flag; the avatar is the one public field it cannot reach.
+  const organisationProfileQuery = usePublicOrganisationProfile(outreach?.organisation?.id);
   const isClinical = outreach?.role_type === 'clinical';
   const isVerified = volunteerProfile?.verification_status === 'verified';
   // CLAUDE.md's Phase 2 eligibility rule: an unverified volunteer may browse
@@ -287,6 +292,17 @@ export default function OutreachDetail() {
               accessibilityLabel={`View ${organisation.org_name} profile`}
               style={styles.orgLink}
             >
+              {/*
+                The logo comes from the public organisation view rather than
+                the outreach embed: `profiles.avatar_url` is row-scoped and the
+                embed cannot see it. Falls back to initials, which is what the
+                Avatar does with a null uri.
+              */}
+              <Avatar
+                name={organisation.org_name}
+                uri={organisationProfileQuery.data?.avatar_url}
+                size={28}
+              />
               <Text style={styles.orgLinkText}>View organisation profile</Text>
               <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
             </Pressable>

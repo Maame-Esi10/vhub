@@ -1,12 +1,19 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Badge, FlyerBackground, formatEventDate, formatEventTimeRange } from '@/components/ui';
+import { Avatar, Badge, FlyerBackground, formatEventDate, formatEventTimeRange } from '@/components/ui';
 import { MatchScoreBadge } from '@/components/volunteer/MatchScoreBadge';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { OutreachWithOrganisation } from '@/hooks';
 
 export interface OutreachFeedCardProps {
   outreach: OutreachWithOrganisation;
+  /**
+   * The organisation's logo. Passed in rather than read here because the logo
+   * lives on `profiles.avatar_url`, which the outreach embed cannot reach —
+   * the screen fetches them for the whole list in one query instead. Null or
+   * absent falls back to initials.
+   */
+  organisationLogoUrl?: string | null;
   onPress: () => void;
   /** 0–100 from `/api/match`, or null when the feed is showing its unranked fallback. */
   matchScore?: number | null;
@@ -30,6 +37,7 @@ export interface OutreachFeedCardProps {
  */
 export function OutreachFeedCard({
   outreach,
+  organisationLogoUrl,
   onPress,
   matchScore = null,
   onPressScore,
@@ -51,9 +59,16 @@ export function OutreachFeedCard({
       <FlyerBackground uri={outreach.flyer_url} style={styles.header}>
         <View style={styles.headerContent}>
           <MatchScoreBadge score={matchScore} onDark onPress={onPressScore} />
-          <Text style={styles.eyebrow} numberOfLines={1}>
-            {outreach.organisation?.org_name?.toUpperCase() ?? 'ORGANISATION'}
-          </Text>
+          <View style={styles.orgRow}>
+            <Avatar
+              name={outreach.organisation?.org_name ?? 'Organisation'}
+              uri={organisationLogoUrl}
+              size={20}
+            />
+            <Text style={styles.eyebrow} numberOfLines={1}>
+              {outreach.organisation?.org_name?.toUpperCase() ?? 'ORGANISATION'}
+            </Text>
+          </View>
           <Text style={styles.title} numberOfLines={2}>
             {outreach.title}
           </Text>
@@ -151,7 +166,13 @@ const styles = StyleSheet.create({
     color: colors.white,
     opacity: 0.85,
   },
+  orgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   eyebrow: {
+    flex: 1,
     fontFamily: fontFamily.semiBold,
     fontSize: 10,
     letterSpacing: 1,

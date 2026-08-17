@@ -59,3 +59,49 @@ export function usePublicOrganisationProfile(organisationId: string | undefined)
     },
   });
 }
+
+/**
+ * Organisation logos for MANY outreaches at once, keyed by organisation id.
+ *
+ * WHY THIS EXISTS AT ALL. An outreach embeds `organisation_profiles`, and the
+ * logo does not live there — it is `profiles.avatar_url`, shared with every
+ * other kind of account. The obvious fix, embedding the organisation's
+ * `profiles` row alongside, does not work: `profiles` is row-scoped by RLS and
+ * comes back null for any organisation the volunteer has never applied to.
+ *
+ * So the logo is fetched separately from `public_organisation_profiles`, the
+ * view that exists precisely to expose an organisation's public face to every
+ * authenticated user. One `.in()` query for the whole screen rather than one
+ * per card — the feed renders up to fifty outreaches, and a per-card query
+ * would turn one screen into fifty round trips. Same shape as
+ * `useOutreachRolesForMany`.
+ *
+ * The key is the SORTED id list, so two renders with the same organisations in
+ * a different order share a cache entry instead of refetching.
+ */
+export function useOrganisationLogos(organisationIds: readonly (string | null | undefined)[]) {
+  const ids = [...new Set(organisationIds.filter((id): id is string => !!id))].sort();
+
+  return useQuery({
+    queryKey: [...publicProfileKeys.all, 'organisation-logos', ids.join(',')] as const,
+    enabled: ids.length > 0,
+    // Logos change about never, and this runs alongside every list screen.
+    staleTime: 10 * 60 * 1000,
+    queryFn: async (): Promise<Map<string, string | null>> => {
+      const { data, error } = await supabase
+        .from('public_organisation_profiles')
+        .select('id, avatar_url')
+        .in('id', ids);
+
+      if (error) {
+        throw new Error(error.message || 'Could not load organisation logos.');
+      }
+
+      const byId = new Map<string, string | null>();
+      for (const row of (data ?? []) as { id: string; avatar_url: string | null }[]) {
+        byId.set(row.id, row.avatar_url);
+      }
+      return byId;
+    },
+  });
+}
