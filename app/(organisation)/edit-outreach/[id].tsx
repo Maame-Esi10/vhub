@@ -60,7 +60,11 @@ import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 
 const REGION_OPTIONS: SelectOption[] = GHANA_REGIONS.map((r) => ({ value: r.name, label: r.name }));
-const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({ title: c.name, data: c.skills }));
+const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
+  title: c.name,
+  icon: c.icon,
+  data: c.skills,
+}));
 
 /**
  * Edit a posted outreach.

@@ -1,5 +1,13 @@
 export interface SkillCategory {
   name: string;
+  /**
+   * MaterialCommunityIcons glyph name for the category card.
+   *
+   * A plain string rather than an imported icon type, so this file stays pure
+   * data with no React Native dependency: it is imported by the matching tests,
+   * which run in a Jest config that has no RN preset.
+   */
+  icon: string;
   skills: string[];
 }
 
@@ -39,6 +47,7 @@ export interface SkillCategory {
 export const SKILL_CATEGORIES: SkillCategory[] = [
   {
     name: 'Clinical Assessment',
+    icon: 'stethoscope',
     skills: [
       'Vital signs monitoring',
       'Blood pressure measurement',
@@ -55,6 +64,7 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'Screening & Early Detection',
+    icon: 'magnify-scan',
     skills: [
       'Clinical breast examination',
       'Breast self-examination teaching',
@@ -70,6 +80,7 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'Eye & Vision',
+    icon: 'eye-outline',
     skills: [
       'Visual acuity screening',
       'Refraction and lens prescribing',
@@ -83,6 +94,7 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'Nursing Procedures',
+    icon: 'needle',
     skills: [
       'Venipuncture',
       'Intravenous cannulation',
@@ -96,6 +108,7 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'Blood Donation',
+    icon: 'blood-bag',
     skills: [
       'Donor registration',
       'Donor eligibility screening',
@@ -107,6 +120,7 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'Pharmacy',
+    icon: 'pill',
     skills: [
       'Medication dispensing',
       'Prescription review',
@@ -118,6 +132,7 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'Emergency & First Aid',
+    icon: 'medical-bag',
     skills: [
       'Basic Life Support (BLS)',
       'Cardiopulmonary resuscitation (CPR)',
@@ -132,6 +147,7 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'Maternal & Child Health',
+    icon: 'mother-nurse',
     skills: [
       'Antenatal care',
       'Postnatal care',
@@ -145,6 +161,7 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'General Support',
+    icon: 'hand-heart-outline',
     skills: [
       'Patient registration',
       'Health education',
@@ -202,5 +219,5 @@ export function isRetiredSkill(skill: string): boolean {
 export function skillSectionsFor(selected: readonly string[]): SkillCategory[] {
   const held = RETIRED_SKILLS.filter((skill) => selected.includes(skill));
   if (held.length === 0) return SKILL_CATEGORIES;
-  return [...SKILL_CATEGORIES, { name: 'No longer offered', skills: held }];
+  return [...SKILL_CATEGORIES, { name: 'No longer offered', icon: 'archive-outline', skills: held }];
 }

@@ -1,20 +1,28 @@
 import { useMemo, useState } from 'react';
-import { SectionList, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Input, OnboardingStepFooter, OnboardingStepHeader } from '@/components/ui';
+import {
+  Button,
+  CategoryChecklist,
+  Input,
+  OnboardingStepFooter,
+  OnboardingStepHeader,
+} from '@/components/ui';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { SKILL_CATEGORIES } from '@/constants/skills';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 
 interface SkillSection {
   title: string;
+  icon: string;
   data: string[];
 }
 
 const SECTIONS: SkillSection[] = SKILL_CATEGORIES.map((category) => ({
   title: category.name,
+  icon: category.icon,
   data: category.skills,
 }));
 
@@ -29,7 +37,7 @@ export default function OnboardingSkills() {
     const trimmed = query.trim().toLowerCase();
     if (!trimmed) return SECTIONS;
     return SECTIONS.map((section) => ({
-      title: section.title,
+      ...section,
       data: section.data.filter((skill) => skill.toLowerCase().includes(trimmed)),
     })).filter((section) => section.data.length > 0);
   }, [query]);
@@ -85,30 +93,29 @@ export default function OnboardingSkills() {
             : ''}
         </Text>
 
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => item}
+        {/*
+          The same collapsible category cards the picker uses, from the same
+          component. This screen had its own flat SectionList before, which is
+          how two screens that should look identical stop looking identical.
+        */}
+        <ScrollView
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          stickySectionHeadersEnabled={false}
-          renderSectionHeader={({ section }) => (
-            <Text style={styles.sectionHeader}>{section.title}</Text>
-          )}
-          renderItem={({ item }) => (
-            <View style={styles.row}>
-              <View style={styles.rowLeading}>
-                <MaterialCommunityIcons name="checkbox-blank-circle-outline" size={18} color={colors.primary} />
-                <Text style={styles.rowLabel}>{item}</Text>
-              </View>
-              <Switch
-                value={selected.has(item)}
-                onValueChange={() => toggleSkill(item)}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.white}
-              />
-            </View>
-          )}
-        />
+          keyboardShouldPersistTaps="handled"
+        >
+          {sections.length === 0 ? (
+            <Text style={styles.noMatches}>
+              Nothing matches &quot;{query.trim()}&quot;. Try a shorter word.
+            </Text>
+          ) : null}
+
+          <CategoryChecklist
+            sections={sections}
+            selected={selected}
+            onToggle={toggleSkill}
+            searching={query.trim().length > 0}
+          />
+        </ScrollView>
 
         <Button title="Continue" variant="solid" onPress={handleContinue} style={styles.continueButton} />
         <OnboardingStepFooter step={1} total={5} section="Skill Configuration" />
@@ -146,6 +153,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
+  noMatches: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
+    paddingVertical: spacing.xl,
+    textAlign: 'center',
+  },
   search: {
     marginBottom: spacing.sm,
   },
@@ -154,36 +168,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: spacing.base,
-  },
-  sectionHeader: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 12,
-    letterSpacing: 0.5,
-    color: colors.textSecondary,
-    marginTop: spacing.base,
-    marginBottom: spacing.xs,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  rowLeading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    flexShrink: 1,
-  },
-  rowLabel: {
-    fontFamily: fontFamily.medium,
-    fontSize: 14,
-    color: colors.textPrimary,
-    flexShrink: 1,
   },
   continueButton: {
     marginTop: spacing.sm,

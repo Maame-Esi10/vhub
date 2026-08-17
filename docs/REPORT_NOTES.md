@@ -1768,3 +1768,38 @@ community-focused cervical and breast cancer screening program using a
 sustainable funding model in a training center in Ghana", BMC Health Services
 Research 2025; National Blood Service Ghana donor services and blood-drive
 booking.
+
+## The skills picker becomes nine cards (2026-08-19)
+
+Seventy-five skills as one flat list was a wall. The first thing anyone saw was
+every skill at once, under section headings small and grey enough that they did
+not break it up, and the owner's report was simply that looking at the list was
+tiring. That is a layout problem, not a content problem: the vocabulary is the
+right size, it was just presented as one undifferentiated scroll.
+
+It is now nine collapsible category cards, each with an icon and a count. The
+first thing you see is nine choices rather than seventy-five, and an icon is
+recognised faster than a heading is read.
+
+Two alternatives were weighed. Keeping the flat list but making the headings
+large and sticky is less work, but it does not fix the actual complaint: the
+scroll is still seventy-five rows long. Giving each category its own screen
+removes the wall but adds a navigation step per category and hides how much has
+been picked overall, which matters when someone is filling in a profile they
+want to look complete.
+
+Four behaviours the cards need to be usable rather than merely tidy:
+
+- **Search ignores the cards.** Collapsing is the wrong answer to "show me where
+  this is", so any category holding a match opens itself while a search runs.
+- **Each card carries its own count**, so nobody opens all nine to find out what
+  they already chose.
+- **Several open at once.** People pick across categories rather than finishing
+  one before starting another, and a strict one-at-a-time accordion makes them
+  keep reopening.
+- **Categories with existing selections open on arrival**, so an edit begins
+  with the user's own choices in view.
+
+The list lives in one shared component used by both the picker modal and the
+onboarding step. Those two had separate copies of the same flat list before,
+which is how two screens that should look identical stop looking identical.

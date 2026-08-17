@@ -53,7 +53,11 @@ const TOTAL_STEPS = 4;
 const STEP_TITLES = ['Basic Information', 'Where & When', 'Requirements & Capacity', 'Preview'];
 
 const REGION_OPTIONS: SelectOption[] = GHANA_REGIONS.map((r) => ({ value: r.name, label: r.name }));
-const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({ title: c.name, data: c.skills }));
+const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
+  title: c.name,
+  icon: c.icon,
+  data: c.skills,
+}));
 
 export default function CreateOutreach() {
   const router = useRouter();

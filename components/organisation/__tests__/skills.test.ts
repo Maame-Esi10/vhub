@@ -38,6 +38,12 @@ describe('the skills vocabulary', () => {
     expect(ALL_SKILLS).toContain('Phlebotomy for donation');
   });
 
+  it('gives every category an icon, since the picker draws one per card', () => {
+    for (const category of SKILL_CATEGORIES) {
+      expect(category.icon).toBeTruthy();
+    }
+  });
+
   it('puts every skill in exactly one findable category', () => {
     for (const skill of ALL_SKILLS) {
       expect(getSkillCategory(skill)).toBeDefined();
@@ -58,6 +64,7 @@ describe('the skills vocabulary', () => {
     expect(sections).toHaveLength(SKILL_CATEGORIES.length + 1);
     expect(sections[sections.length - 1]).toEqual({
       name: 'No longer offered',
+      icon: 'archive-outline',
       skills: ['Catheterisation'],
     });
   });

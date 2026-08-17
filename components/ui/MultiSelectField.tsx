@@ -1,12 +1,15 @@
-import { useMemo, useState } from 'react';
-import { Modal, Pressable, SectionList, StyleSheet, Switch, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Input } from './Input';
+import { CategoryChecklist } from './CategoryChecklist';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
 export interface MultiSelectSection {
   title: string;
+  /** MaterialCommunityIcons glyph for the category card. Falls back to a generic tag. */
+  icon?: string;
   data: string[];
 }
 
@@ -22,12 +25,12 @@ export interface MultiSelectFieldProps {
 /**
  * Pressable field that opens a searchable, sectioned multi-select picker.
  *
- * FULL SCREEN, NOT AN 80% SHEET. The skills vocabulary grew to roughly ninety
- * entries across nine categories, and a sheet that leaves a fifth of the screen
- * showing the page behind it wastes the space where the list goes. It also
- * shows how many are selected and how many matched a search, because with a
- * list this long the two questions people ask are "what have I already picked"
- * and "did my search find anything".
+ * FULL SCREEN, NOT AN 80% SHEET. The skills vocabulary is seventy-five entries
+ * across nine categories, and a sheet that leaves a fifth of the screen showing
+ * the page behind it wastes the space where the list goes. It also shows how
+ * many are selected and how many matched a search, because with a list this
+ * long the two questions people ask are "what have I already picked" and "did
+ * my search find anything".
  */
 export function MultiSelectField({
   label,
@@ -40,13 +43,14 @@ export function MultiSelectField({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const searching = query.trim().length > 0;
 
   const filteredSections = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
     if (!trimmed) return sections;
     return sections
       .map((section) => ({
-        title: section.title,
+        ...section,
         data: section.data.filter((item) => item.toLowerCase().includes(trimmed)),
       }))
       .filter((section) => section.data.length > 0);
@@ -128,31 +132,20 @@ export function MultiSelectField({
                 : ''}
             </Text>
 
-            <SectionList
-              sections={filteredSections}
-              keyExtractor={(item) => item}
-              style={styles.list}
-              stickySectionHeadersEnabled={false}
-              renderSectionHeader={({ section }) => (
-                <Text style={styles.sectionHeader}>{section.title}</Text>
-              )}
-              ListEmptyComponent={
+            <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+              {filteredSections.length === 0 ? (
                 <Text style={styles.pickerEmpty}>
                   Nothing matches &quot;{query.trim()}&quot;. Try a shorter word.
                 </Text>
-              }
-              renderItem={({ item }) => (
-                <View style={styles.row}>
-                  <Text style={styles.rowLabel}>{item}</Text>
-                  <Switch
-                    value={selectedSet.has(item)}
-                    onValueChange={() => toggle(item)}
-                    trackColor={{ false: colors.border, true: colors.primary }}
-                    thumbColor={colors.white}
-                  />
-                </View>
-              )}
-            />
+              ) : null}
+
+              <CategoryChecklist
+                sections={filteredSections}
+                selected={selectedSet}
+                onToggle={toggle}
+                searching={searching}
+              />
+            </ScrollView>
           </SafeAreaView>
         </View>
       </Modal>
@@ -265,29 +258,6 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
-  },
-  sectionHeader: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 12,
-    letterSpacing: 0.5,
-    color: colors.textSecondary,
-    marginTop: spacing.base,
-    marginBottom: spacing.xs,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  rowLabel: {
-    fontFamily: fontFamily.regular,
-    fontSize: 14,
-    color: colors.textPrimary,
-    flexShrink: 1,
-    marginRight: spacing.sm,
   },
   empty: {
     fontFamily: fontFamily.regular,

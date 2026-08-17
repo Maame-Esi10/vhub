@@ -70,7 +70,12 @@ export default function EditVolunteerProfile() {
   const [specialties, setSpecialties] = useState<string[]>(volunteerProfile?.specialties ?? []);
   const [skillTags, setSkillTags] = useState<string[]>(volunteerProfile?.skill_tags ?? []);
   const skillSections = useMemo(
-    () => skillSectionsFor(skillTags).map((category) => ({ title: category.name, data: category.skills })),
+    () =>
+      skillSectionsFor(skillTags).map((category) => ({
+        title: category.name,
+        icon: category.icon,
+        data: category.skills,
+      })),
     [skillTags]
   );
   const [availability, setAvailability] = useState<string[]>(
