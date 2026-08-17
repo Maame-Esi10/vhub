@@ -64,7 +64,12 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'Screening & Early Detection',
-    icon: 'magnify-scan',
+    // The awareness ribbon, not a magnifier. `magnify-scan` was two ideas in
+    // one glyph (a lens plus corner brackets) and lost both at 20pt, and worse,
+    // it looked like the QR scanner this app already has for check-in. The
+    // ribbon is the symbol Ghanaian breast and cervical campaigns actually use,
+    // which is most of what this category holds.
+    icon: 'ribbon',
     skills: [
       'Clinical breast examination',
       'Breast self-examination teaching',
@@ -108,7 +113,11 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     name: 'Blood Donation',
-    icon: 'blood-bag',
+    // A drop, not a bag. `blood-bag` draws a pouch with tubing, which collapses
+    // into an indistinct blob at 20pt; a droplet is the shape blood donation is
+    // recognised by everywhere and stays legible when small. Beside the words
+    // "Blood Donation" it cannot be mistaken for water.
+    icon: 'water',
     skills: [
       'Donor registration',
       'Donor eligibility screening',
