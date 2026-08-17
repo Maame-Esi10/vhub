@@ -40,6 +40,8 @@ export {
   usePublicOrganisationOutreaches,
   useCreateOutreach,
   useSaveOutreach,
+  useCompleteOrCancelOutreach,
+  useDeleteOutreach,
   useUpdateOutreach,
   useUpdateOutreachStatus,
 } from './useOutreaches';
@@ -53,6 +55,8 @@ export type {
   FeedFilters,
   CreateOutreachParams,
   SaveOutreachParams,
+  CompleteOrCancelParams,
+  DeleteOutreachParams,
   UpdateOutreachParams,
   UpdateOutreachStatusParams,
 } from './useOutreaches';

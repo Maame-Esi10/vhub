@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PostgrestError } from '@supabase/supabase-js';
-import { ApiClientError, rankFeed } from '@/lib/api-client';
+import { ApiClientError, rankFeed, setOutreachStatus } from '@/lib/api-client';
 import type { Layer1MatchResult } from '@/lib/matching/layer1';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -593,6 +593,82 @@ export function useSaveOutreach() {
  * and importing back would make the two files circular.
  */
 const outreachRoleKeysAll = ['outreach-roles'] as const;
+
+export interface CompleteOrCancelParams {
+  outreachId: string;
+  organisationId: string;
+  status: 'completed' | 'cancelled';
+  /** Shown to volunteers verbatim when cancelling. */
+  reason?: string;
+}
+
+/**
+ * Marks an outreach completed, or cancels it and tells everyone with a live
+ * application.
+ *
+ * Goes through `/api/outreach-status` rather than writing the column directly:
+ * cancelling has to read other volunteers' push tokens and write notification
+ * rows they own, which no organisation's JWT can do under RLS, and completing
+ * has a precondition — the event must actually have finished — that no
+ * constraint can express.
+ */
+export function useCompleteOrCancelOutreach() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: CompleteOrCancelParams) =>
+      setOutreachStatus(params.outreachId, params.status, { reason: params.reason }),
+    onSuccess: (_result, params) => {
+      queryClient.invalidateQueries({
+        queryKey: outreachKeys.byOrganisation(params.organisationId),
+      });
+      queryClient.invalidateQueries({ queryKey: outreachKeys.detail(params.outreachId) });
+      // A cancelled outreach leaves the feed and changes how it reads on every
+      // volunteer's schedule, so the whole outreach cache goes.
+      queryClient.invalidateQueries({ queryKey: outreachKeys.all });
+    },
+  });
+}
+
+export interface DeleteOutreachParams {
+  outreachId: string;
+  organisationId: string;
+}
+
+/**
+ * Deletes an outreach outright.
+ *
+ * Only ever succeeds for one nobody has touched. `trg_outreaches_refuse_used_delete`
+ * refuses the delete in the DATABASE when any application, attendance record or
+ * review exists, because those belong to the volunteers rather than to the
+ * organisation and a V-Score has to stay explainable from the events that
+ * produced it. The screen offers Cancel instead in that case; this mapping
+ * exists for the race where someone applies between the screen loading and the
+ * button being pressed.
+ */
+export function useDeleteOutreach() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: DeleteOutreachParams): Promise<void> => {
+      const { error } = await supabase.from('outreaches').delete().eq('id', params.outreachId);
+
+      if (error) {
+        throw new Error(
+          error.message?.includes('Cancel it instead')
+            ? 'Someone has applied to this outreach, so it can no longer be deleted. Cancel it instead.'
+            : error.message || 'Could not delete this outreach. Please try again.'
+        );
+      }
+    },
+    onSuccess: (_result, params) => {
+      queryClient.invalidateQueries({
+        queryKey: outreachKeys.byOrganisation(params.organisationId),
+      });
+      queryClient.invalidateQueries({ queryKey: outreachKeys.all });
+    },
+  });
+}
 
 export interface UpdateOutreachStatusParams {
   outreachId: string;

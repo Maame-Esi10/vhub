@@ -42,6 +42,7 @@ export const API_ROUTES = {
   verificationDocument: '/api/verification-document',
   cancelEmailChange: '/api/cancel-email-change',
   waitlistPosition: '/api/waitlist-position',
+  outreachStatus: '/api/outreach-status',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -496,6 +497,44 @@ export function setApplicationStatusBatch(
   return apiPost<BatchApplicationStatusResponse>(
     API_ROUTES.applicationStatus,
     { outreachId, decisions },
+    options
+  );
+}
+
+// ---------------------------------------------------------------------------
+// /api/outreach-status
+// ---------------------------------------------------------------------------
+
+export interface OutreachStatusResponse {
+  outreachId: string;
+  status: 'completed' | 'cancelled';
+  /** Volunteers told about the cancellation. Always 0 for `completed`. */
+  notified: number;
+}
+
+/**
+ * Marks an outreach completed, or cancels it.
+ *
+ * Publishing a draft and closing an outreach stay on the client's own write
+ * (`useUpdateOutreachStatus`) — one column, one owned row, nothing follows.
+ * These two go through the server: cancelling has to notify every live
+ * applicant, which means reading other users' push tokens and writing rows they
+ * own, and completing has a precondition (the event must actually have
+ * finished) that no constraint can express.
+ *
+ * Cancelling does NOT touch the applications. `cancelled` on an application
+ * means the volunteer withdrew, and writing it here would stamp a withdrawal —
+ * on short notice, a LATE one that costs V-Score points — onto volunteers for a
+ * decision that was not theirs.
+ */
+export function setOutreachStatus(
+  outreachId: string,
+  status: 'completed' | 'cancelled',
+  options?: RequestOptions & { reason?: string }
+): Promise<OutreachStatusResponse> {
+  return apiPost<OutreachStatusResponse>(
+    API_ROUTES.outreachStatus,
+    { outreachId, status, ...(options?.reason ? { reason: options.reason } : {}) },
     options
   );
 }

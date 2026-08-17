@@ -373,6 +373,13 @@ export default function OutreachDetail() {
             onPress={() => setWithdrawVisible(true)}
             accessibilityLabel="Withdraw application"
           />
+        ) : outreach.status === 'cancelled' ? (
+          // Checked BEFORE the application's own status: "you withdrew" or
+          // "you're in" is not the thing a volunteer needs to read about an
+          // event that is not happening.
+          <Text style={styles.footerCancelled}>
+            The organisation cancelled this event. You do not need to attend.
+          </Text>
         ) : alreadyApplied ? (
           <Text style={styles.footerNote}>{STATUS_MESSAGE[application.status]}</Text>
         ) : outreach.status !== 'open' ? (
@@ -736,6 +743,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.base,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  footerCancelled: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.danger,
+    textAlign: 'center',
   },
   footerNote: {
     fontFamily: fontFamily.regular,

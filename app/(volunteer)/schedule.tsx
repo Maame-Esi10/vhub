@@ -210,6 +210,18 @@ export default function Schedule() {
           // the scan action must not reappear on it after the fact.
           const isToday = !item.isPast && isEventToday(outreach.date);
 
+          /*
+            A CANCELLED EVENT STAYS ON THE SCHEDULE, MARKED.
+
+            The application is still `accepted` and deliberately so: writing
+            `cancelled` onto it would mean the volunteer withdrew, and on short
+            notice would stamp a LATE withdrawal and cost them V-Score points
+            for their organiser's decision. So the event's own status is what
+            says it is off, and it has to say so HERE — silently dropping the
+            card would leave someone turning up to a cancelled clinic.
+          */
+          const isCancelled = outreach.status === 'cancelled';
+
           return (
             <View style={styles.eventBlock}>
               {/*
@@ -231,8 +243,9 @@ export default function Schedule() {
                 accessibilityLabel={`${outreach.title} at ${startLabel}`}
                 style={({ pressed }) => [
                   styles.eventCard,
-                  isToday && styles.eventCardToday,
+                  isToday && !isCancelled && styles.eventCardToday,
                   item.isPast && styles.eventCardPast,
+                  isCancelled && styles.eventCardCancelled,
                   pressed && styles.pressed,
                 ]}
               >
@@ -242,7 +255,11 @@ export default function Schedule() {
                     {startLabel}
                     {endLabel ? ` – ${endLabel}` : ''}
                   </Text>
-                  {isToday ? (
+                  {isCancelled ? (
+                    <View style={styles.cancelledPill}>
+                      <Text style={styles.cancelledPillText}>CANCELLED</Text>
+                    </View>
+                  ) : isToday ? (
                     <View style={styles.todayPill}>
                       <Text style={styles.todayPillText}>TODAY</Text>
                     </View>
@@ -252,9 +269,15 @@ export default function Schedule() {
                 </View>
 
                 {/* Two lines, not one: outreach titles are sentences, not labels. */}
-                <Text style={styles.eventTitle} numberOfLines={2}>
+                <Text style={[styles.eventTitle, isCancelled && styles.eventTitleCancelled]} numberOfLines={2}>
                   {outreach.title}
                 </Text>
+
+                {isCancelled ? (
+                  <Text style={styles.cancelledLine}>
+                    The organisation cancelled this event. You do not need to attend.
+                  </Text>
+                ) : null}
 
                 {outreach.organisation?.org_name ? (
                   <View style={styles.detailRow}>
@@ -426,6 +449,30 @@ const styles = StyleSheet.create({
   },
   eventTopSpacer: {
     flex: 1,
+  },
+  cancelledPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.danger,
+  },
+  cancelledPillText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    color: colors.white,
+  },
+  eventCardCancelled: {
+    borderColor: colors.danger,
+  },
+  eventTitleCancelled: {
+    textDecorationLine: 'line-through',
+  },
+  cancelledLine: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.danger,
+    marginTop: spacing.xs,
   },
   todayPill: {
     paddingHorizontal: spacing.sm,

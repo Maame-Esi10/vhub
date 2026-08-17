@@ -1478,3 +1478,68 @@ derived from — records that are not the organisation's to erase. A BEFORE DELE
 trigger now refuses when any of the three exist. Enforced in the database rather
 than the screen, because RLS already permits the delete and a client is not the
 right place to hold that line.
+
+## Event lifecycle: completed, cancelled, deleted (2026-08-17)
+
+Until now an outreach could only be published or closed. Three acts were
+missing, and each turned out to be a different kind of thing.
+
+**Completed is archival, not a gate.** It means "I have wrapped this up", and it
+deliberately closes nothing: attendance and reviews stay open afterwards.
+Reviews are what move V-Scores and are filed days after the event, so tying them
+to a button an organiser presses when they are being tidy would punish exactly
+the organisers who keep their records straight. If a cutoff is ever wanted it
+should be time-based, because a rule that applies evenly cannot be triggered by
+mistake. It is offered only once the event has actually ended — a precondition
+no constraint can express, which is why the transition goes through the server.
+
+**Cancelled is a fifth status, not a reuse of closed.** `closed` means "no longer
+recruiting" and leaves the event happening; an event that is not happening is a
+different fact. Reusing `closed` would have left a cancelled event sitting on
+volunteers' schedules looking live, which is the one thing a cancellation must
+not do.
+
+It is terminal. `trg_outreaches_no_uncancel` refuses any move out of it, so the
+volunteers who were told it was off are never silently re-enrolled days later.
+The only way back is a new outreach, which is honest about what happened.
+
+**Cancelling deliberately does not touch the applications.** The obvious
+implementation — mark every accepted application `cancelled` — is wrong twice
+over, because `cancelled` on an APPLICATION means the volunteer withdrew. It is
+what the withdrawal flow writes, it stamps `cancelled_at` and
+`late_cancellation` through `trg_applications_stamp_cancellation`, and
+`late_cancellation` is what the V-Score penalty reads. Cancelling an event would
+therefore have written a withdrawal into the record of every volunteer who did
+nothing wrong, and on short notice would have stamped them as LATE withdrawals
+and docked their V-Score for their organiser's decision. The applications are
+left alone and every screen reads the OUTREACH's status instead, so the record
+keeps saying, truthfully, that the volunteer was accepted onto an event that was
+then cancelled. A migration-time assertion fails if a cascade is ever added.
+
+Because the applications are untouched, the cancelled event stays on the
+volunteer's schedule — struck through, badged CANCELLED, with a line saying they
+need not attend. Dropping the card would have been worse than leaving it: a
+volunteer who never opens the notification would turn up to a clinic that is not
+happening.
+
+**Deleting is only for an event nobody has touched.** Once an application,
+attendance record or review exists, the outreach is part of somebody else's
+record and is not the organisation's to erase — and a V-Score has to stay
+explainable from the events that produced it. `trg_outreaches_refuse_used_delete`
+enforces this in the database, because `outreaches_delete_own` already permits
+the delete and a screen is not where that line should be held. The UI offers
+Cancel instead and says why.
+
+**Why two of the four transitions go through the server.** Publishing and
+closing stay on the client's own RLS-governed write: one column, one owned row,
+nothing follows. Cancelling has to notify every live applicant, which means
+reading other users' push tokens and writing rows they own — something no
+organisation's JWT can do under RLS, and which must not half-happen. Completing
+has the "has it finished" precondition. So `/api/outreach-status` owns those two
+and only those two.
+
+**A Postgres constraint shaped the migration.** `ALTER TYPE ... ADD VALUE` cannot
+have its new value USED in the same transaction that added it, and the Supabase
+editor wraps a paste in one transaction. So the enum addition is its own file
+(`20260815a`) and everything that compares against 'cancelled' is in the next
+one (`20260815b`). The split is a requirement, not tidiness.

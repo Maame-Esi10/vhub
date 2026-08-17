@@ -39,7 +39,13 @@ export type VerificationStatus = "unverified" | "documents_pending" | "verified"
 
 export type OutreachRoleType = "clinical" | "support";
 
-export type OutreachStatus = "draft" | "open" | "closed" | "completed";
+/**
+ * `cancelled` is terminal and cannot be reversed (trg_outreaches_no_uncancel):
+ * the volunteers who were told the event is off must not be silently
+ * re-enrolled days later. It is distinct from `closed`, which means "no longer
+ * recruiting" and leaves the event happening.
+ */
+export type OutreachStatus = "draft" | "open" | "closed" | "completed" | "cancelled";
 
 export type ApplicationType = "quick_join" | "full";
 

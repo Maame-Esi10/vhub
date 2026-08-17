@@ -12,6 +12,7 @@ const STATUS_TONE: Record<OutreachStatus, BadgeTone> = {
   open: 'success',
   closed: 'warning',
   completed: 'navy',
+  cancelled: 'danger',
 };
 
 const STATUS_LABEL: Record<OutreachStatus, string> = {
@@ -19,6 +20,7 @@ const STATUS_LABEL: Record<OutreachStatus, string> = {
   open: 'Open',
   closed: 'Closed',
   completed: 'Completed',
+  cancelled: 'Cancelled',
 };
 
 export interface OutreachCardProps {

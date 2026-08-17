@@ -3,6 +3,7 @@
 --
 -- RUN AS ONE PASTE. Idempotent (create or replace).
 --
+
 -- THE PROBLEM. Editing an outreach writes the details to `outreaches` and the
 -- staffing to `outreach_roles`, and supabase-js cannot span two tables in one
 -- transaction. Every request is its own transaction, so a save was two or three

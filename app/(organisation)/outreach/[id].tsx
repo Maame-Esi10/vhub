@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Avatar,
   Badge,
+  ConfirmDialog,
   ErrorState,
   FlyerBackground,
   ListSkeleton,
@@ -17,7 +18,12 @@ import {
 } from '@/components/ui';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { useOutreach, useOutreachApplications } from '@/hooks';
+import {
+  useCompleteOrCancelOutreach,
+  useDeleteOutreach,
+  useOutreach,
+  useOutreachApplications,
+} from '@/hooks';
 import { isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachStatus } from '@/types/database';
@@ -27,6 +33,7 @@ const STATUS_TONE: Record<OutreachStatus, BadgeTone> = {
   open: 'success',
   closed: 'warning',
   completed: 'navy',
+  cancelled: 'danger',
 };
 
 const STATUS_LABEL: Record<OutreachStatus, string> = {
@@ -34,6 +41,7 @@ const STATUS_LABEL: Record<OutreachStatus, string> = {
   open: 'Open',
   closed: 'Closed',
   completed: 'Completed',
+  cancelled: 'Cancelled',
 };
 
 /**
@@ -70,6 +78,11 @@ export default function OrganisationOutreachDetail() {
 
   const outreachQuery = useOutreach(id);
   const outreach = outreachQuery.data;
+
+  const completeOrCancel = useCompleteOrCancelOutreach();
+  const deleteOutreach = useDeleteOutreach();
+  const [confirming, setConfirming] = useState<'completed' | 'cancelled' | 'delete' | null>(null);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
 
   const applicationsQuery = useOutreachApplications(id);
   const applications = useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
@@ -132,6 +145,69 @@ export default function OrganisationOutreachDetail() {
   const eventOver = hasEventEnded(outreach.date, outreach.end_time);
   const started = !isUpcomingEvent(outreach.date, outreach.start_time);
   const isDraft = outreach.status === 'draft';
+
+  /*
+    WHICH LIFECYCLE ACTIONS THIS EVENT CAN TAKE.
+
+    `completed` is an ARCHIVAL act, not a gate: it means "I have wrapped this
+    up". It deliberately does not close attendance or reviews, because reviews
+    are filed days later and are what move V-Scores — an organiser who tidies
+    up promptly must not lock themselves out of them.
+
+    `cancelled` means the event is not happening. It is offered while the event
+    is still ahead, because cancelling one that has already taken place says
+    something untrue about it. It is terminal: the database refuses to move an
+    outreach back out of it, so the volunteers who were told are never silently
+    re-enrolled.
+
+    Deleting is only ever offered when NOBODY has touched the event. Once an
+    application exists, the outreach is part of someone else's record — their
+    history, their schedule, and the event rows their V-Score is derived from —
+    and none of that is the organisation's to erase. The database enforces this
+    too (trg_outreaches_refuse_used_delete); this is the half that explains it
+    rather than refusing at the last moment.
+  */
+  const isCancelled = outreach.status === 'cancelled';
+  const canComplete = !isCancelled && !isDraft && eventOver && outreach.status !== 'completed';
+  const canCancel = !isCancelled && !eventOver && outreach.status !== 'completed';
+  const untouched = applications.length === 0;
+  const canDelete = !isCancelled && untouched;
+  const busy = completeOrCancel.isPending || deleteOutreach.isPending;
+
+  function runLifecycle(action: 'completed' | 'cancelled' | 'delete') {
+    if (!organisationId) return;
+    setLifecycleError(null);
+
+    if (action === 'delete') {
+      deleteOutreach.mutate(
+        { outreachId: outreach!.id, organisationId },
+        {
+          onSuccess: () => {
+            setConfirming(null);
+            router.replace('/(organisation)/dashboard');
+          },
+          onError: (error) => {
+            setConfirming(null);
+            setLifecycleError(error instanceof Error ? error.message : 'Could not delete this outreach.');
+          },
+        }
+      );
+      return;
+    }
+
+    completeOrCancel.mutate(
+      { outreachId: outreach!.id, organisationId, status: action },
+      {
+        onSuccess: () => setConfirming(null),
+        onError: (error) => {
+          setConfirming(null);
+          setLifecycleError(
+            error instanceof Error ? error.message : 'Could not update this outreach.'
+          );
+        },
+      }
+    );
+  }
 
   const short =
     daysOut !== null &&
@@ -340,6 +416,15 @@ export default function OrganisationOutreachDetail() {
           />
         ) : null}
 
+        {canComplete ? (
+          <ActionRow
+            icon="check-decagram-outline"
+            title="Mark as completed"
+            meta="Wraps this event up. Attendance and reviews stay open."
+            onPress={() => setConfirming('completed')}
+          />
+        ) : null}
+
         {outreach.description ? (
           <>
             <Text style={styles.sectionLabel}>DESCRIPTION</Text>
@@ -348,7 +433,112 @@ export default function OrganisationOutreachDetail() {
             </View>
           </>
         ) : null}
+
+        {/* ---------- Cancelled banner ----------
+
+            A cancelled event keeps its whole management surface -- the roster,
+            the applicants, the reviews -- because the organisation still needs
+            to see who had been coming. Only the state at the top changes.
+        */}
+        {isCancelled ? (
+          <View style={styles.cancelledNotice}>
+            <MaterialCommunityIcons name="calendar-remove" size={18} color={colors.danger} />
+            <Text style={styles.cancelledText}>
+              This event was cancelled and everyone who had applied has been told. It cannot be
+              reopened -- create a new outreach instead.
+            </Text>
+          </View>
+        ) : null}
+
+        {/* ---------- Ending it ----------
+
+            Separated and labelled rather than sitting in ACTIONS with the
+            everyday controls, because these two cannot be undone and should
+            not be reachable by a mistap on the way to Applicants.
+        */}
+        {canCancel || canDelete ? (
+          <>
+            <Text style={styles.sectionLabel}>ENDING THIS EVENT</Text>
+
+            {canDelete ? (
+              <ActionRow
+                icon="trash-can-outline"
+                title="Delete this outreach"
+                meta="Nobody has applied yet, so it can be removed completely."
+                tone="danger"
+                onPress={() => setConfirming('delete')}
+              />
+            ) : null}
+
+            {canCancel ? (
+              <ActionRow
+                icon="calendar-remove-outline"
+                title="Cancel this event"
+                meta={
+                  untouched
+                    ? 'Tells anyone who applies later that it is off.'
+                    : `Tells all ${applications.length} applicant${
+                        applications.length === 1 ? '' : 's'
+                      } it is not happening.`
+                }
+                tone="danger"
+                onPress={() => setConfirming('cancelled')}
+              />
+            ) : null}
+
+            {!canDelete && !untouched ? (
+              <Text style={styles.dangerNote}>
+                People have applied to this event, so it can no longer be deleted -- their
+                applications and any reviews are part of their record, not yours to remove.
+              </Text>
+            ) : null}
+          </>
+        ) : null}
+
+        {lifecycleError ? <Text style={styles.dangerError}>{lifecycleError}</Text> : null}
       </ScrollView>
+
+      <ConfirmDialog
+        visible={confirming === 'completed'}
+        icon="check-decagram-outline"
+        title="Mark this event as completed?"
+        message="This records that you have wrapped it up. Marking attendance and filing reviews stay open afterwards, so you can still do those."
+        confirmLabel="Mark completed"
+        cancelLabel="Not yet"
+        busy={busy}
+        onConfirm={() => runLifecycle('completed')}
+        onCancel={() => setConfirming(null)}
+      />
+
+      <ConfirmDialog
+        visible={confirming === 'cancelled'}
+        icon="calendar-remove-outline"
+        tone="destructive"
+        title="Cancel this event?"
+        message={
+          applications.length > 0
+            ? 'Everyone who applied will be told it is not happening. Nobody is marked as having withdrawn, so no volunteer takes a V-Score penalty for this. It cannot be undone.'
+            : 'The event will show as cancelled and can no longer be applied to. This cannot be undone.'
+        }
+        confirmLabel="Cancel the event"
+        cancelLabel="Keep it"
+        busy={busy}
+        onConfirm={() => runLifecycle('cancelled')}
+        onCancel={() => setConfirming(null)}
+      />
+
+      <ConfirmDialog
+        visible={confirming === 'delete'}
+        icon="trash-can-outline"
+        tone="destructive"
+        title="Delete this outreach?"
+        message="It will be removed completely. Nobody has applied, so nothing of anyone else's goes with it."
+        confirmLabel="Delete"
+        cancelLabel="Keep it"
+        busy={busy}
+        onConfirm={() => runLifecycle('delete')}
+        onCancel={() => setConfirming(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -401,12 +591,17 @@ function ActionRow({
   title,
   meta,
   onPress,
+  tone = 'default',
 }: {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   title: string;
   meta: string;
   onPress: () => void;
+  /** 'danger' colours the icon and title for the irreversible actions. */
+  tone?: 'default' | 'danger';
 }) {
+  const accent = tone === 'danger' ? colors.danger : colors.primary;
+
   return (
     <Pressable
       onPress={onPress}
@@ -414,9 +609,9 @@ function ActionRow({
       accessibilityLabel={title}
       style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
     >
-      <MaterialCommunityIcons name={icon} size={20} color={colors.primary} />
+      <MaterialCommunityIcons name={icon} size={20} color={accent} />
       <View style={styles.actionText}>
-        <Text style={styles.actionTitle}>{title}</Text>
+        <Text style={[styles.actionTitle, tone === 'danger' && styles.dangerTitle]}>{title}</Text>
         <Text style={styles.actionMeta}>{meta}</Text>
       </View>
       <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
@@ -454,6 +649,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xxl,
     gap: spacing.base,
+  },
+  cancelledNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    padding: spacing.base,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: colors.surface,
+  },
+  cancelledText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.textPrimary,
+  },
+  dangerTitle: {
+    color: colors.danger,
+  },
+  dangerNote: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.xs,
+  },
+  dangerError: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    color: colors.danger,
+    marginTop: spacing.sm,
+    textAlign: 'center',
   },
   savedNotice: {
     flexDirection: 'row',
