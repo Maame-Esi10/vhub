@@ -47,8 +47,26 @@ export function VolunteerApplicationCard({
   const outreach = application.outreach;
   const timeRange = outreach ? formatEventTimeRange(outreach.start_time, outreach.end_time) : null;
   const upcoming = outreach ? isUpcomingEvent(outreach.date, outreach.start_time) : false;
+
+  /*
+    THE EVENT'S STATUS OUTRANKS THE APPLICATION'S.
+
+    Cancelling an event deliberately leaves the applications alone -- writing
+    `cancelled` onto them would mean the volunteer withdrew, and would stamp a
+    late-withdrawal V-Score penalty for the organiser's decision. The cost of
+    that correctness is that the application still reads `accepted` or
+    `pending`, which on its own is now misleading: "pending" implies a decision
+    is still coming for an event that is not happening, and nothing resolves
+    those applications afterwards.
+
+    So the card leads with the event being off, and the withdraw button goes:
+    there is nothing left to withdraw from.
+  */
+  const eventCancelled = outreach?.status === 'cancelled';
   const canWithdraw =
-    upcoming && (application.status === 'pending' || application.status === 'accepted' || application.status === 'waitlisted');
+    upcoming &&
+    !eventCancelled &&
+    (application.status === 'pending' || application.status === 'accepted' || application.status === 'waitlisted');
 
   return (
     <Pressable
@@ -61,8 +79,19 @@ export function VolunteerApplicationCard({
         <Text style={styles.title} numberOfLines={2}>
           {outreach?.title ?? 'Outreach unavailable'}
         </Text>
-        <Badge label={STATUS_LABEL[application.status]} tone={STATUS_TONE[application.status]} />
+        {eventCancelled ? (
+          <Badge label="Event cancelled" tone="danger" />
+        ) : (
+          <Badge label={STATUS_LABEL[application.status]} tone={STATUS_TONE[application.status]} />
+        )}
       </View>
+
+      {eventCancelled ? (
+        <Text style={styles.cancelledLine}>
+          The organisation cancelled this event. Nothing is expected of you, and your record is
+          unaffected.
+        </Text>
+      ) : null}
 
       <Text style={styles.org} numberOfLines={1}>
         {outreach?.organisation?.org_name ?? 'Unknown organisation'}
@@ -171,6 +200,12 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semiBold,
     fontSize: 15,
     color: colors.textPrimary,
+  },
+  cancelledLine: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.danger,
+    marginTop: spacing.xs,
   },
   org: {
     fontFamily: fontFamily.regular,
