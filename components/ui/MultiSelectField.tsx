@@ -20,8 +20,14 @@ export interface MultiSelectFieldProps {
 }
 
 /**
- * Pressable field that opens a searchable, sectioned multi-select modal.
- * Same search + toggle interaction as app/(auth)/onboarding/skills.tsx, generalised for reuse.
+ * Pressable field that opens a searchable, sectioned multi-select picker.
+ *
+ * FULL SCREEN, NOT AN 80% SHEET. The skills vocabulary grew to roughly ninety
+ * entries across nine categories, and a sheet that leaves a fifth of the screen
+ * showing the page behind it wastes the space where the list goes. It also
+ * shows how many are selected and how many matched a search, because with a
+ * list this long the two questions people ask are "what have I already picked"
+ * and "did my search find anything".
  */
 export function MultiSelectField({
   label,
@@ -93,9 +99,9 @@ export function MultiSelectField({
         </View>
       ) : null}
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
+      <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
         <View style={styles.backdrop}>
-          <SafeAreaView style={styles.sheet} edges={['bottom']}>
+          <SafeAreaView style={styles.sheet} edges={['top', 'bottom']}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>{label}</Text>
               <Pressable
@@ -115,6 +121,13 @@ export function MultiSelectField({
               leadingIcon={<MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />}
               containerStyle={styles.search}
             />
+            <Text style={styles.pickerMeta}>
+              {selected.length} selected
+              {query.trim()
+                ? ` · ${filteredSections.reduce((sum, section) => sum + section.data.length, 0)} match "${query.trim()}"`
+                : ''}
+            </Text>
+
             <SectionList
               sections={filteredSections}
               keyExtractor={(item) => item}
@@ -123,6 +136,11 @@ export function MultiSelectField({
               renderSectionHeader={({ section }) => (
                 <Text style={styles.sectionHeader}>{section.title}</Text>
               )}
+              ListEmptyComponent={
+                <Text style={styles.pickerEmpty}>
+                  Nothing matches &quot;{query.trim()}&quot;. Try a shorter word.
+                </Text>
+              }
               renderItem={({ item }) => (
                 <View style={styles.row}>
                   <Text style={styles.rowLabel}>{item}</Text>
@@ -134,7 +152,6 @@ export function MultiSelectField({
                   />
                 </View>
               )}
-              ListEmptyComponent={<Text style={styles.empty}>No matches.</Text>}
             />
           </SafeAreaView>
         </View>
@@ -200,16 +217,26 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(11, 11, 15, 0.4)',
-    justifyContent: 'flex-end',
+    backgroundColor: colors.background,
   },
   sheet: {
+    flex: 1,
     backgroundColor: colors.background,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    height: '80%',
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.base,
+  },
+  pickerEmpty: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
+    paddingVertical: spacing.xl,
+    textAlign: 'center',
+  },
+  pickerMeta: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   sheetHeader: {
     flexDirection: 'row',

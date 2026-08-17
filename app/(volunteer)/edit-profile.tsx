@@ -24,7 +24,7 @@ import {
 } from '@/components/ui';
 import { EXPERIENCE_LEVELS, VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { GHANA_REGION_NAMES, getDistrictsForRegion } from '@/constants/ghana-locations';
-import { SKILL_CATEGORIES } from '@/constants/skills';
+import { skillSectionsFor } from '@/constants/skills';
 import { MEDICAL_SPECIALTIES } from '@/constants/specialties';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useUpdateVolunteerProfile } from '@/hooks/useProfileEditor';
@@ -34,10 +34,7 @@ import { useAvatarUpload, useRemoveAvatar } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import type { ExperienceLevel, VolunteerCategory } from '@/types/database';
 
-const SKILL_SECTIONS = SKILL_CATEGORIES.map((category) => ({
-  title: category.name,
-  data: category.skills,
-}));
+
 
 const SPECIALTY_SECTIONS = [{ title: 'Medical Specialties', data: [...MEDICAL_SPECIALTIES] }];
 
@@ -72,6 +69,10 @@ export default function EditVolunteerProfile() {
   const [district, setDistrict] = useState<string | null>(profile?.district ?? null);
   const [specialties, setSpecialties] = useState<string[]>(volunteerProfile?.specialties ?? []);
   const [skillTags, setSkillTags] = useState<string[]>(volunteerProfile?.skill_tags ?? []);
+  const skillSections = useMemo(
+    () => skillSectionsFor(skillTags).map((category) => ({ title: category.name, data: category.skills })),
+    [skillTags]
+  );
   const [availability, setAvailability] = useState<string[]>(
     volunteerProfile?.availability_slots ?? []
   );
@@ -292,7 +293,14 @@ export default function EditVolunteerProfile() {
               label="Skills"
               placeholder="Add your skills"
               selected={skillTags}
-              sections={SKILL_SECTIONS}
+              /*
+                Built from the CURRENT selection, so a volunteer who still
+                holds a skill that is no longer offered can see it under "No
+                longer offered" and clear it deliberately. A picker that could
+                not draw it would silently drop it the next time anything else
+                was toggled.
+              */
+              sections={skillSections}
               onChange={setSkillTags}
             />
             <Text style={styles.helper}>

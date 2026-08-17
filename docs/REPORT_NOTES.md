@@ -1722,3 +1722,49 @@ those had been shipped for weeks.
 All five now return a plain object keyed by id, which is exactly what JSON round
 trips without loss. The rule this leaves behind: **anything that becomes React
 Query data in this app must be JSON-safe.** Map, Set and Date all fail that test.
+
+## The skills vocabulary, rewritten against Ghanaian practice (2026-08-19)
+
+The original list read as a generic clinical vocabulary rather than a
+description of what medical outreaches in Ghana actually run. Three whole
+outreach types were unrepresentable.
+
+**Eye and vision.** Uncorrected refractive error and cataract are the leading
+causes of severe visual impairment in Ghana, and around 95% of people who need
+glasses do not have them, which is why eye camps are among the most heavily run
+outreach types in the country. The old list contained one relevant entry,
+"Visual acuity screening", and nothing about refraction, dispensing spectacles,
+cataract or pterygium, which is what those camps are built around.
+
+**Screening and early detection.** Clinical breast examination and cervical
+screening by visual inspection with acetic acid are the two techniques Ghana's
+breast and cervical programmes are actually built on, performed by trained
+nurses and midwives on outreach. Hepatitis B, HIV counselling and testing,
+malaria rapid diagnostic testing and PSA all appear in the Ministry of Health's
+own description of its Community Health Screening Outreach Project.
+
+**Blood donation.** The National Blood Service runs mobile sessions with
+schools, churches, workplaces and market groups, and treats donor counselling
+before, during and after donation as part of its duty of care. That is real work
+a volunteer is asked to do, and none of it could be described before.
+
+Five entries were retired: Catheterisation, Patient positioning, Compounding,
+Pharmacovigilance and ACLS. All five are hospital or pharmacy-department
+procedures rather than field-outreach work.
+
+**Retiring is not deleting, and the difference matters.**
+`volunteer_profiles.skill_tags` stores plain strings, so removing an entry from
+this file does not remove it from anyone's saved profile. It stops being
+offered, and it stops being renderable in the picker. A picker that cannot draw
+a skill somebody holds would silently discard it the next time they toggled
+anything else, so retired skills are kept in `RETIRED_SKILLS` and appended to
+the volunteer's own picker under "No longer offered". They can keep it or clear
+it deliberately, which is the only honest way to remove something people already
+have.
+
+Sources: Ministry of Health, Community Health Screening Outreach Project;
+Ghana Eye Project 2026; Cure Blindness Project Ghana; Orbis Ghana; "A
+community-focused cervical and breast cancer screening program using a
+sustainable funding model in a training center in Ghana", BMC Health Services
+Research 2025; National Blood Service Ghana donor services and blood-drive
+booking.

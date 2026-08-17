@@ -73,6 +73,18 @@ export default function OnboardingSkills() {
           containerStyle={styles.search}
         />
 
+        {/*
+          With ninety skills across nine categories, the two things a volunteer
+          wants to know while scrolling are how many they have already picked
+          and whether their search found anything at all.
+        */}
+        <Text style={styles.selectionCount}>
+          {selected.size} selected
+          {query.trim()
+            ? ` · ${sections.reduce((sum, section) => sum + section.data.length, 0)} match "${query.trim()}"`
+            : ''}
+        </Text>
+
         <SectionList
           sections={sections}
           keyExtractor={(item) => item}
@@ -127,6 +139,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
     marginBottom: spacing.base,
+  },
+  selectionCount: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   search: {
     marginBottom: spacing.sm,
