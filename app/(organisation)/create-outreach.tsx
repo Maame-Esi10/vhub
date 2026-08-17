@@ -25,10 +25,12 @@ import {
 import { DateTimeField } from '@/components/ui/DateTimeField';
 import type { SelectOption } from '@/components/ui';
 import {
+  GalleryEditor,
   INITIAL_WIZARD_STATE,
   OutreachPreviewCard,
   RoleBuilder,
   hasWizardErrors,
+  swapAdjacent,
   toStoragePayload,
   validateWizard,
 } from '@/components/organisation';
@@ -36,10 +38,15 @@ import type { OutreachWizardState, WizardFieldError } from '@/components/organis
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { SKILL_CATEGORIES } from '@/constants/skills';
-import { useCreateOutreach, useReplaceOutreachRoles } from '@/hooks';
+import {
+  MAX_GALLERY_IMAGES,
+  useAddOutreachImages,
+  useCreateOutreach,
+  useReplaceOutreachRoles,
+} from '@/hooks';
 // Direct import, not the hooks barrel: this reaches the native picker
 // modules. See the note in lib/cloudinary.ts.
-import { useFlyerUpload } from '@/hooks/useMediaUpload';
+import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 
 const TOTAL_STEPS = 4;
@@ -54,6 +61,8 @@ export default function CreateOutreach() {
   const createOutreach = useCreateOutreach();
   const replaceRoles = useReplaceOutreachRoles();
   const flyerUpload = useFlyerUpload();
+  const galleryUpload = useGalleryImageUpload();
+  const addImages = useAddOutreachImages();
 
   const [step, setStep] = useState(1);
   const [state, setState] = useState<OutreachWizardState>(INITIAL_WIZARD_STATE);
@@ -71,6 +80,35 @@ export default function CreateOutreach() {
         if (result) update('flyerUrl', result.secureUrl);
       },
     });
+  }
+
+  /*
+    Gallery images are uploaded as they are picked and their URLs held in form
+    state, because the outreach row does not exist yet — the same reason the
+    roles are written after the insert. The flyer above is untouched by any of
+    this and remains a separate, single image.
+  */
+  function handleAddGalleryImage() {
+    galleryUpload.mutate(undefined, {
+      onSuccess: (result) => {
+        if (!result) return;
+        setState((prev) => ({ ...prev, galleryUrls: [...prev.galleryUrls, result.secureUrl] }));
+      },
+    });
+  }
+
+  function handleRemoveGalleryImage(index: number) {
+    setState((prev) => ({
+      ...prev,
+      galleryUrls: prev.galleryUrls.filter((_, i) => i !== index),
+    }));
+  }
+
+  function handleMoveGalleryImage(index: number, direction: -1 | 1) {
+    setState((prev) => ({
+      ...prev,
+      galleryUrls: swapAdjacent(prev.galleryUrls, index, direction),
+    }));
   }
 
   const districtOptions: SelectOption[] =
@@ -157,6 +195,29 @@ export default function CreateOutreach() {
               );
               setRoleError(
                 'The outreach was saved, but its roles could not be. Open it from the dashboard and set them again.'
+              );
+              return;
+            }
+          }
+
+          // Written after the outreach exists, for the same reason the roles
+          // are. Failing here is worth saying but not worth blocking on: the
+          // event is real and correct, it just has no pictures yet, and the
+          // editor can add them.
+          if (state.galleryUrls.length > 0) {
+            try {
+              await addImages.mutateAsync({
+                outreachId: outreach.id,
+                urls: state.galleryUrls,
+                startPosition: 0,
+              });
+            } catch (error) {
+              console.warn(
+                '[create-outreach] outreach saved but its gallery did not:',
+                error instanceof Error ? error.message : error
+              );
+              setRoleError(
+                'The outreach was published, but its gallery images could not be attached. Open it from the dashboard and add them again.'
               );
               return;
             }
@@ -281,6 +342,22 @@ export default function CreateOutreach() {
                   <Text style={styles.flyerError}>{flyerUpload.error.message}</Text>
                 ) : null}
               </View>
+
+              {/*
+                A separate block below the flyer, not a fifth step: creation is
+                already four screens and an optional extra would make the
+                commonest path (no images at all) longer for no reason. Nothing
+                here blocks Next.
+              */}
+              <GalleryEditor
+                urls={state.galleryUrls}
+                onAdd={handleAddGalleryImage}
+                onRemove={handleRemoveGalleryImage}
+                onMove={handleMoveGalleryImage}
+                uploading={galleryUpload.isPending}
+                max={MAX_GALLERY_IMAGES}
+                error={galleryUpload.error ? galleryUpload.error.message : null}
+              />
             </View>
           ) : null}
 

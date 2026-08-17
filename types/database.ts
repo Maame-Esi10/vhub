@@ -122,6 +122,13 @@ export interface OrganisationProfile {
   contact_email: string | null;
   /** Public enquiries phone, Ghana format. Distinct from the private profiles.phone. */
   contact_phone: string | null;
+  /**
+   * Whether the profile shows a gallery drawn from this organisation's past
+   * events. Defaults TRUE: an organisation that uploaded images to its events
+   * has already said it wants them seen, and an opt-IN would leave the section
+   * permanently empty for everyone who never found the switch.
+   */
+  show_gallery: boolean;
   verified: boolean;
   created_at: string;
   updated_at: string;
@@ -138,6 +145,25 @@ export interface OrganisationProfile {
  *
  * `slots_filled` is derived by trigger and is never client-writable.
  */
+/**
+ * One image in an outreach's gallery.
+ *
+ * SEPARATE FROM `outreaches.flyer_url`, which is unchanged and unaffected. The
+ * flyer is the single banner that heads the card and the detail hero; these are
+ * the event's poster and photographs. An outreach may have either, both or
+ * neither, and nothing here ever falls back to the flyer.
+ */
+export interface OutreachImage {
+  id: string;
+  outreach_id: string;
+  /** Cloudinary secure URL. Public delivery, like the flyer — never the credential path. */
+  url: string;
+  caption: string | null;
+  /** Display order. NOT unique; ties break on created_at. */
+  position: number;
+  created_at: string;
+}
+
 export interface OutreachRole {
   id: string;
   outreach_id: string;
@@ -341,6 +367,8 @@ export interface PublicOrganisationProfile {
   verified: boolean;
   contact_email: string | null;
   contact_phone: string | null;
+  /** False when the organisation has opted its profile gallery out. */
+  show_gallery: boolean;
 }
 
 /**

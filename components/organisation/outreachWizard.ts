@@ -61,6 +61,20 @@ export interface OutreachWizardState {
    * wizard is the accepted cost, and is cheap on the free tier.
    */
   flyerUrl: string | null;
+  /**
+   * Gallery image URLs, already uploaded to Cloudinary, in display order.
+   *
+   * SEPARATE FROM `flyerUrl` AND WITH NO RELATIONSHIP TO IT. The flyer is the
+   * one banner that heads the card and the detail hero; these are the event's
+   * poster and photographs. Neither substitutes for the other and neither is a
+   * fallback for the other.
+   *
+   * Held here rather than written as they are picked because the outreach row
+   * does not exist yet during creation — the rows are inserted after it does,
+   * the same way the roles are. In the EDITOR the outreach already exists, so
+   * this field is unused and gallery changes are written immediately.
+   */
+  galleryUrls: string[];
 }
 
 /**
@@ -88,6 +102,7 @@ export const INITIAL_WIZARD_STATE: OutreachWizardState = {
   requiredSkills: [],
   roles: [INITIAL_ROLE],
   flyerUrl: null,
+  galleryUrls: [],
 };
 
 export type WizardFieldError = Partial<
@@ -275,6 +290,10 @@ export function wizardStateFromOutreach(
             },
           ],
     flyerUrl: outreach.flyer_url,
+    // Always empty on hydration. The editor reads and writes the real
+    // outreach_images rows directly, because by then the outreach exists and
+    // there is nothing to defer.
+    galleryUrls: [],
   };
 }
 
@@ -370,4 +389,29 @@ export function rolesChanged(before: RoleDraft[], after: RoleDraft[]): boolean {
   const afterKeys = after.map(key).sort();
 
   return beforeKeys.some((value, index) => value !== afterKeys[index]);
+}
+
+/**
+ * Moves one item one place left or right, returning a new array.
+ *
+ * Shared by the wizard and the editor, which both reorder a gallery with the
+ * same two arrows but hold different things — the wizard holds URLs it has not
+ * saved yet, the editor holds row ids it is about to persist. Writing the swap
+ * twice is how the two quietly stop agreeing about what "move left" means at
+ * the ends of the list.
+ *
+ * Out-of-range moves return the ORIGINAL array, identity included, so a caller
+ * setting state with it re-renders nothing.
+ */
+export function swapAdjacent<T>(items: readonly T[], index: number, direction: -1 | 1): T[] {
+  const target = index + direction;
+  if (index < 0 || index >= items.length || target < 0 || target >= items.length) {
+    return items as T[];
+  }
+
+  const next = [...items];
+  const moved = next[index]!;
+  next[index] = next[target]!;
+  next[target] = moved;
+  return next;
 }

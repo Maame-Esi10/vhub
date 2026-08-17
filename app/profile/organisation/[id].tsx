@@ -12,7 +12,12 @@ import {
   formatEventTimeRange,
 } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { usePublicOrganisationOutreaches, usePublicOrganisationProfile } from '@/hooks';
+import { GalleryStrip } from '@/components/volunteer';
+import {
+  useOrganisationGallery,
+  usePublicOrganisationOutreaches,
+  usePublicOrganisationProfile,
+} from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { Outreach } from '@/types/database';
 
@@ -36,6 +41,21 @@ export default function PublicOrganisationProfile() {
 
   const profileQuery = usePublicOrganisationProfile(organisationId);
   const outreachesQuery = usePublicOrganisationOutreaches(organisationId);
+
+  /*
+    AUTOMATIC, FROM PAST EVENTS, AND OPT-OUT.
+
+    Curating would need another screen to build and another thing organisations
+    would not maintain, so the section would sit empty for everyone who never
+    found it. Drawing on what they have already uploaded means it fills itself
+    as they run events.
+
+    `enabled` rather than filtering afterwards: an organisation that has opted
+    out should not have its images fetched at all.
+  */
+  const galleryQuery = useOrganisationGallery(organisationId, {
+    enabled: profileQuery.data?.show_gallery !== false,
+  });
 
   const organisation = profileQuery.data;
   const outreaches = useMemo(() => outreachesQuery.data ?? [], [outreachesQuery.data]);
@@ -127,6 +147,26 @@ export default function PublicOrganisationProfile() {
             </Pressable>
           ) : null}
         </View>
+
+        {/*
+          Above the mission text: what the organisation's outreaches actually
+          look like says more to a volunteer deciding whether to apply than a
+          paragraph does. Absent entirely when there are no images or the
+          organisation has opted out — not an empty shell.
+        */}
+        {galleryQuery.data && galleryQuery.data.length > 0 ? (
+          <View style={styles.section}>
+            <GalleryStrip
+              title="From their outreaches"
+              items={galleryQuery.data.map((image) => ({
+                id: image.id,
+                url: image.url,
+                caption: image.caption,
+                subtitle: image.outreach?.title ?? null,
+              }))}
+            />
+          </View>
+        ) : null}
 
         {organisation.description ? (
           <View style={styles.section}>

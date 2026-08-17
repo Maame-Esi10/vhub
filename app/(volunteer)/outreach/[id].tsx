@@ -14,7 +14,13 @@ import {
   formatEventTimeRange,
   isUpcomingEvent,
 } from '@/components/ui';
-import { FullApplicationSheet, MatchScoreBadge, RolePicker, WithdrawSheet } from '@/components/volunteer';
+import {
+  FullApplicationSheet,
+  GalleryStrip,
+  MatchScoreBadge,
+  RolePicker,
+  WithdrawSheet,
+} from '@/components/volunteer';
 import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
@@ -22,6 +28,7 @@ import {
   useCreateApplication,
   useMyApplicationForOutreach,
   useOutreach,
+  useOutreachImages,
   useOutreachRoles,
 } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
@@ -57,6 +64,9 @@ export default function OutreachDetail() {
 
   // Empty means single-role mode — the same rule the database uses.
   const rolesQuery = useOutreachRoles(outreachId);
+  // The event's poster and photographs. Entirely separate from the flyer,
+  // which still heads the hero above and is untouched by this.
+  const imagesQuery = useOutreachImages(outreachId);
   const roles = rolesQuery.data ?? [];
   const usesRoles = roles.length > 0;
   const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? null;
@@ -295,6 +305,21 @@ export default function OutreachDetail() {
             ) : null}
           </View>
         ) : null}
+
+        {/*
+          Renders nothing at all when the outreach has no images — no
+          placeholder, no empty frame. Most outreaches will never have a
+          gallery, and a permanent empty shell on every one of them would make
+          the app look broken rather than look empty.
+        */}
+        <GalleryStrip
+          title="Event gallery"
+          items={(imagesQuery.data ?? []).map((image) => ({
+            id: image.id,
+            url: image.url,
+            caption: image.caption,
+          }))}
+        />
 
         {usesRoles && !alreadyApplied ? (
           <RolePicker

@@ -41,7 +41,7 @@ export type PickOutcome = { cancelled: true } | { cancelled: false; file: Picked
  * exactly what is stored — and so a wildly oversized camera original is never
  * uploaded over a Ghanaian mobile connection in the first place.
  */
-export async function pickImage(kind: 'avatar' | 'flyer'): Promise<PickOutcome> {
+export async function pickImage(kind: 'avatar' | 'flyer' | 'gallery'): Promise<PickOutcome> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
     throw new Error('V-HUB needs permission to open your photos.');
@@ -50,7 +50,10 @@ export async function pickImage(kind: 'avatar' | 'flyer'): Promise<PickOutcome> 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsEditing: true,
-    aspect: kind === 'avatar' ? [1, 1] : [16, 9],
+    // 4:3 for gallery images: a poster or a photograph from the day is
+    // usually taller than the 16:9 the banner crops to, and cropping one to a
+    // letterbox loses the top and bottom of it.
+    aspect: kind === 'avatar' ? [1, 1] : kind === 'gallery' ? [4, 3] : [16, 9],
     quality: 0.8,
   });
 

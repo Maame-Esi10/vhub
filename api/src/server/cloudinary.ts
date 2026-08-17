@@ -16,7 +16,7 @@ import { env } from "./env";
  * cannot be pointed at a different folder without invalidating the hash.
  */
 
-export type UploadKind = "avatar" | "flyer" | "credential";
+export type UploadKind = "avatar" | "flyer" | "credential" | "gallery";
 
 export interface UploadTarget {
   /** Cloudinary folder. Namespaced per user so one account cannot overwrite another's asset. */
@@ -31,6 +31,12 @@ export function uploadTargetFor(kind: UploadKind, userId: string): UploadTarget 
       return { folder: `vhub/avatars/${userId}`, resourceType: "image" };
     case "flyer":
       return { folder: `vhub/flyers/${userId}`, resourceType: "image" };
+    case "gallery":
+      // Same treatment as a flyer -- a public image the organisation wants
+      // seen -- in its own folder so the banner and the gallery stay
+      // separable. Deliberately NOT the credential path: those are `raw`,
+      // private evidence and must never share a route with promotional images.
+      return { folder: `vhub/gallery/${userId}`, resourceType: "image" };
     case "credential":
       // `raw` because a credential is commonly a PDF rather than a photo.
       // Cloudinary will not apply image transformations to raw assets, which

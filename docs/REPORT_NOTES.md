@@ -1543,3 +1543,57 @@ have its new value USED in the same transaction that added it, and the Supabase
 editor wraps a paste in one transaction. So the enum addition is its own file
 (`20260815a`) and everything that compares against 'cancelled' is in the next
 one (`20260815b`). The split is a requirement, not tidiness.
+
+## Event gallery (2026-08-17)
+
+Several images per outreach — the poster, photographs, promotional material —
+held in `outreach_images`, **alongside and entirely separate from the flyer**.
+`outreaches.flyer_url` is untouched and keeps doing what it does: the one banner
+that heads the feed card, the detail hero and the wizard preview. Nothing in the
+gallery reads, writes, replaces or falls back to it, and an outreach may have
+either, both or neither. Merging the two would have been the tempting
+simplification and the wrong one: a banner and an album answer different
+questions, and a card can only have one image at its head.
+
+**The cap is a trigger, not a form.** Eight per outreach, enforced by
+`trg_outreach_images_cap`. The form stops there too, but the form is not the
+guarantee — RLS decides which rows a client may touch and column GRANTs decide
+which columns, and neither of them can count existing rows. Eight is a
+judgement: enough for a poster and a handful of photographs, small enough that a
+volunteer on Ghanaian mobile data scrolling a feed is not paying for an album.
+
+**`position` is not unique, deliberately.** A unique constraint makes every
+reorder a dance with temporary values, because swapping two rows needs a third
+slot to pass through. Ordering is `position, created_at`, so the order stays
+total even when two rows share a position.
+
+**Gallery writes do not go through `save_outreach()`, and that is the whole
+distinction from the roles.** The roles need one transaction because the
+outreach's own `role_type` and `slots_total` are DERIVED from them: a half-write
+leaves an event describing one thing and staffed as another. Nothing on
+`outreaches` is derived from the gallery. A failed image write leaves an
+outreach with fewer images — visible on the screen, fixed by pressing add again
+— which is a retryable state, not an inconsistent one. Adding a photograph is
+also a discrete act rather than an edit to a field: an organisation who picks an
+image expects it to be there, not to be pending until they find a Save button
+belonging to a different section. The editor therefore writes immediately and
+says so on the control; the wizard holds URLs in form state because the outreach
+row does not exist yet, and inserts them after it does, exactly as the roles do.
+
+**The organisation profile gallery is automatic, not curated.** Curating needs
+another screen to build and another thing organisations will not maintain, so
+the section would sit empty for everyone who never found it. Drawing on images
+they have already uploaded means it fills itself as they run events. It shows
+PAST events only, so a profile displays work that happened rather than
+re-advertising the drives already in the feed. `organisation_profiles.show_gallery`
+is the opt-out and defaults TRUE, because an organisation that uploaded images
+to its events has already said it wants them seen; an opt-IN would have left the
+section permanently empty for everyone who never found the switch. The flag had
+to be added to `public_organisation_profiles` as well — that view is what every
+volunteer-facing screen reads, and without it the profile could never tell
+whether an organisation had opted out.
+
+**Nothing renders when there is nothing to render.** No placeholder, no empty
+frame, no "no photos yet". Most outreaches will never have a gallery, and a
+permanent empty shell on every one of them would make the app look broken rather
+than look empty.

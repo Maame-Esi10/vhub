@@ -706,7 +706,7 @@ export function resolveAttendance(
 // /api/upload-signature + /api/verification-document
 // ---------------------------------------------------------------------------
 
-export type UploadKind = 'avatar' | 'flyer' | 'credential';
+export type UploadKind = 'avatar' | 'flyer' | 'credential' | 'gallery';
 
 export interface UploadSignature {
   cloudName: string;

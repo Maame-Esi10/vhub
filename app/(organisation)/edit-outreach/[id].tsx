@@ -28,10 +28,12 @@ import {
 import { DateTimeField } from '@/components/ui/DateTimeField';
 import type { SelectOption } from '@/components/ui';
 import {
+  GalleryEditor,
   RoleBuilder,
   hasWizardErrors,
   roleKey,
   rolesChanged,
+  swapAdjacent,
   toStoragePayload,
   validateOutreachEdit,
   wizardStateFromOutreach,
@@ -42,14 +44,19 @@ import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { SKILL_CATEGORIES } from '@/constants/skills';
 import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import {
+  MAX_GALLERY_IMAGES,
+  useAddOutreachImages,
+  useDeleteOutreachImage,
   useOutreach,
   useOutreachApplications,
+  useOutreachImages,
   useOutreachRoles,
+  useReorderOutreachImages,
   useSaveOutreach,
 } from '@/hooks';
 // Direct import, not the hooks barrel: this reaches the native picker
 // modules. See the note in lib/cloudinary.ts.
-import { useFlyerUpload } from '@/hooks/useMediaUpload';
+import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 
 const REGION_OPTIONS: SelectOption[] = GHANA_REGIONS.map((r) => ({ value: r.name, label: r.name }));
@@ -77,6 +84,27 @@ export default function EditOutreach() {
   const applicationsQuery = useOutreachApplications(outreachId);
   const saveOutreach = useSaveOutreach();
   const flyerUpload = useFlyerUpload();
+
+  /*
+    THE GALLERY SAVES ITSELF, AND DOES NOT GO THROUGH save_outreach().
+
+    The roles need that transaction because the outreach's own role_type and
+    slots_total are DERIVED from them — a half-write leaves an event describing
+    one thing and staffed as another. Nothing on `outreaches` is derived from
+    the gallery. A failed image write leaves an outreach with fewer images,
+    which is visible on the screen and fixed by pressing add again; it is not an
+    inconsistent event.
+
+    Adding a photo is also a discrete act rather than an edit to a field. An
+    organisation who picks an image expects it to be there, not to be pending
+    until they find a Save button belonging to a different section.
+  */
+  const imagesQuery = useOutreachImages(outreachId);
+  const galleryUpload = useGalleryImageUpload();
+  const addImages = useAddOutreachImages();
+  const deleteImage = useDeleteOutreachImage();
+  const reorderImages = useReorderOutreachImages();
+  const [galleryError, setGalleryError] = useState<string | null>(null);
 
   const [state, setState] = useState<OutreachWizardState | null>(null);
   const [errors, setErrors] = useState<WizardFieldError>({});
@@ -164,6 +192,48 @@ export default function EditOutreach() {
 
   function update<K extends keyof OutreachWizardState>(key: K, value: OutreachWizardState[K]) {
     setState((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  const galleryImages = imagesQuery.data ?? [];
+
+  function handleAddGalleryImage() {
+    if (!outreachId) return;
+    setGalleryError(null);
+    galleryUpload.mutate(undefined, {
+      onSuccess: (result) => {
+        if (!result) return;
+        addImages.mutate(
+          { outreachId, urls: [result.secureUrl], startPosition: galleryImages.length },
+          { onError: (error) => setGalleryError(error.message) }
+        );
+      },
+      onError: (error) => setGalleryError(error.message),
+    });
+  }
+
+  function handleRemoveGalleryImage(index: number) {
+    const image = galleryImages[index];
+    if (!image || !outreachId) return;
+    setGalleryError(null);
+    deleteImage.mutate(
+      { imageId: image.id, outreachId },
+      { onError: (error) => setGalleryError(error.message) }
+    );
+  }
+
+  function handleMoveGalleryImage(index: number, direction: -1 | 1) {
+    if (!outreachId) return;
+    const current = galleryImages.map((image) => image.id);
+    const ordered = swapAdjacent(current, index, direction);
+    // Identity is unchanged when the move was out of range, which is the
+    // cheapest way to say "nothing to do".
+    if (ordered === current) return;
+
+    setGalleryError(null);
+    reorderImages.mutate(
+      { outreachId, orderedIds: ordered },
+      { onError: (error) => setGalleryError(error.message) }
+    );
   }
 
   function handlePickFlyer() {
@@ -470,6 +540,17 @@ export default function EditOutreach() {
                 <Text style={styles.flyerError}>{flyerUpload.error.message}</Text>
               ) : null}
             </View>
+
+            <GalleryEditor
+              urls={galleryImages.map((image) => image.url)}
+              onAdd={handleAddGalleryImage}
+              onRemove={handleRemoveGalleryImage}
+              onMove={handleMoveGalleryImage}
+              uploading={galleryUpload.isPending || addImages.isPending}
+              max={MAX_GALLERY_IMAGES}
+              error={galleryError}
+              savesImmediately
+            />
           </View>
 
           {/* ---------- Where and when ---------- */}

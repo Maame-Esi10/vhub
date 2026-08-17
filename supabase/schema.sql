@@ -1201,7 +1201,10 @@ with (security_invoker = false) as
     -- own advertised enquiry details, not a person's private contact info.
     -- The prohibition above still stands for p.phone and p.email.
     op.contact_email,
-    op.contact_phone
+    op.contact_phone,
+    -- Whether this organisation's profile shows a gallery from its past
+    -- events. Default true; see 20260817_outreach_gallery.sql.
+    op.show_gallery
   from profiles p
   join organisation_profiles op on op.id = p.id
   where p.role = 'organisation';

@@ -1,6 +1,7 @@
 import {
   INITIAL_WIZARD_STATE,
   rolesChanged,
+  swapAdjacent,
   toStoragePayload,
   validateRoles,
   validateOutreachEdit,
@@ -295,5 +296,40 @@ describe('validateRoles', () => {
   it('rejects an empty list and a role with no places', () => {
     expect(validateRoles([])).not.toBeNull();
     expect(validateRoles([{ ...nurse, slotsTotal: 0 }])).not.toBeNull();
+  });
+});
+
+describe('swapAdjacent — the gallery reorder both screens share', () => {
+  const list = ['a', 'b', 'c'];
+
+  it('moves an item later', () => {
+    expect(swapAdjacent(list, 0, 1)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('moves an item earlier', () => {
+    expect(swapAdjacent(list, 2, -1)).toEqual(['a', 'c', 'b']);
+  });
+
+  it('returns the ORIGINAL array at either end, identity included', () => {
+    // Identity is the signal callers use to skip a write and a re-render, so
+    // a defensive copy here would be worse than useless.
+    expect(swapAdjacent(list, 0, -1)).toBe(list);
+    expect(swapAdjacent(list, 2, 1)).toBe(list);
+  });
+
+  it('returns the original for an index that is not in the list', () => {
+    expect(swapAdjacent(list, -1, 1)).toBe(list);
+    expect(swapAdjacent(list, 9, -1)).toBe(list);
+  });
+
+  it('leaves the input untouched', () => {
+    swapAdjacent(list, 0, 1);
+    expect(list).toEqual(['a', 'b', 'c']);
+  });
+
+  it('handles a single-item list', () => {
+    const one = ['only'];
+    expect(swapAdjacent(one, 0, 1)).toBe(one);
+    expect(swapAdjacent(one, 0, -1)).toBe(one);
   });
 });

@@ -61,6 +61,21 @@ export type {
   UpdateOutreachStatusParams,
 } from './useOutreaches';
 export {
+  outreachImageKeys,
+  MAX_GALLERY_IMAGES,
+  useOutreachImages,
+  useAddOutreachImages,
+  useDeleteOutreachImage,
+  useReorderOutreachImages,
+  useOrganisationGallery,
+} from './useOutreachImages';
+export type {
+  AddOutreachImagesParams,
+  DeleteOutreachImageParams,
+  ReorderOutreachImagesParams,
+  OrganisationGalleryImage,
+} from './useOutreachImages';
+export {
   outreachRoleKeys,
   useOutreachRoles,
   useOutreachRolesForMany,

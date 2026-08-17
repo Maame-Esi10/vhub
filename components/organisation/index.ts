@@ -12,6 +12,8 @@ export { AttendanceRow } from './AttendanceRow';
 export type { AttendanceRowProps } from './AttendanceRow';
 export { EventReviewSheet } from './EventReviewSheet';
 export type { EventReviewSheetProps, EventReviewDraft } from './EventReviewSheet';
+export { GalleryEditor } from './GalleryEditor';
+export type { GalleryEditorProps } from './GalleryEditor';
 export { OutreachPreviewCard } from './OutreachPreviewCard';
 export type { OutreachPreviewCardProps } from './OutreachPreviewCard';
 export {
@@ -24,6 +26,7 @@ export {
   wizardStateFromOutreach,
   toStoragePayload,
   rolesChanged,
+  swapAdjacent,
 } from './outreachWizard';
 export type {
   OutreachWizardState,

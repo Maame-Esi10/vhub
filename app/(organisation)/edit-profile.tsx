@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -55,6 +56,7 @@ export default function EditOrganisationProfile() {
   const [website, setWebsite] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+  const [showGallery, setShowGallery] = useState(true);
   const [region, setRegion] = useState<string | null>(profile?.region ?? null);
   const [district, setDistrict] = useState<string | null>(profile?.district ?? null);
   const [discarding, setDiscarding] = useState(false);
@@ -77,6 +79,7 @@ export default function EditOrganisationProfile() {
       setWebsite(org.website ?? '');
       setContactEmail(org.contact_email ?? '');
       setContactPhone(org.contact_phone ?? '');
+      setShowGallery(org.show_gallery ?? true);
     }
   }, [org]);
 
@@ -108,7 +111,8 @@ export default function EditOrganisationProfile() {
     description !== (org?.description ?? '') ||
     website !== (org?.website ?? '') ||
     contactEmail !== (org?.contact_email ?? '') ||
-    contactPhone !== (org?.contact_phone ?? '');
+    contactPhone !== (org?.contact_phone ?? '') ||
+    showGallery !== (org?.show_gallery ?? true);
 
   async function handleSave() {
     const trimmedName = fullName.trim();
@@ -143,6 +147,7 @@ export default function EditOrganisationProfile() {
         website: website.trim() || null,
         contactEmail: trimmedEmail || null,
         contactPhone: trimmedPhone || null,
+        showGallery,
       });
       router.replace('/(organisation)/profile');
     } catch {
@@ -265,6 +270,31 @@ export default function EditOrganisationProfile() {
                   ? ` You sign in as ${profile.email} — change that under Settings › Account & Security.`
                   : ''}
               </Text>
+            </EditSectionCard>
+
+            <EditSectionCard icon="image-multiple-outline" title="PROFILE GALLERY">
+              {/*
+                An opt-OUT, not an opt-in. An organisation that has uploaded
+                images to its events has already said it wants them seen;
+                making them find a second switch before anything appeared would
+                leave the section permanently empty for everyone who never did.
+              */}
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleText}>
+                  <Text style={styles.toggleLabel}>Show images from past events</Text>
+                  <Text style={styles.toggleHelper}>
+                    Volunteers looking at your profile see recent pictures from outreaches you have
+                    already run. Turn this off and your profile shows none.
+                  </Text>
+                </View>
+                <Switch
+                  value={showGallery}
+                  onValueChange={setShowGallery}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.white}
+                  accessibilityLabel="Show images from past events on your profile"
+                />
+              </View>
             </EditSectionCard>
 
             <EditSectionCard icon="map-marker-outline" title="BASE LOCATION">
@@ -443,6 +473,25 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'right',
     marginTop: spacing.xs,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.base,
+  },
+  toggleText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  toggleLabel: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  toggleHelper: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   helper: {
     fontFamily: fontFamily.regular,

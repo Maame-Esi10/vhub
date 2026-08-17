@@ -142,3 +142,25 @@ export function useFlyerUpload() {
     },
   });
 }
+
+/**
+ * Uploads one gallery image and returns its URL.
+ *
+ * Deliberately separate from `useFlyerUpload` even though the flow is the
+ * same shape: the two are different things on the outreach (one banner versus
+ * several supporting images), they crop to different aspects, and they land in
+ * different Cloudinary folders. Sharing the hook would make it one edit away
+ * from a gallery upload overwriting a flyer.
+ *
+ * Writes nothing to the database — the caller decides where the URL goes,
+ * because in the wizard the outreach row does not exist yet.
+ */
+export function useGalleryImageUpload() {
+  return useMutation({
+    mutationFn: async (): Promise<UploadResult | null> => {
+      const picked = await pickImage('gallery');
+      if (picked.cancelled) return null;
+      return uploadToCloudinary('gallery', picked.file);
+    },
+  });
+}

@@ -129,6 +129,13 @@ export interface UpdateOrganisationProfileParams {
   /** Public enquiry details — organisation_profiles, NOT the private profiles.email/phone. */
   contactEmail: string | null;
   contactPhone: string | null;
+  /**
+   * Whether the public profile shows a gallery drawn from this organisation's
+   * past events. Client-writable (it is in organisation_profiles' UPDATE and
+   * INSERT grant lists) because it is the organisation's own presentation
+   * choice — unlike `verified`, which is a service-role judgement about them.
+   */
+  showGallery: boolean;
 }
 
 /**
@@ -177,6 +184,7 @@ export function useUpdateOrganisationProfile() {
             website: params.website,
             contact_email: params.contactEmail,
             contact_phone: params.contactPhone,
+            show_gallery: params.showGallery,
           })
           .eq('id', params.userId)
           .select()
