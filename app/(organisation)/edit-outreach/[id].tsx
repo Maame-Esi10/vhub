@@ -137,16 +137,41 @@ export default function EditOutreach() {
   const outreach = outreachQuery.data;
   const storedRoles = useMemo(() => rolesQuery.data ?? [], [rolesQuery.data]);
 
-  // Hydrate once both queries have answered. Roles resolving to an empty array
-  // is a real answer — single-role storage — so the form must wait for the
-  // query to SETTLE rather than for the array to be non-empty; hydrating early
-  // would build the list from the outreach columns and then overwrite the real
-  // roles with it on save.
+  /*
+    HYDRATION IS KEYED ON THE OUTREACH, NOT ON "HAVE WE HYDRATED YET".
+
+    THE BUG THIS FIXES. Every screen in the (organisation) group is a tab screen
+    — that is what `href: null` registers — and tab screens STAY MOUNTED after
+    their first visit. Opening a second event therefore changes the route params
+    but does not remount this component. The old guard was `state !== null`,
+    which is true forever after the first event, so the form was populated once
+    and then showed THAT event's title, description, dates and roles on every
+    later one. Saving from there would have written one event's content onto
+    another. Applicant Vetting documents the same hazard; this screen had it too.
+
+    Roles resolving to an empty array is still a real answer — single-role
+    storage — so hydration waits for the query to SETTLE rather than for the
+    array to be non-empty.
+  */
+  const hydratedFor = useRef<string | null>(null);
   const ready = !!outreach && !rolesQuery.isPending;
   useEffect(() => {
-    if (!ready || state !== null || !outreach) return;
+    if (!ready || !outreach || !outreachId) return;
+    // The query can still be serving the previous event's row for one render
+    // after the id changes. Hydrating from that is precisely the mix-up.
+    if (outreach.id !== outreachId) return;
+    if (hydratedFor.current === outreachId) return;
+
+    hydratedFor.current = outreachId;
     setState(wizardStateFromOutreach(outreach, storedRoles));
-  }, [ready, state, outreach, storedRoles]);
+    // Everything derived from the previous event goes with it.
+    setErrors({});
+    setSaveError(null);
+    setSlotsFloorError(null);
+    setGalleryError(null);
+    setRoleWarning(false);
+    scrolledToSection.current = false;
+  }, [ready, outreach, outreachId, storedRoles]);
 
   /** The roles as they are stored, in the form's own shape, for change detection. */
   const storedRoleDrafts = useMemo(
@@ -198,12 +223,19 @@ export default function EditOutreach() {
 
   function handleAddGalleryImage() {
     if (!outreachId) return;
+    const remaining = MAX_GALLERY_IMAGES - galleryImages.length;
+    if (remaining <= 0) return;
+
     setGalleryError(null);
-    galleryUpload.mutate(undefined, {
-      onSuccess: (result) => {
-        if (!result) return;
+    galleryUpload.mutate(remaining, {
+      onSuccess: (results) => {
+        if (results.length === 0) return;
         addImages.mutate(
-          { outreachId, urls: [result.secureUrl], startPosition: galleryImages.length },
+          {
+            outreachId,
+            urls: results.map((r) => r.secureUrl),
+            startPosition: galleryImages.length,
+          },
           { onError: (error) => setGalleryError(error.message) }
         );
       },
@@ -258,7 +290,11 @@ export default function EditOutreach() {
     );
   }
 
-  if (outreachQuery.isPending || !state) {
+  // `state` belonging to another event is the mix-up itself, so it counts as
+  // "not ready" rather than as something to render.
+  const stateMatchesRoute = hydratedFor.current === outreachId;
+
+  if (outreachQuery.isPending || !state || !stateMatchesRoute) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.content}>
@@ -440,7 +476,9 @@ export default function EditOutreach() {
       // just left would be gone before they read it.
       router.replace({
         pathname: '/(organisation)/outreach/[id]',
-        params: { id: outreach.id, saved: '1' },
+        // The id, not a bare flag: the destination compares it to its own
+        // route so the confirmation cannot appear on a different event.
+        params: { id: outreach.id, saved: outreach.id },
       });
     } catch (error) {
       setSaveError(

@@ -135,7 +135,10 @@ const styles = StyleSheet.create({
   // card whether or not a flyer was uploaded — a list of cards must not change
   // its rhythm as images load — while still growing for a two-line title.
   header: {
-    minHeight: 132,
+    // Raised from 132: a card is how a volunteer decides whether to open an
+    // outreach at all, and the flyer was being reduced to a band too shallow
+    // to make out. Still a MINIMUM so the rhythm holds for cards without one.
+    minHeight: 176,
     justifyContent: 'flex-end',
   },
   headerContent: {

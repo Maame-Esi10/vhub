@@ -14,6 +14,7 @@ import { outreachKeys } from '@/hooks/useOutreaches';
 import type { OutreachOrganisation } from '@/hooks/useOutreaches';
 import type {
   Application,
+  OutreachStatus,
   ApplicationStatus,
   ApplicationType,
   ExperienceLevel,
@@ -370,6 +371,20 @@ export interface CreateApplicationParams {
    * for.
    */
   outreachRoleId?: string | null;
+  /**
+   * What the SCREEN already knows about why this might be refused.
+   *
+   * The insert policy folds two independent conditions together — the outreach
+   * must be open, and a clinical role needs a verified profile — and a
+   * row-level-security refusal carries only the code 42501, never which clause
+   * failed. Without this the message had to hedge and name BOTH, which told a
+   * volunteer their open event was "closed".
+   */
+  eligibility?: {
+    outreachStatus: OutreachStatus;
+    roleIsClinical: boolean;
+    volunteerIsVerified: boolean;
+  };
 }
 
 /**
@@ -444,7 +459,7 @@ export function useCreateApplication() {
             .single();
 
       if (error || !data) {
-        throw new Error(applicationInsertMessage(error));
+        throw new Error(applicationInsertMessage(error, params.eligibility));
       }
 
       try {
@@ -471,16 +486,42 @@ export function useCreateApplication() {
   });
 }
 
-function applicationInsertMessage(error: PostgrestError | null): string {
+/**
+ * Turns a refusal into ONE reason, and only a reason it has actually checked.
+ *
+ * This used to assert both of the policy's conditions at once — "clinical
+ * outreaches need a verified profile, and closed outreaches no longer accept
+ * applications" — which meant a volunteer applying to an OPEN event five days
+ * away was told it was closed. Naming two possible causes is not a compromise
+ * between them; it is a message that is half wrong whichever one applied.
+ *
+ * The screen knows the state that decides it, so the refusal is resolved
+ * against that and the hedge is only reached when nothing on the client
+ * explains it — at which point saying so plainly is the honest answer.
+ */
+function applicationInsertMessage(
+  error: PostgrestError | null,
+  eligibility?: CreateApplicationParams['eligibility']
+): string {
   if (error?.code === UNIQUE_VIOLATION) {
     return "You've already applied to this outreach.";
   }
+
   if (error?.code === RLS_VIOLATION) {
-    // The insert policy folds three conditions together, so the code alone
-    // can't say which one failed. The UI blocks the verification and
-    // closed-event cases before getting here, so this is the backstop wording.
-    return 'You are not eligible to apply to this outreach. Clinical outreaches need a verified profile, and closed outreaches no longer accept applications.';
+    if (eligibility) {
+      if (eligibility.outreachStatus === 'cancelled') {
+        return 'This event has been cancelled, so applications are closed.';
+      }
+      if (eligibility.outreachStatus !== 'open') {
+        return 'This outreach is no longer accepting applications.';
+      }
+      if (eligibility.roleIsClinical && !eligibility.volunteerIsVerified) {
+        return 'This is a clinical role, so it needs a verified profile before you can apply.';
+      }
+    }
+    return 'Your application was refused. Please reload this outreach and try again.';
   }
+
   return error?.message || 'Could not submit your application. Please try again.';
 }
 

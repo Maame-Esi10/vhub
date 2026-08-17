@@ -89,10 +89,21 @@ export default function CreateOutreach() {
     this and remains a separate, single image.
   */
   function handleAddGalleryImage() {
-    galleryUpload.mutate(undefined, {
-      onSuccess: (result) => {
-        if (!result) return;
-        setState((prev) => ({ ...prev, galleryUrls: [...prev.galleryUrls, result.secureUrl] }));
+    // Only ever offers as many as are still allowed, so the picker cannot
+    // return a selection the cap will then reject.
+    const remaining = MAX_GALLERY_IMAGES - state.galleryUrls.length;
+    if (remaining <= 0) return;
+
+    galleryUpload.mutate(remaining, {
+      onSuccess: (results) => {
+        if (results.length === 0) return;
+        setState((prev) => ({
+          ...prev,
+          galleryUrls: [...prev.galleryUrls, ...results.map((r) => r.secureUrl)].slice(
+            0,
+            MAX_GALLERY_IMAGES
+          ),
+        }));
       },
     });
   }
@@ -226,7 +237,14 @@ export default function CreateOutreach() {
           setState(INITIAL_WIZARD_STATE);
           setErrors({});
           setStep(1);
-          router.replace('/(organisation)/dashboard');
+          // Straight to the new event's own screen rather than the dashboard,
+          // carrying the confirmation with it. Publishing used to land on a
+          // list with no acknowledgement at all, so the only way to find out
+          // whether it had worked was to go looking for it.
+          router.replace({
+            pathname: '/(organisation)/outreach/[id]',
+            params: { id: outreach.id, created: outreach.id },
+          });
         },
       }
     );

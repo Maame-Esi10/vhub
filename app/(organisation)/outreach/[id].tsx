@@ -60,21 +60,52 @@ const STATUS_LABEL: Record<OutreachStatus, string> = {
  */
 export default function OrganisationOutreachDetail() {
   const router = useRouter();
-  const { id, saved } = useLocalSearchParams<{ id: string; saved?: string }>();
+  const { id, saved, created } = useLocalSearchParams<{
+    id: string;
+    saved?: string;
+    created?: string;
+  }>();
   const organisationId = useAuthStore((s) => s.user)?.id;
 
-  // Set by Edit event on a successful save. The confirmation belongs here
-  // rather than on the form, because the form is gone by the time it would be
-  // read — "it saved" and "you are back on the event" are one moment.
-  const [savedNotice, setSavedNotice] = useState(saved === '1');
+  /*
+    THE CONFIRMATION IS SCOPED TO THE EVENT THAT PRODUCED IT.
+
+    It used to be a bare boolean set from a `saved=1` param. This screen is a
+    tab screen and stays mounted, so both the flag and the param outlived the
+    save: the banner reappeared on other events and on later visits, cheerfully
+    reporting a save that had nothing to do with what was on screen.
+
+    Carrying the OUTREACH ID instead makes it self-limiting — it can only ever
+    show on the event it belongs to — and the id is compared to the route rather
+    than trusted, so navigating away drops it without needing anything cleared.
+  */
+  const [savedFor, setSavedFor] = useState<string | null>(saved && saved !== '1' ? saved : null);
+  // Publishing lands here too, with the same self-limiting id and a different
+  // sentence — "saved" is not what an organisation wants to read about an event
+  // that has just gone live.
+  const [createdFor, setCreatedFor] = useState<string | null>(created ?? null);
   useEffect(() => {
-    if (saved !== '1') return;
-    setSavedNotice(true);
-    // Cleared so it does not reappear on every later visit to this screen.
+    if (!created) return;
+    setCreatedFor(created);
+    router.setParams({ created: '' });
+    const timer = setTimeout(() => setCreatedFor(null), 6000);
+    return () => clearTimeout(timer);
+  }, [created, router]);
+
+  useEffect(() => {
+    if (!saved || saved === '1') return;
+    setSavedFor(saved);
+    // Cleared immediately so a re-render, a refetch or a later visit cannot
+    // resurrect it from the URL.
     router.setParams({ saved: '' });
-    const timer = setTimeout(() => setSavedNotice(false), 4000);
+    const timer = setTimeout(() => setSavedFor(null), 4000);
     return () => clearTimeout(timer);
   }, [saved, router]);
+
+  // Belt and braces: even if the timer has not fired, the banner is only ever
+  // shown on the event whose save produced it.
+  const savedNotice = savedFor !== null && savedFor === id;
+  const createdNotice = createdFor !== null && createdFor === id;
 
   const outreachQuery = useOutreach(id);
   const outreach = outreachQuery.data;
@@ -234,7 +265,16 @@ export default function OrganisationOutreachDetail() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {savedNotice ? (
+        {createdNotice ? (
+          <View style={styles.savedNotice}>
+            <MaterialCommunityIcons name="check-circle" size={16} color={colors.success} />
+            <Text style={styles.savedNoticeText}>
+              {outreach.status === 'draft'
+                ? 'Saved as a draft. Publish it when you are ready.'
+                : 'Published. Volunteers can find this outreach now.'}
+            </Text>
+          </View>
+        ) : savedNotice ? (
           <View style={styles.savedNotice}>
             <MaterialCommunityIcons name="check-circle" size={16} color={colors.success} />
             <Text style={styles.savedNoticeText}>Your changes have been saved.</Text>
@@ -456,7 +496,15 @@ export default function OrganisationOutreachDetail() {
             everyday controls, because these two cannot be undone and should
             not be reachable by a mistap on the way to Applicants.
         */}
-        {canCancel || canDelete ? (
+        {/*
+          Shown whenever there is something to SAY, not only when there is
+          something to press. With the old condition an event that could
+          neither be cancelled (already over) nor deleted (someone applied)
+          showed no section at all, so the absence of Delete looked like an
+          oversight rather than a rule. A refusal the organisation cannot see
+          is indistinguishable from a missing feature.
+        */}
+        {canCancel || canDelete || !untouched || isCancelled ? (
           <>
             <Text style={styles.sectionLabel}>ENDING THIS EVENT</Text>
 
@@ -486,10 +534,19 @@ export default function OrganisationOutreachDetail() {
               />
             ) : null}
 
-            {!canDelete && !untouched ? (
+            {!canDelete && !untouched && !isCancelled ? (
               <Text style={styles.dangerNote}>
-                People have applied to this event, so it can no longer be deleted -- their
-                applications and any reviews are part of their record, not yours to remove.
+                {applications.length} {applications.length === 1 ? 'person has' : 'people have'}{' '}
+                applied to this event, so it can no longer be deleted — their applications, and any
+                attendance or reviews, are part of their record rather than yours to remove.
+                {canCancel ? '' : ' It has also already taken place, so there is nothing left to cancel.'}
+              </Text>
+            ) : null}
+
+            {canDelete && !canCancel ? (
+              <Text style={styles.dangerNote}>
+                This event has already taken place, so there is nothing left to cancel — but nobody
+                applied, so it can still be removed.
               </Text>
             ) : null}
           </>
@@ -699,7 +756,9 @@ const styles = StyleSheet.create({
   },
   hero: {
     borderRadius: radius.lg,
-    minHeight: 150,
+    // Matched to the volunteer's detail hero, so an organisation checking its
+    // own event sees the banner at the size volunteers actually get.
+    minHeight: 220,
     justifyContent: 'flex-end',
   },
   heroContent: {

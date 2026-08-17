@@ -3,6 +3,7 @@ import { deleteVerificationDocument, recordVerificationDocument } from '@/lib/ap
 import {
   pickCredentialDocument,
   pickImage,
+  pickImages,
   uploadToCloudinary,
   type UploadResult,
 } from '@/lib/cloudinary';
@@ -157,10 +158,20 @@ export function useFlyerUpload() {
  */
 export function useGalleryImageUpload() {
   return useMutation({
-    mutationFn: async (): Promise<UploadResult | null> => {
-      const picked = await pickImage('gallery');
-      if (picked.cancelled) return null;
-      return uploadToCloudinary('gallery', picked.file);
+    mutationFn: async (remaining: number): Promise<UploadResult[]> => {
+      const picked = await pickImages('gallery', Math.max(1, remaining));
+      if (picked.cancelled) return [];
+
+      // Sequential, not Promise.all. Each upload is a signature request plus a
+      // multipart POST, and firing eight at once over a Ghanaian mobile
+      // connection is how they all time out together. The organisation sees
+      // them appear one by one instead, which also makes a partial failure
+      // legible: what arrived stays.
+      const uploaded: UploadResult[] = [];
+      for (const file of picked.files) {
+        uploaded.push(await uploadToCloudinary('gallery', file));
+      }
+      return uploaded;
     },
   });
 }

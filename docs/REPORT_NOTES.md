@@ -1597,3 +1597,74 @@ whether an organisation had opted out.
 frame, no "no photos yet". Most outreaches will never have a gallery, and a
 permanent empty shell on every one of them would make the app look broken rather
 than look empty.
+
+## The per-role gate was never wired into the database (2026-08-17)
+
+The multi-role migration created `application_role_is_clinical()`, documented it
+as "the verification gate, per role", granted EXECUTE on it — and then called it
+from nothing. Both application policies still read the outreach's summarised
+column:
+
+    o.role_type is distinct from 'clinical'
+
+and `outreaches.role_type` is 'clinical' if ANY role on the event is. So an
+unverified volunteer who chose the SUPPORT role of a mixed event was refused by
+RLS, with the app's own gate having correctly let them through. The two halves
+implemented different rules and only the database's counted.
+
+That is precisely the failure multi-role exists to remove — a drive needing 3
+nurses and 6 helpers could not accept unverified helpers — and it had been
+shipped, documented and reported as working. **A helper that is granted but
+never called fails silently: nothing errors, and the tests that would have
+caught it are the ones nobody writes for a policy.** The migration now asserts
+that both policies mention the function, so a future rewrite that drops it fails
+loudly at migration time instead.
+
+## A refusal must name one reason, and only a reason it checked
+
+The insert message asserted both of the policy's conditions at once — "clinical
+outreaches need a verified profile, and closed outreaches no longer accept
+applications" — so a volunteer applying to an OPEN event five days away was told
+it was closed. Naming two possible causes is not a compromise between them; it
+is a message that is half wrong whichever one applied. A row-level-security
+refusal carries only 42501 and never says which clause failed, so the screen now
+passes down the state it already knows and the message resolves to a single
+accurate sentence, falling back to "please reload and try again" when nothing on
+the client explains it.
+
+## Tab screens stay mounted, and state derived from params must be keyed
+
+Every screen in the `(organisation)` group is a tab screen — that is what
+`href: null` registers — and tab screens stay mounted after their first visit.
+Opening a second event changes the route params but does not remount the
+component.
+
+The editor hydrated its form behind a `state !== null` guard, which is true
+forever after the first event. So the form was populated once and then showed
+THAT event's title, description, dates and roles on every later one, and saving
+from there would have written one event's content onto another. The success
+banner had the same shape: a bare boolean plus a `saved=1` param, both of which
+outlived the save and reappeared on unrelated events.
+
+Both are fixed by keying on the outreach id rather than on "has this happened
+yet" — the editor records which outreach it hydrated from and re-hydrates when
+that changes, and the banner carries the outreach id so it can only ever appear
+on the event whose save produced it. Applicant Vetting had already documented
+this hazard; the lesson is that it applies to every screen in the group, not
+just the one where it was first noticed.
+
+## Gallery images are not cropped
+
+They were being run through the picker's 4:3 crop and rendered in landscape
+tiles — the banner's proportions. A real event flyer is a portrait poster whose
+entire purpose is the text printed on it, and a landscape crop removes the top
+and bottom of exactly the part that carries the information. `allowsEditing` is
+therefore off for gallery images and they are stored at whatever shape they
+already are; the tiles are portrait and the full-screen viewer takes most of the
+screen. The avatar and the flyer keep their crops for good reasons — an avatar
+must be square to sit in a circle, and the flyer is a fixed-height band behind
+text where an uncropped portrait would be scaled to fill and lose more than a
+deliberate crop does.
+
+Turning cropping off is also what makes multi-selection possible: both platforms
+offer it only when `allowsEditing` is false.

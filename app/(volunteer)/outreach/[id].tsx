@@ -106,19 +106,37 @@ export default function OutreachDetail() {
   }, [outreach?.required_skills, volunteerProfile?.skill_tags]);
 
   function handleQuickJoin() {
-    if (!outreachId || !volunteerId) return;
+    if (!outreachId || !volunteerId || !outreach) return;
     createApplication.mutate({
       outreachId,
       volunteerId,
       type: 'quick_join',
       outreachRoleId: selectedRoleId,
+      // What this screen already knows, so a refusal can name ONE real reason
+      // instead of listing every clause the policy folds together.
+      eligibility: {
+        outreachStatus: outreach.status,
+        roleIsClinical: usesRoles ? selectedRole?.role_type === 'clinical' : isClinical,
+        volunteerIsVerified: isVerified,
+      },
     });
   }
 
   function handleFullSubmit(motivation: string) {
-    if (!outreachId || !volunteerId) return;
+    if (!outreachId || !volunteerId || !outreach) return;
     createApplication.mutate(
-      { outreachId, volunteerId, type: 'full', motivation, outreachRoleId: selectedRoleId },
+      {
+        outreachId,
+        volunteerId,
+        type: 'full',
+        motivation,
+        outreachRoleId: selectedRoleId,
+        eligibility: {
+          outreachStatus: outreach.status,
+          roleIsClinical: usesRoles ? selectedRole?.role_type === 'clinical' : isClinical,
+          volunteerIsVerified: isVerified,
+        },
+      },
       { onSuccess: () => setFullFormVisible(false) }
     );
   }
@@ -571,7 +589,11 @@ const styles = StyleSheet.create({
   // typical poster rather than floating in the middle of it.
   hero: {
     borderRadius: radius.lg,
-    minHeight: 180,
+    // Raised from 180. The banner is the first thing a volunteer sees and an
+    // organisation's flyer was being reduced to a strip behind the title; this
+    // gives roughly 16:10 on a common phone width, which is enough of the
+    // image to be worth uploading.
+    minHeight: 240,
     justifyContent: 'flex-end',
   },
   heroContent: {

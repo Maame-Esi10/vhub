@@ -57,8 +57,8 @@ export function GalleryEditor({
       </View>
 
       <Text style={styles.hint}>
-        The event&rsquo;s poster and any other images you want volunteers to see. The first one
-        leads.
+        The event&rsquo;s poster and any other images you want volunteers to see — uploaded whole,
+        not cropped, so a portrait flyer stays readable. The first one leads.
         {savesImmediately ? ' Changes here save straight away.' : ''}
       </Text>
 
@@ -148,7 +148,11 @@ export function GalleryEditor({
   );
 }
 
-const TILE = 116;
+// Portrait, matching how these actually render to a volunteer. A landscape
+// thumbnail in the form and a portrait one on the detail screen would show the
+// organisation something different from what they are publishing.
+const TILE = 132;
+const TILE_ASPECT = 4 / 3; // height / width
 
 const styles = StyleSheet.create({
   wrap: {
@@ -180,8 +184,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     width: TILE,
-    // 4:3, matching the aspect the picker crops to.
-    height: (TILE * 3) / 4,
+    height: TILE * TILE_ASPECT,
     borderRadius: radius.md,
     overflow: 'hidden',
     backgroundColor: colors.surface,

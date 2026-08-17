@@ -477,6 +477,12 @@ create policy "applications_select_own_or_org"
 -- everyone. The UI gates this too and explains what to do about it; this
 -- policy is the backstop that makes the rule real rather than cosmetic.
 drop policy if exists "applications_insert_own" on applications;
+-- SUPERSEDED by 20260817_per_role_verification_gate.sql, which is the live
+-- version. The gate now asks application_role_is_clinical() about the ROLE the
+-- volunteer chose, not the outreach's summarised role_type -- that summary is
+-- 'clinical' if ANY role is, so this version refused an unverified volunteer
+-- who had picked the SUPPORT role of a mixed event, which is the exact failure
+-- multi-role exists to remove.
 create policy "applications_insert_own"
   on applications for insert
   to authenticated
@@ -486,14 +492,17 @@ create policy "applications_insert_own"
       select 1 from outreaches o
       where o.id = applications.outreach_id
         and o.status = 'open'
-        and (
-          o.role_type is distinct from 'clinical'
-          or exists (
-            select 1 from volunteer_profiles vp
-            where vp.id = auth.uid()
-              and vp.verification_status = 'verified'
-          )
-        )
+    )
+    and (
+      not application_role_is_clinical(
+        applications.outreach_id,
+        applications.outreach_role_id
+      )
+      or exists (
+        select 1 from volunteer_profiles vp
+        where vp.id = auth.uid()
+          and vp.verification_status = 'verified'
+      )
     )
   );
 

@@ -126,7 +126,18 @@ export function GalleryStrip({ items, title }: GalleryStripProps) {
   );
 }
 
-const TILE = 168;
+/*
+  PORTRAIT, AND BIG ENOUGH TO READ.
+
+  These were 168pt wide and 4:3 landscape — the banner's proportions — which is
+  the wrong shape for the commonest thing in an event gallery. A real flyer is a
+  portrait poster whose entire purpose is the text printed on it, and a short
+  landscape thumbnail crops that away and then renders what survives too small
+  to read. A 3:4 tile at 220pt shows a whole A4-proportioned poster, and the
+  full-screen viewer is one tap away for the detail.
+*/
+const TILE = 220;
+const TILE_ASPECT = 4 / 3; // height / width — portrait.
 
 const styles = StyleSheet.create({
   wrap: {
@@ -150,8 +161,7 @@ const styles = StyleSheet.create({
   },
   tileImage: {
     width: '100%',
-    // 4:3, matching the aspect the organisation's picker crops to.
-    height: (TILE * 3) / 4,
+    height: TILE * TILE_ASPECT,
   },
   tileSubtitle: {
     fontFamily: fontFamily.regular,
@@ -179,7 +189,9 @@ const styles = StyleSheet.create({
   },
   viewerImage: {
     width: '100%',
-    height: '70%',
+    // Most of the screen: a poster is only useful when its text is legible,
+    // and this is the surface that exists to make it so.
+    height: '78%',
   },
   viewerCaption: {
     fontFamily: fontFamily.regular,

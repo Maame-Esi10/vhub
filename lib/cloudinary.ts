@@ -42,31 +42,61 @@ export type PickOutcome = { cancelled: true } | { cancelled: false; file: Picked
  * uploaded over a Ghanaian mobile connection in the first place.
  */
 export async function pickImage(kind: 'avatar' | 'flyer' | 'gallery'): Promise<PickOutcome> {
+  const picked = await pickImages(kind, 1);
+  if (picked.cancelled) return picked;
+  return { cancelled: false, file: picked.files[0]! };
+}
+
+export type MultiPickOutcome = { cancelled: true } | { cancelled: false; files: PickedFile[] };
+
+/**
+ * Picks one or several images.
+ *
+ * GALLERY IMAGES ARE NOT CROPPED. A real event flyer is a portrait poster whose
+ * whole point is the text on it, and forcing it through a fixed aspect
+ * ratio — 16:9 especially, but 4:3 too — cuts the top and bottom off exactly
+ * the part that carries the information. `allowsEditing` is therefore off for
+ * the gallery and the image is stored at whatever shape it already is; the
+ * strip that renders it adapts instead.
+ *
+ * The avatar and the flyer keep their crops, and for good reason: an avatar has
+ * to be square to sit in a circle, and the flyer is a fixed-height banner
+ * behind text, so an uncropped portrait would be scaled to fill and lose more
+ * than a deliberate 16:9 crop does.
+ *
+ * `limit` above 1 turns on multi-selection, which iOS and Android both support
+ * only when `allowsEditing` is false — another reason the two cannot be
+ * combined for the gallery.
+ */
+export async function pickImages(
+  kind: 'avatar' | 'flyer' | 'gallery',
+  limit = 1
+): Promise<MultiPickOutcome> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
     throw new Error('V-HUB needs permission to open your photos.');
   }
 
+  const cropped = kind !== 'gallery';
+
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    allowsEditing: true,
-    // 4:3 for gallery images: a poster or a photograph from the day is
-    // usually taller than the 16:9 the banner crops to, and cropping one to a
-    // letterbox loses the top and bottom of it.
-    aspect: kind === 'avatar' ? [1, 1] : kind === 'gallery' ? [4, 3] : [16, 9],
+    allowsEditing: cropped,
+    ...(cropped ? { aspect: kind === 'avatar' ? ([1, 1] as [number, number]) : ([16, 9] as [number, number]) } : {}),
+    ...(cropped ? {} : { allowsMultipleSelection: limit > 1, selectionLimit: limit }),
     quality: 0.8,
   });
 
-  const asset = result.canceled ? undefined : result.assets?.[0];
-  if (!asset) return { cancelled: true };
+  const assets = result.canceled ? [] : (result.assets ?? []);
+  if (assets.length === 0) return { cancelled: true };
 
   return {
     cancelled: false,
-    file: {
+    files: assets.map((asset, index) => ({
       uri: asset.uri,
-      name: asset.fileName ?? `${kind}.jpg`,
+      name: asset.fileName ?? `${kind}-${index + 1}.jpg`,
       mimeType: asset.mimeType ?? 'image/jpeg',
-    },
+    })),
   };
 }
 
