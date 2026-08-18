@@ -517,6 +517,17 @@ export interface SaveOutreachParams extends UpdateOutreachParams {
     minExperienceLevel: string | null;
     slotsTotal: number;
   }[] | null;
+  /**
+   * Every day the outreach runs on, `YYYY-MM-DD`, first day included.
+   *
+   * `null` leaves the days untouched — the common save, where only the details
+   * changed. An ARRAY replaces the set: days already present keep their ids
+   * (and therefore every commitment made against them), days no longer listed
+   * are removed, and days nobody has committed to yet are the only ones that
+   * CAN be removed. The database refuses to delete a day volunteers promised,
+   * which aborts the whole save rather than half-applying it.
+   */
+  days: string[] | null;
 }
 
 /**
@@ -566,6 +577,7 @@ export function useSaveOutreach() {
               slots_total: role.slotsTotal,
             }))
           : null,
+        p_days: params.days,
       });
 
       if (error || !data) {
@@ -579,6 +591,7 @@ export function useSaveOutreach() {
         queryKey: outreachKeys.byOrganisation(params.organisationId),
       });
       queryClient.invalidateQueries({ queryKey: outreachRoleKeysAll });
+      queryClient.invalidateQueries({ queryKey: outreachDayKeysAll });
       // A changed date, region or skill set all change how this ranks, and the
       // ranked feed caches for five minutes. Drop the whole outreach cache
       // rather than guessing which slices moved.
@@ -593,6 +606,9 @@ export function useSaveOutreach() {
  * and importing back would make the two files circular.
  */
 const outreachRoleKeysAll = ['outreach-roles'] as const;
+
+/** Same one-way-dependency reason as `outreachRoleKeysAll` above — useOutreachDays imports from here. */
+const outreachDayKeysAll = ['outreach-days'] as const;
 
 export interface CompleteOrCancelParams {
   outreachId: string;

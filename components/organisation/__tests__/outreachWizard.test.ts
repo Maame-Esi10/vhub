@@ -1,5 +1,7 @@
 import {
   INITIAL_WIZARD_STATE,
+  daysChanged,
+  firstDay,
   rolesChanged,
   swapAdjacent,
   toStoragePayload,
@@ -15,34 +17,71 @@ const PAST_DATE = '2020-03-01';
 const FUTURE_DATE = '2099-06-15';
 
 function stateWith(overrides: Partial<OutreachWizardState>): OutreachWizardState {
-  return { ...INITIAL_WIZARD_STATE, title: 'Screening day', date: FUTURE_DATE, ...overrides };
+  return { ...INITIAL_WIZARD_STATE, title: 'Screening day', days: [FUTURE_DATE], ...overrides };
 }
 
 describe('validateOutreachEdit', () => {
   it('allows an outreach that already happened to be saved unchanged', () => {
-    const state = stateWith({ date: PAST_DATE });
+    const state = stateWith({ days: [PAST_DATE] });
 
     // The wizard refuses this date, which is right when creating an event...
     expect(validateWizard(state).date).toBeDefined();
     // ...and wrong when editing one that has already taken place. This is the
     // case that matters: attaching a flyer to an outreach posted before
     // flyers existed must not be blocked by its own date.
-    expect(validateOutreachEdit(state, PAST_DATE).date).toBeUndefined();
+    expect(validateOutreachEdit(state, [PAST_DATE]).date).toBeUndefined();
   });
 
   it('still refuses to reschedule an event into the past', () => {
-    const state = stateWith({ date: PAST_DATE });
+    const state = stateWith({ days: [PAST_DATE] });
 
-    expect(validateOutreachEdit(state, FUTURE_DATE).date).toBeDefined();
+    expect(validateOutreachEdit(state, [FUTURE_DATE]).date).toBeDefined();
+  });
+
+  it('still refuses a malformed day list even when the days are untouched', () => {
+    // Only the "today or later" rule is relaxed by editing. An empty list is
+    // an outreach with nothing to attend, whatever its history.
+    expect(validateOutreachEdit(stateWith({ days: [] }), []).date).toBeDefined();
   });
 
   it('leaves every other rule intact', () => {
     const state = stateWith({ title: '   ', startTime: '14:00', endTime: '09:00' });
 
-    const errors = validateOutreachEdit(state, state.date);
+    const errors = validateOutreachEdit(state, state.days);
 
     expect(errors.title).toBeDefined();
     expect(errors.endTime).toBeDefined();
+  });
+});
+
+describe('firstDay', () => {
+  it('is the earliest day, whatever order they were added in', () => {
+    // outreaches.date is this value, and everything date-based still reads it.
+    expect(firstDay(stateWith({ days: ['2099-06-17', '2099-06-15', '2099-06-16'] }))).toBe(
+      '2099-06-15'
+    );
+  });
+
+  it('is empty when no day has been picked yet', () => {
+    expect(firstDay(stateWith({ days: [] }))).toBe('');
+  });
+});
+
+describe('daysChanged', () => {
+  it('ignores the order the days are held in', () => {
+    expect(daysChanged(['2099-06-15', '2099-06-16'], ['2099-06-16', '2099-06-15'])).toBe(false);
+  });
+
+  it('sees an added day', () => {
+    expect(daysChanged(['2099-06-15'], ['2099-06-15', '2099-06-16'])).toBe(true);
+  });
+
+  it('sees a removed day', () => {
+    expect(daysChanged(['2099-06-15', '2099-06-16'], ['2099-06-15'])).toBe(true);
+  });
+
+  it('sees a moved day', () => {
+    expect(daysChanged(['2099-06-15'], ['2099-06-22'])).toBe(true);
   });
 });
 
@@ -331,5 +370,40 @@ describe('swapAdjacent — the gallery reorder both screens share', () => {
     const one = ['only'];
     expect(swapAdjacent(one, 0, 1)).toBe(one);
     expect(swapAdjacent(one, 0, -1)).toBe(one);
+  });
+});
+
+describe('wizardStateFromOutreach — days', () => {
+  const row = {
+    title: 'Free BP Screening',
+    description: null,
+    date: '2026-09-01',
+    start_time: '09:00:00',
+    end_time: '15:30:00',
+    region: 'Greater Accra',
+    district: 'Ayawaso West',
+    location_name: null,
+    required_skills: null,
+    required_category: 'nurse',
+    role_type: 'clinical' as const,
+    slots_total: 8,
+    flyer_url: null,
+  };
+
+  it('reads every day row, in order', () => {
+    const state = wizardStateFromOutreach(row, [], [
+      { day: '2026-09-03' },
+      { day: '2026-09-01' },
+      { day: '2026-09-02' },
+    ]);
+
+    expect(state.days).toEqual(['2026-09-01', '2026-09-02', '2026-09-03']);
+  });
+
+  it('falls back to the outreach date when the day rows have not loaded', () => {
+    // Every outreach has at least one day row, so an empty list here means the
+    // read failed rather than that the event has no days. Hydrating an empty
+    // list would let a save wipe the real ones.
+    expect(wizardStateFromOutreach(row, [], []).days).toEqual(['2026-09-01']);
   });
 });

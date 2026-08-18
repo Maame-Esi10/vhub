@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -8,16 +8,20 @@ import {
   ErrorState,
   ListSkeleton,
   ScreenHeader,
-  formatEventDate,
 } from '@/components/ui';
 import { AttendanceRow } from '@/components/organisation';
 import { useOutreach } from '@/hooks/useOutreaches';
 import { useOutreachApplications } from '@/hooks/useApplications';
-import { useOutreachAttendance, useResolveAttendance } from '@/hooks/useAttendance';
+import { useOutreachCommitments, useOutreachDays } from '@/hooks/useOutreachDays';
+import {
+  attendanceForDay,
+  useOutreachAttendance,
+  useResolveAttendance,
+} from '@/hooks/useAttendance';
 import { isPresent, needsAction } from '@/lib/attendance';
+import { formatDayShort, formatDaySpan, todayIso } from '@/lib/outreachDays';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { ApplicationWithVolunteer } from '@/hooks/useApplications';
-import type { Attendance } from '@/types/database';
 
 /**
  * Post-event attendance (section 3, owner decision 2026-08-05).
@@ -31,6 +35,18 @@ import type { Attendance } from '@/types/database';
  *
  * So the work here scales with the number of ABSENCES rather than the number
  * of volunteers: a fully attended twenty-person event needs no taps at all.
+ *
+ * ONE DAY AT A TIME. Attendance is recorded per day, so this screen resolves
+ * one day and shows the day strip only when there is more than one — a one-day
+ * outreach looks and behaves exactly as it always did. Two things follow from
+ * the multi-day model and are not incidental:
+ *
+ *   - The roster for a day is the people who COMMITTED to that day, not every
+ *     accepted volunteer. A student who offered four Saturdays of a month-long
+ *     campaign must never appear on the other 22 days as somebody to mark
+ *     absent; they did not promise those days and are not missing from them.
+ *   - An unresolved day simply does not count. There is no obligation to work
+ *     through every day, and leaving one untouched costs no volunteer anything.
  *
  * This inverts design-refs/Mark Attendance.png, which is opt-in ("Mark
  * Present" on every row). The layout is that design's; the semantics are the
@@ -51,23 +67,69 @@ export default function OrganisationAttendance() {
 
   const outreachQuery = useOutreach(id);
   const applicationsQuery = useOutreachApplications(id);
+  const daysQuery = useOutreachDays(id);
+  const commitmentsQuery = useOutreachCommitments(id);
   const attendanceQuery = useOutreachAttendance(id);
   const resolve = useResolveAttendance();
 
-  const attendanceByVolunteer = useMemo(
-    () => attendanceQuery.data ?? ({} as Record<string, Attendance>),
-    [attendanceQuery.data]
-  );
+  const days = useMemo(() => daysQuery.data ?? [], [daysQuery.data]);
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
 
   /**
-   * Only ACCEPTED applicants are on the roster. Someone pending, waitlisted or
-   * rejected was never expected at the event, so marking them absent would be
-   * meaningless — and the check-in endpoint refuses their scan for the same
-   * reason.
+   * Opens on TODAY when the event is running today, and on the last day
+   * otherwise.
+   *
+   * Both defaults answer the same question — which day is the organiser most
+   * likely holding this phone for? During the event it is today; afterwards it
+   * is the day that just finished, since attendance is filed as the event ends.
+   * Keyed on the outreach id, not on "have we chosen yet": these screens stay
+   * mounted between events, so a plain first-run guard would leave the previous
+   * event's day selected on the next one.
+   */
+  useEffect(() => {
+    if (days.length === 0) return;
+    // Only choose when the current selection is not a day of THIS outreach —
+    // which covers both the first render and arriving from another event. A
+    // plain "set it every time days changes" would snap the organiser back to
+    // today every time the query refetched, mid-way through marking day two.
+    setSelectedDayId((current) => {
+      if (current && days.some((day) => day.id === current)) return current;
+      const runningToday = days.find((day) => day.day === todayIso());
+      return runningToday?.id ?? days[days.length - 1]?.id ?? null;
+    });
+  }, [days]);
+
+  const selectedDay = days.find((day) => day.id === selectedDayId) ?? days[0] ?? null;
+
+  const attendanceForSelectedDay = useMemo(
+    () => attendanceForDay(attendanceQuery.data ?? {}, selectedDay?.id),
+    [attendanceQuery.data, selectedDay?.id]
+  );
+
+  const commitments = useMemo(() => commitmentsQuery.data ?? {}, [commitmentsQuery.data]);
+
+  /**
+   * Only ACCEPTED applicants who COMMITTED to this day are on the roster.
+   *
+   * Someone pending, waitlisted or rejected was never expected at the event, so
+   * marking them absent would be meaningless — and the check-in endpoint
+   * refuses their scan for the same reason. Someone who never offered this
+   * particular day is in the same position for that day alone.
+   *
+   * An application with no commitment rows recorded is treated as committed to
+   * every day. That is the honest reading of every application made before
+   * commitments existed, and of a quick join nobody was asked to choose on.
    */
   const roster = useMemo(
-    () => (applicationsQuery.data ?? []).filter((application) => application.status === 'accepted'),
-    [applicationsQuery.data]
+    () =>
+      (applicationsQuery.data ?? []).filter((application) => {
+        if (application.status !== 'accepted') return false;
+        if (!selectedDay) return true;
+        const committed = commitments[application.id];
+        if (!committed || committed.length === 0) return true;
+        return committed.includes(selectedDay.id);
+      }),
+    [applicationsQuery.data, commitments, selectedDay]
   );
 
   const { rows, presentCount, absentCount, checkedInCount } = useMemo(() => {
@@ -82,7 +144,7 @@ export default function OrganisationAttendance() {
     let checkedIn = 0;
 
     for (const application of roster) {
-      const attendance = attendanceByVolunteer[application.volunteer_id];
+      const attendance = attendanceForSelectedDay[application.volunteer_id];
       if (isPresent(attendance)) present += 1;
       else absent += 1;
       if (attendance?.checked_in_at) checkedIn += 1;
@@ -115,10 +177,13 @@ export default function OrganisationAttendance() {
     }
 
     return { rows: out, presentCount: present, absentCount: absent, checkedInCount: checkedIn };
-  }, [roster, attendanceByVolunteer]);
+  }, [roster, attendanceForSelectedDay]);
 
   const isLoading =
-    outreachQuery.isLoading || applicationsQuery.isLoading || attendanceQuery.isLoading;
+    outreachQuery.isLoading ||
+    applicationsQuery.isLoading ||
+    daysQuery.isLoading ||
+    attendanceQuery.isLoading;
   const isError = outreachQuery.isError || applicationsQuery.isError || attendanceQuery.isError;
 
   if (isLoading) {
@@ -148,6 +213,7 @@ export default function OrganisationAttendance() {
             onRetry={() => {
               void outreachQuery.refetch();
               void applicationsQuery.refetch();
+              void daysQuery.refetch();
               void attendanceQuery.refetch();
             }}
           />
@@ -155,6 +221,8 @@ export default function OrganisationAttendance() {
       </SafeAreaView>
     );
   }
+
+  const multiDay = days.length > 1;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -164,17 +232,56 @@ export default function OrganisationAttendance() {
         <Text style={styles.title} numberOfLines={2}>
           {outreachQuery.data?.title ?? 'Outreach'}
         </Text>
-        {outreachQuery.data ? (
-          <Text style={styles.meta}>{formatEventDate(outreachQuery.data.date)}</Text>
-        ) : null}
+        <Text style={styles.meta}>
+          {formatDaySpan(days.map((day) => day.day)) || outreachQuery.data?.date}
+        </Text>
         <Text style={styles.explainer}>
           Everyone is counted present. Only flag the people who did not turn up.
         </Text>
       </View>
 
-      {resolve.isError ? (
-        <Text style={styles.errorText}>{resolve.error.message}</Text>
+      {/*
+        The day strip appears only when there is more than one day. A one-day
+        outreach has nothing to choose between, and a strip of one would be a
+        control that does nothing.
+      */}
+      {multiDay ? (
+        <View style={styles.daySection}>
+          <Text style={styles.dayLabel}>Which day</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dayStrip}
+          >
+            {days.map((day, index) => {
+              const active = day.id === selectedDay?.id;
+              return (
+                <Pressable
+                  key={day.id}
+                  onPress={() => setSelectedDayId(day.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`Day ${index + 1}, ${formatDayShort(day.day)}`}
+                  style={[styles.dayChip, active && styles.dayChipActive]}
+                >
+                  <Text style={[styles.dayChipIndex, active && styles.dayChipTextActive]}>
+                    Day {index + 1}
+                  </Text>
+                  <Text style={[styles.dayChipDate, active && styles.dayChipTextActive]}>
+                    {formatDayShort(day.day)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <Text style={styles.dayHint}>
+            Only volunteers who committed to this day are listed. Days you never look at simply
+            do not count.
+          </Text>
+        </View>
       ) : null}
+
+      {resolve.isError ? <Text style={styles.errorText}>{resolve.error.message}</Text> : null}
 
       <FlatList
         data={rows}
@@ -197,16 +304,21 @@ export default function OrganisationAttendance() {
               name={volunteer?.profile?.full_name ?? 'Volunteer'}
               avatarUrl={volunteer?.profile?.avatar_url ?? null}
               category={volunteer?.category ?? null}
-              attendance={attendanceByVolunteer[application.volunteer_id]}
+              attendance={attendanceForSelectedDay[application.volunteer_id]}
               isPending={
                 resolve.isPending && resolve.variables?.volunteerId === application.volunteer_id
               }
               onToggle={() => {
-                if (!id) return;
-                const attendance = attendanceByVolunteer[application.volunteer_id];
+                if (!id || !selectedDay) return;
+                const attendance = attendanceForSelectedDay[application.volunteer_id];
                 resolve.mutate({
                   outreachId: id,
                   volunteerId: application.volunteer_id,
+                  // Always sent, even for a one-day outreach where the server
+                  // could work it out: the screen already knows which day it is
+                  // showing, and letting the server infer it is one more place
+                  // the two could disagree.
+                  outreachDayId: selectedDay.id,
                   status: isPresent(attendance) ? 'absent' : 'present',
                 });
               }}
@@ -216,8 +328,12 @@ export default function OrganisationAttendance() {
         ListEmptyComponent={
           <EmptyState
             icon="account-group-outline"
-            title="Nobody accepted yet"
-            message="Attendance appears here once you have accepted volunteers for this outreach."
+            title={multiDay ? 'Nobody committed to this day' : 'Nobody accepted yet'}
+            message={
+              multiDay
+                ? 'No accepted volunteer offered this day. Check another day, or accept more people.'
+                : 'Attendance appears here once you have accepted volunteers for this outreach.'
+            }
           />
         }
       />
@@ -231,6 +347,7 @@ export default function OrganisationAttendance() {
             </Text>
             <Text style={styles.footerSecondary}>
               {checkedInCount} of {roster.length} scanned in
+              {multiDay && selectedDay ? ` · ${formatDayShort(selectedDay.day)}` : ''}
             </Text>
           </View>
           {/*
@@ -280,6 +397,61 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: colors.textSecondary,
     marginTop: spacing.sm,
+  },
+  // A section of its own with real space around it, not a strip wedged against
+  // the summary above and the list below.
+  daySection: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.md,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.sm,
+  },
+  dayLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    color: colors.textPrimary,
+    paddingHorizontal: spacing.xl,
+  },
+  dayStrip: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xs,
+  },
+  dayChip: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    gap: 2,
+    minWidth: 96,
+  },
+  dayChipActive: {
+    backgroundColor: colors.navy,
+  },
+  dayChipIndex: {
+    fontFamily: fontFamily.bold,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  dayChipDate: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  dayChipTextActive: {
+    color: colors.white,
+  },
+  dayHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.xl,
   },
   errorText: {
     fontFamily: fontFamily.regular,

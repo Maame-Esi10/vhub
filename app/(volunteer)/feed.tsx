@@ -13,6 +13,7 @@ import {
   unreadCount,
   useNotifications,
   useOutreachRoles,
+  useOutreachDaysForMany,
   useOutreachRolesForMany,
   useRankedFeed,
   useOrganisationLogos,
@@ -82,6 +83,14 @@ export default function Feed() {
     [feed?.items]
   );
   const feedRoles = useOutreachRolesForMany(visibleOutreachIds);
+  // Same batching, same reason. Every outreach has at least one day row, so an
+  // outreach missing from this map means the query has not landed yet — the
+  // card falls back to `outreaches.date`, which is its first day.
+  const feedDays = useOutreachDaysForMany(visibleOutreachIds);
+
+  function dayStringsFor(outreachId: string): string[] | undefined {
+    return feedDays.data?.[outreachId]?.map((day) => day.day);
+  }
 
   function roleSummaryFor(outreachId: string): string | null {
     const roles = feedRoles.data?.[outreachId];
@@ -219,6 +228,7 @@ export default function Feed() {
             matchScore={item.matchScore}
             onPressScore={item.breakdown ? () => setBreakdownFor(item) : undefined}
             roleSummary={roleSummaryFor(item.outreach.id)}
+            days={dayStringsFor(item.outreach.id)}
             onPress={() => router.push(`/(volunteer)/outreach/${item.outreach.id}?from=/(volunteer)/feed`)}
           />
         )}

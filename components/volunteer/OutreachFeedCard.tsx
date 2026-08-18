@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar, Badge, FlyerBackground, formatEventDate, formatEventTimeRange } from '@/components/ui';
 import { MatchScoreBadge } from '@/components/volunteer/MatchScoreBadge';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { formatDaySpan } from '@/lib/outreachDays';
 import type { OutreachWithOrganisation } from '@/hooks';
 
 export interface OutreachFeedCardProps {
@@ -24,6 +25,16 @@ export interface OutreachFeedCardProps {
    * single-role mode, where the category badge already says everything.
    */
   roleSummary?: string | null;
+  /**
+   * Every day the outreach runs on, `YYYY-MM-DD`.
+   *
+   * Omitted or empty falls back to the outreach's own `date`, which is the
+   * first day — correct for the one-day outreach that most of them are, and the
+   * right thing to show while the day rows are still loading. Passed in rather
+   * than read here for the same reason the logo is: the feed fetches them for
+   * the whole list in one query instead of one per card.
+   */
+  days?: readonly string[];
 }
 
 /**
@@ -42,6 +53,7 @@ export function OutreachFeedCard({
   matchScore = null,
   onPressScore,
   roleSummary,
+  days,
 }: OutreachFeedCardProps) {
   const slotsLeft = Math.max(0, outreach.slots_total - outreach.slots_filled);
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
@@ -49,6 +61,12 @@ export function OutreachFeedCard({
   // go. District and region only stand in when no venue was given: "Ayawaso
   // West, Greater Accra" is an administrative area, not somewhere you can turn
   // up to.
+  // "Mon, Oct 12 2026" for one day; "3 days" or "4 days · Oct 3 – Oct 24" for
+  // more. A volunteer deciding whether to tap needs to know an event is four
+  // Saturdays before they open it, not after.
+  const when =
+    days && days.length > 0 ? formatDaySpan(days) : formatEventDate(outreach.date);
+
   const place = outreach.location_name
     ? outreach.location_name
     : [outreach.district, outreach.region].filter(Boolean).join(', ');
@@ -57,7 +75,7 @@ export function OutreachFeedCard({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${outreach.title}, ${formatEventDate(outreach.date)}`}
+      accessibilityLabel={`${outreach.title}, ${when}`}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <FlyerBackground uri={outreach.flyer_url} style={styles.header}>
@@ -110,7 +128,7 @@ export function OutreachFeedCard({
             <View style={styles.statText}>
               <Text style={styles.statLabel}>WHEN</Text>
               <Text style={styles.statValue} numberOfLines={1}>
-                {formatEventDate(outreach.date)}
+                {when}
               </Text>
             </View>
           </View>

@@ -164,6 +164,48 @@ export interface OutreachImage {
   created_at: string;
 }
 
+/**
+ * One calendar day an outreach runs on.
+ *
+ * SINGLE-DAY IS THE n=1 CASE. Every outreach has at least one of these —
+ * guaranteed by `trg_outreaches_default_day`, not by client code — so nothing
+ * anywhere has to branch on "is this multi-day". `outreaches.date` is the
+ * FIRST day, kept in step by trigger, which is why the feed bound, the reminder
+ * window, the under-subscription stages and the lifecycle close all still work
+ * untouched.
+ */
+export interface OutreachDay {
+  id: string;
+  outreach_id: string;
+  /** ISO calendar date, `YYYY-MM-DD`. */
+  day: string;
+  /**
+   * Null means "the same hours as the outreach". A campaign running 9–4 every
+   * day states that once on the outreach; these exist for the day that differs.
+   * Read them through `dayStartTime()` / `dayEndTime()` in lib/outreachDays.ts
+   * rather than directly, so the inheritance happens in one place.
+   */
+  start_time: string | null;
+  end_time: string | null;
+  created_at: string;
+}
+
+/**
+ * One day a volunteer promised, on one application.
+ *
+ * A TABLE RATHER THAN A COUNT, because this is the unit everything else is
+ * measured against: attendance is scored on days committed versus days
+ * attended, never against the event's span. A student who commits to four
+ * Saturdays of a month-long campaign and attends all four did exactly what they
+ * promised, and must not be marked absent for the 26 days they never offered.
+ */
+export interface ApplicationDay {
+  id: string;
+  application_id: string;
+  outreach_day_id: string;
+  created_at: string;
+}
+
 export interface OutreachRole {
   id: string;
   outreach_id: string;
@@ -282,7 +324,12 @@ export type CheckInMethod = "qr_scan" | "organiser";
 export type OrganiserAttendanceStatus = "present" | "absent";
 
 /**
- * One volunteer's attendance at one outreach. UNIQUE (outreach_id, volunteer_id).
+ * One volunteer's attendance on ONE DAY of one outreach.
+ * UNIQUE (outreach_id, volunteer_id, outreach_day_id).
+ *
+ * Per day, not per event: a single scan must never be able to record someone
+ * present for a month-long campaign, which is the whole reason
+ * 20260812_multi_day_outreaches.sql swapped the two-column constraint out.
  *
  * Written ONLY by /api/checkin on the service-role key — `authenticated` has
  * no insert/update/delete policy or privilege on this table at all.
@@ -295,6 +342,8 @@ export interface Attendance {
   id: string;
   outreach_id: string;
   volunteer_id: string;
+  /** Which day of the outreach this row is about. NOT NULL at the column. */
+  outreach_day_id: string;
   /** Null means they never scanned — which is what puts them on the organiser's list. */
   checked_in_at: string | null;
   check_in_method: CheckInMethod | null;

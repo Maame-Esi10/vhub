@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -16,6 +16,7 @@ import {
   isUpcomingEvent,
 } from '@/components/ui';
 import {
+  DayCommitmentPicker,
   FullApplicationSheet,
   GalleryStrip,
   MatchScoreBadge,
@@ -29,10 +30,12 @@ import {
   useCreateApplication,
   useMyApplicationForOutreach,
   useOutreach,
+  useOutreachDays,
   useOutreachImages,
   useOutreachRoles,
   usePublicOrganisationProfile,
 } from '@/hooks';
+import { formatDaySpan } from '@/lib/outreachDays';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
 
@@ -63,6 +66,42 @@ export default function OutreachDetail() {
   const [withdrawVisible, setWithdrawVisible] = useState(false);
   const [verifyNotice, setVerifyNotice] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+
+  /*
+    THE DAYS THIS VOLUNTEER IS COMMITTING TO.
+
+    Held here rather than inside the application sheet because BOTH ways in
+    need it — Quick Join is one tap with no sheet at all, and a quick join to a
+    four-day campaign still has to say which days it means.
+
+    `null` means "not chosen yet", which is different from "chose none": it is
+    the state before the days have even loaded, and it is what makes the
+    every-day default below correct rather than a silent overwrite of a real
+    choice.
+  */
+  const [committedDayIds, setCommittedDayIds] = useState<string[] | null>(null);
+  const daysQuery = useOutreachDays(outreachId);
+  const days = useMemo(() => daysQuery.data ?? [], [daysQuery.data]);
+  const multiDay = days.length > 1;
+
+  // Everything ticked to begin with: most volunteers applying to a three-day
+  // clinic mean all three, so un-ticking is the deliberate act rather than
+  // ticking. Re-seeded whenever the day list itself changes, and never once the
+  // volunteer has touched it.
+  useEffect(() => {
+    if (days.length === 0) return;
+    setCommittedDayIds((current) => {
+      if (current && current.every((dayId) => days.some((day) => day.id === dayId))) {
+        return current;
+      }
+      return days.map((day) => day.id);
+    });
+  }, [days]);
+
+  const dayIdsForApplication = committedDayIds ?? days.map((day) => day.id);
+  // Only ever blocks a multi-day application. A one-day outreach has nothing
+  // to choose and commits to its only day.
+  const noDaysChosen = multiDay && dayIdsForApplication.length === 0;
 
   // Empty means single-role mode — the same rule the database uses.
   const rolesQuery = useOutreachRoles(outreachId);
@@ -117,6 +156,7 @@ export default function OutreachDetail() {
       volunteerId,
       type: 'quick_join',
       outreachRoleId: selectedRoleId,
+      dayIds: dayIdsForApplication,
       // What this screen already knows, so a refusal can name ONE real reason
       // instead of listing every clause the policy folds together.
       eligibility: {
@@ -136,6 +176,7 @@ export default function OutreachDetail() {
         type: 'full',
         motivation,
         outreachRoleId: selectedRoleId,
+        dayIds: dayIdsForApplication,
         eligibility: {
           outreachStatus: outreach.status,
           roleIsClinical: usesRoles ? selectedRole?.role_type === 'clinical' : isClinical,
@@ -252,8 +293,17 @@ export default function OutreachDetail() {
               },
               {
                 icon: 'calendar-outline',
-                label: 'DATE & TIME',
-                value: `${formatEventDate(outreach.date)}${timeRange ? ` · ${timeRange}` : ''}`,
+                label: multiDay ? 'DATES & TIME' : 'DATE & TIME',
+                // formatDaySpan reads a one-day outreach exactly as
+                // formatEventDate did, and says "3 days" or "4 days · Oct 3 –
+                // Oct 24" for the rest. It falls back to the outreach's own
+                // date if the day rows have not arrived yet, so this row is
+                // never blank.
+                value: `${
+                  days.length > 0
+                    ? formatDaySpan(days.map((day) => day.day))
+                    : formatEventDate(outreach.date)
+                }${timeRange ? ` · ${timeRange}` : ''}`,
               },
               {
                 icon: 'account-multiple-outline',
@@ -369,6 +419,25 @@ export default function OutreachDetail() {
           />
         ) : null}
 
+        {/*
+          Sits with the other things being decided before applying, above the
+          action bar that acts on them — and renders nothing at all for a
+          one-day outreach, which is every outreach until an organisation makes
+          a longer one. Hidden once applied: the commitment is fixed at that
+          point, and re-ticking boxes that change nothing would be a lie.
+        */}
+        {!alreadyApplied ? (
+          <View style={styles.daysSection}>
+            <DayCommitmentPicker
+              days={days}
+              outreach={outreach}
+              selected={dayIdsForApplication}
+              onChange={setCommittedDayIds}
+              disabled={createApplication.isPending}
+            />
+          </View>
+        ) : null}
+
         {alreadyApplied ? (
           <View style={styles.statusPanel}>
             <Badge
@@ -465,7 +534,7 @@ export default function OutreachDetail() {
               <Button
                 title={createApplication.isPending ? 'Joining...' : 'Quick Join'}
                 onPress={handleQuickJoin}
-                disabled={createApplication.isPending}
+                disabled={createApplication.isPending || noDaysChosen}
                 style={styles.actionButton}
                 accessibilityLabel="Quick join this outreach"
               />
@@ -477,6 +546,7 @@ export default function OutreachDetail() {
               disabled={
                 blockedByVerification ||
                 createApplication.isPending ||
+                noDaysChosen ||
                 (usesRoles && !selectedRole)
               }
               style={styles.actionButton}
@@ -763,6 +833,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: spacing.sm,
+  },
+  // Margins live here rather than inside DayCommitmentPicker's own card so the
+  // section sits clear of the role picker above and the status panel below,
+  // instead of being flush against either.
+  daysSection: {
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   statusPanel: {
     marginTop: spacing.xl,

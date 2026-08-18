@@ -58,31 +58,67 @@ export async function sendCheckinReminders(): Promise<CheckinReminderResult> {
   // date agree — the same assumption lib/attendance.ts's anchor check makes.
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: outreaches, error } = await admin
-    .from("outreaches")
-    .select("id, title, location_name")
-    .in("status", ["open", "closed"])
-    .eq("date", today);
+  // DRIVEN BY outreach_days, NOT BY outreaches.date. `date` is only the FIRST
+  // day, so querying it reminded people on day one of a four-day campaign and
+  // never again -- the other three days had no reminder at all. Every outreach
+  // has at least one day row, so a single-day event behaves exactly as before.
+  const { data: dayRows, error } = await admin
+    .from("outreach_days")
+    .select("id, outreach_id, outreaches!inner (id, title, location_name, status)")
+    .eq("day", today)
+    .in("outreaches.status", ["open", "closed"]);
   if (error) throw Errors.internal("Could not load today's outreaches.");
 
-  const todaysOutreaches = outreaches ?? [];
-  if (todaysOutreaches.length === 0) {
+  const todaysDays = (dayRows ?? []) as unknown as {
+    id: string;
+    outreach_id: string;
+    outreaches: { title: string | null; location_name: string | null } | null;
+  }[];
+  if (todaysDays.length === 0) {
     return { remindersSent: 0, outreachesConsidered: 0 };
   }
 
   let remindersSent = 0;
 
-  for (const outreach of todaysOutreaches) {
-    const outreachId = outreach.id as string;
+  for (const dayRow of todaysDays) {
+    const outreachId = dayRow.outreach_id;
+    const outreachDayId = dayRow.id;
+    const outreach = dayRow.outreaches;
+    if (!outreach) continue;
 
     const { data: applications, error: applicationsError } = await admin
       .from("applications")
-      .select("volunteer_id")
+      .select("id, volunteer_id")
       .eq("outreach_id", outreachId)
       .eq("status", "accepted");
     if (applicationsError || !applications?.length) continue;
 
-    const volunteerIds = applications.map((a) => a.volunteer_id as string);
+    const acceptedIds = applications.map((a) => a.id as string);
+
+    // Only the people who COMMITTED to today. A student who offered four
+    // Saturdays of a month-long campaign must not be told to go and scan on the
+    // other 22 days -- they never promised them, and being chased about a day
+    // they declined would read as the app not having listened.
+    //
+    // An application with no commitment rows falls back to "every day", which
+    // is what every application made before commitments existed meant.
+    const { data: commitments } = await admin
+      .from("application_days")
+      .select("application_id, outreach_day_id")
+      .in("application_id", acceptedIds);
+    const committedToday = new Set<string>();
+    const hasAnyCommitment = new Set<string>();
+    for (const row of commitments ?? []) {
+      hasAnyCommitment.add(row.application_id as string);
+      if (row.outreach_day_id === outreachDayId) {
+        committedToday.add(row.application_id as string);
+      }
+    }
+
+    const volunteerIds = applications
+      .filter((a) => !hasAnyCommitment.has(a.id as string) || committedToday.has(a.id as string))
+      .map((a) => a.volunteer_id as string);
+    if (volunteerIds.length === 0) continue;
 
     // Already scanned — nothing to remind them about. This is what makes the
     // function safe to run at any hour: run it late and it chases only the
@@ -91,10 +127,15 @@ export async function sendCheckinReminders(): Promise<CheckinReminderResult> {
       .from("attendance")
       .select("volunteer_id")
       .eq("outreach_id", outreachId)
+      // Scoped to THIS day: a scan on day one says nothing about whether they
+      // have scanned on day two.
+      .eq("outreach_day_id", outreachDayId)
       .in("volunteer_id", volunteerIds);
     const checkedIn = new Set((attendance ?? []).map((row) => row.volunteer_id as string));
 
-    // Already reminded for THIS outreach, by an earlier run today.
+    // Already reminded for THIS DAY, by an earlier run today. The day id joins
+    // `stage` in the dedupe key for the same reason: one reminder per outreach
+    // would silence every day after the first.
     const { data: alreadySent } = await admin
       .from("notifications")
       .select("user_id, data")
@@ -103,7 +144,16 @@ export async function sendCheckinReminders(): Promise<CheckinReminderResult> {
       .in("user_id", volunteerIds);
     const reminded = new Set(
       (alreadySent ?? [])
-        .filter((row) => (row.data as Record<string, unknown> | null)?.stage === CHECKIN_STAGE)
+        .filter((row) => {
+          const data = row.data as Record<string, unknown> | null;
+          if (data?.stage !== CHECKIN_STAGE) return false;
+          // Rows written before this change carry no day. They can only ever
+          // have belonged to a single-day outreach, so they count against the
+          // one day that outreach has -- which is this one, or this branch is
+          // not running for them at all.
+          const dayOfRow = (data.outreachDayId as string | undefined) ?? outreachDayId;
+          return dayOfRow === outreachDayId;
+        })
         .map((row) => row.user_id as string)
     );
 
@@ -134,10 +184,11 @@ export async function sendCheckinReminders(): Promise<CheckinReminderResult> {
           outreach.location_name ? ` at ${outreach.location_name}` : ""
         }. Scan the organiser's check-in code before you leave — it's what records your attendance.`,
         outreachId,
-        // `stage` is the dedupe key read back above. Keep it in step with
-        // CHECKIN_STAGE; nothing else distinguishes this from the 24-hour
-        // reminder, which shares the 'event_reminder' type.
-        data: { outreachId, stage: CHECKIN_STAGE },
+        // `stage` + `outreachDayId` are the dedupe key read back above. Keep
+        // both in step: nothing else distinguishes this from the 24-hour
+        // reminder, which shares the 'event_reminder' type, and nothing else
+        // distinguishes day two of a campaign from day one.
+        data: { outreachId, outreachDayId, stage: CHECKIN_STAGE },
         tokens: tokensByUser.get(volunteerId) ?? [],
       }))
     );
@@ -145,5 +196,5 @@ export async function sendCheckinReminders(): Promise<CheckinReminderResult> {
     remindersSent += due.length;
   }
 
-  return { remindersSent, outreachesConsidered: todaysOutreaches.length };
+  return { remindersSent, outreachesConsidered: todaysDays.length };
 }

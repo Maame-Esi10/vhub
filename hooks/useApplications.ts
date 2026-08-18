@@ -355,7 +355,12 @@ export function useMyWaitlistPositions(volunteerId: string | undefined) {
 
 export interface CreateApplicationParams {
   outreachId: string;
-  /** Must equal the signed-in volunteer's auth uid — `applications_insert_own` enforces it. */
+  /**
+   * Used only to invalidate the right caches. The application is written by
+   * `apply_to_outreach()`, which takes the volunteer from `auth.uid()` rather
+   * than from the client, so this can no longer be got wrong in a way that
+   * matters.
+   */
   volunteerId: string;
   /** `quick_join` for one-tap support roles, `full` for the clinical application form. */
   type: ApplicationType;
@@ -385,15 +390,41 @@ export interface CreateApplicationParams {
     roleIsClinical: boolean;
     volunteerIsVerified: boolean;
   };
+  /**
+   * The `outreach_days.id`s this volunteer is committing to.
+   *
+   * Omitted (or empty) means EVERY day of the outreach, which is the honest
+   * reading of a one-day event and of a quick join nobody was asked to choose
+   * on. It is never a way to commit to nothing: the database refuses an
+   * application with no committed days, because that would read afterwards as
+   * "attended 0 of 0" and there is no such thing.
+   */
+  dayIds?: string[];
 }
 
 /**
- * Applies to an outreach, then scores the new application.
+ * Applies to an outreach — the application AND the days it commits to — then
+ * scores it.
  *
- * status/match_score are not sent on the insert: status defaults to
- * 'pending', and match_score is service-role write-only. The follow-up
- * `scoreMyApplication` call is what fills it in, running Layer 1 (+ Gemini
- * Layer 2) against the database's own copy of both profiles.
+ * ONE RPC, NOT TWO WRITES, and that is the point. The committed days are the
+ * denominator every later judgement is measured against: attendance is scored
+ * on days committed versus days attended, never against the event's span. An
+ * application written in one request with its days in a second would, on any
+ * failure between them, leave a row that promises nothing — unfixable from the
+ * volunteer's side, because the application already exists and re-applying is
+ * refused. `apply_to_outreach()` is a plpgsql function, and a function body is
+ * a single transaction, so both land or neither does. It is SECURITY INVOKER,
+ * so `applications_insert_own`, the per-role verification gate and every
+ * column GRANT apply exactly as they did to the direct insert it replaces.
+ *
+ * It also absorbs the re-apply case that used to be handled here: a withdrawn
+ * application still occupies UNIQUE (outreach_id, volunteer_id), so re-applying
+ * reactivates that row rather than inserting a second one.
+ *
+ * status/match_score are not sent: status defaults to 'pending', and
+ * match_score is service-role write-only. The follow-up `scoreMyApplication`
+ * call is what fills it in, running Layer 1 (+ Gemini Layer 2) against the
+ * database's own copy of both profiles.
  *
  * That second call is deliberately BEST-EFFORT: the application already
  * exists and is valid without a score, so a scoring failure must not surface
@@ -408,55 +439,15 @@ export function useCreateApplication() {
     mutationFn: async (params: CreateApplicationParams): Promise<Application> => {
       const motivation = params.motivation?.trim() ? params.motivation.trim() : null;
 
-      // A withdrawn application still occupies the UNIQUE (outreach_id,
-      // volunteer_id) slot, so re-applying cannot INSERT — it would fail with
-      // a unique violation whose message ("You've already applied to this
-      // outreach") is nonsense to someone who just withdrew. Reactivate the
-      // existing row instead.
-      //
-      // Not an .upsert(): PostgREST compiles ON CONFLICT DO UPDATE with every
-      // payload column in the SET clause, and applications' UPDATE grant list
-      // deliberately excludes outreach_id/volunteer_id, so the statement would
-      // be rejected outright (42501). An explicit .update() names only the
-      // granted columns.
-      const { data: existing, error: existingError } = await supabase
-        .from('applications')
-        .select('id, status')
-        .eq('outreach_id', params.outreachId)
-        .eq('volunteer_id', params.volunteerId)
-        .maybeSingle();
-
-      if (existingError) {
-        throw new Error(existingError.message || 'Could not check your application status.');
-      }
-
-      if (existing && existing.status !== 'cancelled') {
-        throw new Error("You've already applied to this outreach.");
-      }
-
-      const { data, error } = existing
-        ? await supabase
-            .from('applications')
-            .update({
-              status: 'pending',
-              type: params.type,
-              motivation,
-              cancellation_reason: null,
-            })
-            .eq('id', existing.id)
-            .select()
-            .single()
-        : await supabase
-            .from('applications')
-            .insert({
-              outreach_id: params.outreachId,
-              volunteer_id: params.volunteerId,
-              type: params.type,
-              motivation,
-              outreach_role_id: params.outreachRoleId ?? null,
-            })
-            .select()
-            .single();
+      const { data, error } = await supabase.rpc('apply_to_outreach', {
+        p_outreach_id: params.outreachId,
+        p_type: params.type,
+        p_motivation: motivation,
+        p_outreach_role_id: params.outreachRoleId ?? null,
+        // Null means every day. The function reads an empty array the same way,
+        // so an unanswered day picker cannot produce a commitment to nothing.
+        p_day_ids: params.dayIds && params.dayIds.length > 0 ? params.dayIds : null,
+      });
 
       if (error || !data) {
         throw new Error(applicationInsertMessage(error, params.eligibility));
@@ -481,10 +472,20 @@ export function useCreateApplication() {
         queryKey: applicationKeys.byVolunteer(params.volunteerId),
       });
       queryClient.invalidateQueries({ queryKey: applicationKeys.byOutreach(params.outreachId) });
+      // The commitment rows were written in the same transaction, so the day
+      // caches are stale the moment this succeeds.
+      queryClient.invalidateQueries({ queryKey: outreachDayKeysAll });
       queryClient.invalidateQueries({ queryKey: outreachKeys.all });
     },
   });
 }
+
+/**
+ * Imported as a literal for the same one-way-dependency reason `useOutreaches`
+ * does it: useOutreachDays already imports from this module's neighbours, and
+ * importing back would make them circular.
+ */
+const outreachDayKeysAll = ['outreach-days'] as const;
 
 /**
  * Turns a refusal into ONE reason, and only a reason it has actually checked.
@@ -505,6 +506,13 @@ function applicationInsertMessage(
 ): string {
   if (error?.code === UNIQUE_VIOLATION) {
     return "You've already applied to this outreach.";
+  }
+
+  // Raised by apply_to_outreach() when the commitment would be empty. The
+  // function's own wording is already the right thing to show, so it is passed
+  // through rather than translated into something vaguer.
+  if (error?.code === CHECK_VIOLATION && error.message) {
+    return error.message;
   }
 
   if (error?.code === RLS_VIOLATION) {

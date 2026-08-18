@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Badge, FlyerBackground, formatEventDate, formatEventTimeRange } from '@/components/ui';
+import { Badge, FlyerBackground, formatEventTimeRange } from '@/components/ui';
+import { formatDaySpan } from '@/lib/outreachDays';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { ROLE_TYPES, VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import type { OutreachWizardState } from '@/components/organisation/outreachWizard';
@@ -58,8 +59,14 @@ export function OutreachPreviewCard({ state }: OutreachPreviewCardProps) {
         <View style={styles.infoRow}>
           <View style={styles.infoPill}>
             <MaterialCommunityIcons name="calendar" size={14} color={colors.primary} />
+            {/*
+              formatDaySpan rather than formatEventDate: it reads a one-day
+              outreach exactly as the old single date did, and says "3 days"
+              or "4 days · Oct 3 – Oct 24" for the rest, so the preview shows
+              the same thing the volunteer's card will.
+            */}
             <Text style={styles.infoText}>
-              {state.date ? formatEventDate(state.date) : 'No date set'}
+              {state.days.length > 0 ? formatDaySpan(state.days) : 'No date set'}
               {timeRange ? ` · ${timeRange}` : ''}
             </Text>
           </View>

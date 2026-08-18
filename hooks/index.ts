@@ -83,6 +83,15 @@ export {
 } from './useOutreachRoles';
 export type { RoleDraft, ReplaceOutreachRolesParams } from './useOutreachRoles';
 export {
+  outreachDayKeys,
+  useOutreachDays,
+  useOutreachDaysForMany,
+  useAddOutreachDays,
+  useApplicationDays,
+  useOutreachCommitments,
+} from './useOutreachDays';
+export type { AddOutreachDaysParams, CommittedDay } from './useOutreachDays';
+export {
   applicationKeys,
   useOutreachApplications,
   useUpdateApplicationStatus,

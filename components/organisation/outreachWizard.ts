@@ -2,7 +2,8 @@ import type { ExperienceLevel, OutreachRoleType, VolunteerCategory } from '@/typ
 // From the module, not the '@/components/ui' barrel. This file is pure logic
 // with no UI in it, and the barrel's first export pulls in React Native — which
 // made the module unloadable in Jest, whose config here has no RN preset.
-import { isTimeAfter, isTodayOrFutureDate, parseClockTime } from '@/components/ui/dateUtils';
+import { isTimeAfter, parseClockTime } from '@/components/ui/dateUtils';
+import { sortDayStrings, validateDays } from '@/lib/outreachDays';
 
 /**
  * One role the outreach is asking for, as the form holds it.
@@ -44,7 +45,23 @@ export interface RoleDraft {
 export interface OutreachWizardState {
   title: string;
   description: string;
-  date: string;
+  /**
+   * Every day the outreach runs on, `YYYY-MM-DD`, chronological.
+   *
+   * ONE FIELD, NO MODE — the same lesson as `roles` above. This replaced a
+   * single `date`, with an empty list meaning nothing and a one-entry list
+   * meaning an ordinary one-day event. There is no "is this multi-day" switch
+   * for the organisation to understand, because running a clinic on three days
+   * is not a different kind of event from running it on one; it is the n=3
+   * case.
+   *
+   * `outreaches.date` is the FIRST of these, and the database keeps it in step
+   * by trigger — which is why the feed's date bound, the reminder window, the
+   * under-subscription stages and the lifecycle close all still work untouched.
+   * The form never writes that column's value itself beyond sending the first
+   * day; see `firstDay`.
+   */
+  days: string[];
   startTime: string;
   endTime: string;
   region: string | null;
@@ -93,7 +110,7 @@ export const INITIAL_ROLE: RoleDraft = {
 export const INITIAL_WIZARD_STATE: OutreachWizardState = {
   title: '',
   description: '',
-  date: '',
+  days: [],
   startTime: '',
   endTime: '',
   region: null,
@@ -109,7 +126,20 @@ export type WizardFieldError = Partial<
   Record<'title' | 'date' | 'startTime' | 'endTime' | 'roles', string>
 >;
 
-/** Validates the fields the spec calls out explicitly: title, date, time ordering, slots. */
+/**
+ * The FIRST day the outreach runs on — what `outreaches.date` holds, and what
+ * every existing date-based query still reads.
+ *
+ * Empty string when no day has been picked yet, which only happens on a form
+ * that has not been validated. Sorting here rather than trusting insertion
+ * order means the first day is the earliest one however the organisation added
+ * them.
+ */
+export function firstDay(state: OutreachWizardState): string {
+  return sortDayStrings(state.days)[0] ?? '';
+}
+
+/** Validates the fields the spec calls out explicitly: title, days, time ordering, slots. */
 export function validateWizard(state: OutreachWizardState): WizardFieldError {
   const errors: WizardFieldError = {};
 
@@ -117,10 +147,12 @@ export function validateWizard(state: OutreachWizardState): WizardFieldError {
     errors.title = 'Give this outreach a title.';
   }
 
-  if (!state.date.trim()) {
-    errors.date = 'Pick an event date.';
-  } else if (!isTodayOrFutureDate(state.date)) {
-    errors.date = 'Enter a valid date (YYYY-MM-DD) that is today or later.';
+  // One rule for the whole day list rather than one for a scalar date: an
+  // outreach with no days, a duplicate day or a day in the past are all the
+  // same class of mistake and are named by `validateDays`.
+  const dayError = validateDays(state.days, { requireFuture: true });
+  if (dayError) {
+    errors.date = dayError;
   }
 
   if (state.startTime && !parseClockTime(state.startTime)) {
@@ -208,15 +240,32 @@ export function hasWizardErrors(errors: WizardFieldError): boolean {
  */
 export function validateOutreachEdit(
   state: OutreachWizardState,
-  originalDate: string
+  originalDays: readonly string[]
 ): WizardFieldError {
   const errors = validateWizard(state);
 
-  if (errors.date && state.date.trim() === originalDate) {
-    delete errors.date;
+  // Only the "must be today or later" part is relaxed, and only when the day
+  // set is untouched. A list that is still malformed — empty, duplicated,
+  // unparsable — is an error whatever its history, so it is re-checked without
+  // the future rule rather than simply dropped.
+  if (errors.date && !daysChanged(originalDays, state.days)) {
+    const stillWrong = validateDays(state.days, { requireFuture: false });
+    if (stillWrong) {
+      errors.date = stillWrong;
+    } else {
+      delete errors.date;
+    }
   }
 
   return errors;
+}
+
+/** True when the day set differs from the one already stored, order ignored. */
+export function daysChanged(before: readonly string[], after: readonly string[]): boolean {
+  if (before.length !== after.length) return true;
+  const sortedBefore = sortDayStrings(before);
+  const sortedAfter = sortDayStrings(after);
+  return sortedBefore.some((day, index) => day !== sortedAfter[index]);
 }
 
 /**
@@ -250,12 +299,19 @@ export function wizardStateFromOutreach(
     role_type: OutreachRoleType;
     min_experience_level: ExperienceLevel | null;
     slots_total: number;
-  }[]
+  }[],
+  /**
+   * The outreach's `outreach_days` rows. Every outreach has at least one, so an
+   * EMPTY list here means the days have not loaded yet or the read failed — in
+   * which case the outreach's own `date` stands in, which is the one day it is
+   * guaranteed to have.
+   */
+  days: { day: string }[] = []
 ): OutreachWizardState {
   return {
     title: outreach.title,
     description: outreach.description ?? '',
-    date: outreach.date,
+    days: days.length > 0 ? sortDayStrings(days.map((row) => row.day)) : [outreach.date],
     // The pickers read and write 'HH:MM'; Postgres `time` comes back as
     // 'HH:MM:SS', and the extra seconds would fail parseClockTime on save.
     startTime: trimClockSeconds(outreach.start_time),

@@ -636,6 +636,13 @@ export function anchorVenue(
 
 export interface CheckInResponse {
   outreachId: string;
+  /**
+   * The day the scan was filed against — always the day happening TODAY. The
+   * server decides it rather than the client: a scan is a physical act at a
+   * venue, so there is exactly one honest answer, and a scan on a day the event
+   * does not run is refused rather than filed somewhere plausible.
+   */
+  outreachDayId: string;
   checkedInAt: string;
   /** Always true. A scan that reaches a 2xx is a check-in, full stop. */
   present: boolean;
@@ -674,30 +681,49 @@ export function checkIn(input: CheckInInput, options?: RequestOptions): Promise<
 
 export interface ResolveAttendanceResponse {
   outreachId: string;
+  outreachDayId: string;
   volunteerId: string;
   status: 'present' | 'absent';
   resolvedAt: string;
 }
 
+export interface ResolveAttendanceInput {
+  outreachId: string;
+  volunteerId: string;
+  status: 'present' | 'absent';
+  /**
+   * Which day the decision is about.
+   *
+   * Optional ONLY because a single-day outreach leaves nothing to choose — the
+   * server fills it in when there is exactly one day. On an outreach with
+   * several days, omitting it is refused rather than guessed: filing an absence
+   * against the wrong day of a campaign is the exact error per-day attendance
+   * exists to prevent.
+   */
+  outreachDayId?: string;
+  note?: string;
+}
+
 /**
- * The organiser's final word on one volunteer, available for anyone on the
- * list rather than only the unscanned: no automated signal ever overrules a
- * human who was physically at the event.
+ * The organiser's final word on one volunteer FOR ONE DAY, available for anyone
+ * on the list rather than only the unscanned: no automated signal ever
+ * overrules a human who was physically at the event.
  *
  * Records the decision only — marking someone absent moves NO V-Score. That
  * happens when the post-event review is filed with `attended: false`
  * (`submitEventReview`), so one path owns every score change.
+ *
+ * Takes an object rather than five positional arguments, which is what it had
+ * grown to: `resolveAttendance(id, id, status, note)` with a day id appended
+ * would be two adjacent uuids whose order nothing but memory enforces.
  */
 export function resolveAttendance(
-  outreachId: string,
-  volunteerId: string,
-  status: 'present' | 'absent',
-  note?: string,
+  input: ResolveAttendanceInput,
   options?: RequestOptions
 ): Promise<ResolveAttendanceResponse> {
   return apiPost<ResolveAttendanceResponse>(
     API_ROUTES.checkin,
-    { mode: 'resolve', outreachId, volunteerId, status, note },
+    { mode: 'resolve', ...input },
     options
   );
 }

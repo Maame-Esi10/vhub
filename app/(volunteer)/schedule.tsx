@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -11,11 +11,15 @@ import {
   formatEventDate,
   formatEventTime,
   hasEventEnded,
-  isEventToday,
   msUntilEvent,
 } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { useOrganisationLogos, useVolunteerApplications } from '@/hooks';
+import {
+  useOrganisationLogos,
+  useOutreachDaysForMany,
+  useVolunteerApplications,
+} from '@/hooks';
+import { isAnyDayToday, lastDay } from '@/lib/outreachDays';
 import type { VolunteerApplication } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -52,6 +56,35 @@ export default function Schedule() {
     [applications]
   );
 
+  /*
+    THE DAYS OF EVERY EVENT ON THE SCHEDULE, IN ONE QUERY.
+
+    `outreaches.date` is only the FIRST day, and judging "is it over?" on it
+    would finish a four-day campaign on the evening of day one -- dropping it
+    off this screen, and taking the check-in action with it, while the volunteer
+    was still standing in it. That is the same failure the `hasEventEnded`
+    comment above describes, one level up.
+
+    An outreach missing from the map falls back to its own date, which is
+    correct for the one-day event most of them are and is what shows while the
+    query is in flight.
+  */
+  const scheduleDays = useOutreachDaysForMany(
+    useMemo(
+      () =>
+        accepted
+          .map((application) => application.outreach?.id)
+          .filter((id): id is string => !!id),
+      [accepted]
+    )
+  );
+
+  const dayStringsFor = useCallback(
+    (outreachId: string, fallbackDate: string): string[] =>
+      scheduleDays.data?.[outreachId]?.map((day) => day.day) ?? [fallbackDate],
+    [scheduleDays.data]
+  );
+
   const { upcoming, past } = useMemo(() => {
     const ahead: VolunteerApplication[] = [];
     const done: VolunteerApplication[] = [];
@@ -59,7 +92,9 @@ export default function Schedule() {
     for (const application of accepted) {
       const outreach = application.outreach;
       if (!outreach) continue;
-      if (hasEventEnded(outreach.date, outreach.end_time)) done.push(application);
+      // Judged on the LAST day, not the first.
+      const finalDay = lastDay(dayStringsFor(outreach.id, outreach.date)) ?? outreach.date;
+      if (hasEventEnded(finalDay, outreach.end_time)) done.push(application);
       else ahead.push(application);
     }
 
@@ -75,7 +110,7 @@ export default function Schedule() {
     done.sort((a, b) => startOf(b) - startOf(a));
 
     return { upcoming: ahead, past: done };
-  }, [accepted]);
+  }, [accepted, dayStringsFor]);
 
   // One lookup for every organisation on the schedule — see useOrganisationLogos
   // for why the logo cannot come from the outreach embed.
@@ -215,7 +250,11 @@ export default function Schedule() {
 
           // A finished event is never "today" for the purpose of checking in —
           // the scan action must not reappear on it after the fact.
-          const isToday = !item.isPast && isEventToday(outreach.date);
+          // ANY day of the event, not just the first: day three of a campaign
+          // is as much "today" as day one, and the check-in action belongs on
+          // every one of them.
+          const isToday =
+            !item.isPast && isAnyDayToday(dayStringsFor(outreach.id, outreach.date));
 
           /*
             A CANCELLED EVENT STAYS ON THE SCHEDULE, MARKED.

@@ -229,3 +229,47 @@ export function needsAction(
   if (!row?.checked_in_at) return true;
   return row.location_check === 'mismatch';
 }
+
+/**
+ * How many of a volunteer's DAYS on an outreach they were present for.
+ *
+ * `days` is every day they COMMITTED to; `rowsByDay` is what is known about
+ * each. A day with no row counts as present, for exactly the reason `isPresent`
+ * defaults that way — the organiser flags real no-shows, and silence is not a
+ * judgement.
+ *
+ * Counted against the commitment rather than the event's span, which is the
+ * whole multi-day rule: four Saturdays attended out of four committed is a
+ * complete record, not four out of twenty-six.
+ */
+export function daysPresent(
+  committedDayIds: readonly string[],
+  rowsByDay: Readonly<Record<string, AttendanceState>>
+): number {
+  return committedDayIds.filter((dayId) => isPresent(rowsByDay[dayId])).length;
+}
+
+/**
+ * Whether a volunteer should open in the review sheet as a NO-SHOW.
+ *
+ * True only when the organiser resolved them absent on at least one day and
+ * they were never present on any of the days they committed to. Someone who
+ * came on three days of four is not a no-show, and seeding the review that way
+ * would put a -15 in front of an organiser as the starting position for a
+ * volunteer who mostly turned up.
+ *
+ * Days never committed to are not consulted at all, and an unresolved day is
+ * not evidence of anything — the same rule as an unrated review moving nothing.
+ */
+export function markedAbsentThroughout(
+  committedDayIds: readonly string[],
+  rowsByDay: Readonly<Record<string, AttendanceState>>
+): boolean {
+  const rows = committedDayIds
+    .map((dayId) => rowsByDay[dayId])
+    .filter((row): row is AttendanceState => !!row);
+
+  if (rows.length === 0) return false;
+  if (rows.some((row) => row.organiser_status === 'present' || row.checked_in_at)) return false;
+  return rows.some((row) => row.organiser_status === 'absent');
+}

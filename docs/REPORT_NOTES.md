@@ -687,7 +687,7 @@ and OpenStreetMap location work described above.
 
 ---
 
-## Multi-day outreaches: commitment, not span (approved 2026-08-12, not yet built)
+## Multi-day outreaches: commitment, not span (approved 2026-08-12, schema 2026-08-15, app 2026-08-18)
 
 **Problem.** The data model assumed one event, one day: a single `date` with a
 `start_time` and `end_time`. A screening campaign running for a month cannot be
@@ -1803,3 +1803,141 @@ Four behaviours the cards need to be usable rather than merely tidy:
 The list lives in one shared component used by both the picker modal and the
 onboarding step. Those two had separate copies of the same flat list before,
 which is how two screens that should look identical stop looking identical.
+
+---
+
+## Building the multi-day app on top of the multi-day schema (2026-08-18)
+
+The tables for multi-day outreaches went into the database on 2026-08-15 and
+nothing in the app had used them since. That gap turned out to be more than an
+unfinished feature: it had quietly broken a feature that was already working.
+
+### The breakage, and why it was invisible
+
+The 2026-08-12 migration changed `attendance` so that a row belongs to one DAY
+of an outreach rather than to the whole thing — `outreach_day_id` became NOT
+NULL and the uniqueness rule became (outreach, volunteer, day). The check-in
+endpoint was never updated to match. It still wrote a row with no day and still
+declared the old two-column conflict target, so every scan and every organiser
+attendance decision would have failed twice over: once on the NOT NULL column,
+and once because the `ON CONFLICT` clause named a constraint that no longer
+existed.
+
+Nothing surfaced it because nobody had scanned since the migration ran. This is
+worth recording as a project lesson rather than an incident: a schema change and
+the code that writes to it were shipped a week apart, and there was no test
+between them that would have noticed.
+
+Two related gaps came from the same source. Every outreach created after
+2026-08-15 had no day row at all, because the migration's backfill was
+one-shot — so even a fixed check-in would have had nothing to point at. And
+every application made since had no committed days, which is the denominator the
+entire accountability model divides by.
+
+### The invariants are now structural rather than remembered
+
+Both gaps are closed in the database rather than in client code, because a rule
+that lives in a screen is a rule that the next screen forgets.
+
+- A trigger writes the first `outreach_days` row in the same transaction as the
+  outreach itself. There is no code path that can produce a dayless outreach.
+- The application and its committed days are written by one plpgsql function,
+  and a function body is a transaction. This is the same argument that produced
+  `save_outreach()` for the details-and-roles problem. It matters more here:
+  a half-written application promises nothing, reads afterwards as "attended 0
+  of 0 days", and cannot be repaired from the volunteer's side, because the row
+  exists and re-applying is refused.
+
+### The three decisions that were not obvious
+
+**A day volunteers committed to cannot be deleted.** `application_days` cascades
+from `outreach_days`, so removing a day would silently erase every promise made
+against it — and those rows are what a V-Score is later derived from. The
+alternative considered was a warning in the editor, which was rejected for the
+same reason RLS is not enforced in the UI: a stale screen gets round it. The
+refusal is not a trap, because an organisation whose day 3 was rained off does
+not need to delete it. An unresolved day simply does not count, so leaving it
+costs nobody anything.
+
+**Rescheduling is not a change to the day set.** Moving a one-day outreach to a
+different date has always been allowed, including for events people have applied
+to. Expressed as a diff it is "remove day A, add day B", which would hit the
+refusal above and lock every organisation out of changing their own date. So one
+day becoming one different day is an in-place update, keeping the row and its
+commitments; anything else is a genuine set change and is governed by the
+refusal. The two cases genuinely are different things and the code says so.
+
+**A scan is refused on a day the event does not run.** This is a new bound and
+it follows from attendance being per day: there is no day to file the scan
+against. Every alternative required inventing one — the first day, the nearest
+day — which would put a record on a date the volunteer demonstrably was not
+there. It also matches the venue anchor, which was already only honoured on the
+event's own day.
+
+### Four places that read the FIRST day and needed the LAST
+
+`outreaches.date` is the first day and is kept in step by trigger, which is what
+lets the feed bound, the reminder window and the lifecycle close carry on
+unchanged. But four things were asking it a question it cannot answer.
+
+- **The volunteer's Schedule** decided an event was over using the first day, so
+  a four-day campaign would have moved to Past on the evening of day one —
+  taking the check-in action with it while the volunteer was still standing in
+  the event. This is the same failure that was already fixed once, one level up,
+  when `isUpcomingEvent` was replaced by `hasEventEnded`.
+- **The venue anchor check** compared against the first day, so an organiser
+  correctly anchoring the venue on day three would have had every genuine
+  on-site scan read as unverified.
+- **Check-in reminders** queried outreaches whose first day is today, so days
+  two onwards got no reminder at all. They now run off `outreach_days`.
+- **The reminder dedupe** was one flag per outreach, so day one's reminder
+  silenced every later day. The day id now joins the dedupe key.
+
+The reminders gained a fourth fix at the same time: they now go only to
+volunteers who committed to that day. Chasing a Saturday-only student to go and
+scan on the other 22 days of a campaign would read as the app not having
+listened to what they offered.
+
+### What the two sides see
+
+The organisation gets one list of days in the create wizard and the editor, with
+no multi-day switch anywhere — the same argument as the role builder. An
+outreach that runs on one day is not a different kind of event from one that runs
+on four; it is the one-day case of the same list. There are two ways to add a
+day because the two real shapes need different gestures: a clinic running
+Thursday to Saturday is three taps of "add the next day", while four Saturdays
+across a month need the calendar each time. Generating every day between a start
+and an end was rejected — it is wrong for the scattered case, which is the more
+common of the two here.
+
+The volunteer sees a day span wherever a date used to appear, and it deliberately
+reads differently for a run of days than for a scatter. "Mon Oct 12 – Wed Oct 14
+· 3 days" is a range; four Saturdays are shown as "4 days · Sat Oct 3 – Sat Oct
+24", leading with the count, because a volunteer who read that as a range would
+think they were being asked for 22 days.
+
+Before applying they tick the days they can make, with everything ticked to begin
+with — most people applying to a three-day clinic mean all three, so un-ticking
+is the deliberate act. The picker does not appear at all for a one-day outreach,
+which is every outreach until an organisation makes a longer one.
+
+The attendance screen resolves one day at a time and shows the day strip only
+when there is more than one. Its roster is the people who committed to THAT day,
+not every accepted volunteer — a student who offered four Saturdays must never
+appear on the other days as somebody to mark absent.
+
+### One correction to an existing rule
+
+The post-event review seeds its "no-show" position from the attendance screen so
+the two cannot disagree. Across several days, "were they marked absent" has no
+single answer, so the seed is now "absent throughout": resolved absent on at
+least one day, and never present on any day they committed to. Someone who came
+on three days of four is not a no-show, and opening their review at -15 would put
+the wrong starting position in front of the organisation.
+
+### Still gated
+
+The approved change that scales `event_outcome` by days attended over days
+committed is NOT built, and neither is continuous availability. `attendedRatio`
+exists as a pure function for display and is wired to nothing in the V-Score
+path, so no score has moved.

@@ -10,6 +10,8 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
   useOrganisationOutreaches,
   useOutreachApplications,
+  useOutreachCommitments,
+  useOutreachDays,
   useOutreachReviews,
   useSubmitEventReview,
 } from '@/hooks';
@@ -17,6 +19,7 @@ import type { ApplicationWithVolunteer, OutreachWithCounts } from '@/hooks';
 // Direct import: useAttendance stays out of the hooks barrel's native-module
 // blast radius, and this is the read half (no expo-location).
 import { useOutreachAttendance } from '@/hooks/useAttendance';
+import { markedAbsentThroughout } from '@/lib/attendance';
 import { useAuthStore } from '@/stores/authStore';
 import type { EventReview } from '@/types/database';
 
@@ -56,6 +59,8 @@ export default function Reviews() {
   const applicationsQuery = useOutreachApplications(selectedOutreachId);
   const reviewsQuery = useOutreachReviews(selectedOutreachId);
   const attendanceQuery = useOutreachAttendance(selectedOutreachId);
+  const daysQuery = useOutreachDays(selectedOutreachId);
+  const commitmentsQuery = useOutreachCommitments(selectedOutreachId);
   const submitReview = useSubmitEventReview();
 
   const attendance = attendanceQuery.data;
@@ -66,6 +71,30 @@ export default function Reviews() {
   );
 
   const [reviewing, setReviewing] = useState<ApplicationWithVolunteer | null>(null);
+
+  /**
+   * Whether the volunteer currently open in the review sheet should start as a
+   * NO-SHOW.
+   *
+   * NOT "were they marked absent" any more, because with several days that
+   * question has no single answer. Someone who came on three days of four is
+   * not a no-show, and opening their review at -15 would put the wrong starting
+   * position in front of the organisation. `markedAbsentThroughout` is true
+   * only when they were resolved absent and were never present on any day they
+   * committed to.
+   *
+   * The commitment is what it is measured against. An application with no
+   * commitment rows — every application made before commitments existed — falls
+   * back to every day of the event, which is what those applications meant.
+   */
+  const reviewingMarkedAbsent = useMemo(() => {
+    if (!reviewing) return undefined;
+    const allDayIds = (daysQuery.data ?? []).map((day) => day.id);
+    const committed = commitmentsQuery.data?.[reviewing.id];
+    const measuredAgainst = committed && committed.length > 0 ? committed : allDayIds;
+    return markedAbsentThroughout(measuredAgainst, attendance?.[reviewing.volunteer_id] ?? {});
+  }, [reviewing, daysQuery.data, commitmentsQuery.data, attendance]);
+
 
   const reviews = reviewsQuery.data;
   const reviewedCount = attendees.filter((a) => reviews?.[a.volunteer_id] !== undefined).length;
@@ -202,12 +231,9 @@ export default function Reviews() {
         existingReview={reviewing ? (reviews?.[reviewing.volunteer_id] ?? null) : null}
         // Seeded from the attendance screen so the two cannot disagree about
         // the same event: someone already flagged absent opens as a no-show
-        // rather than as "attended" waiting to be corrected.
-        markedAbsent={
-          reviewing
-            ? attendance?.[reviewing.volunteer_id]?.organiser_status === 'absent'
-            : undefined
-        }
+        // rather than as "attended" waiting to be corrected. Across several
+        // days, "flagged absent" means absent throughout — see above.
+        markedAbsent={reviewingMarkedAbsent}
         isPending={submitReview.isPending}
         errorMessage={
           submitReview.isError

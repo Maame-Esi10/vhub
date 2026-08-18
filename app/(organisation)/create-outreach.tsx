@@ -23,12 +23,14 @@ import {
 // routing it through '@/components/ui' would crash every screen on a dev
 // client that hasn't been rebuilt. See the note in components/ui/index.ts.
 import { DateTimeField } from '@/components/ui/DateTimeField';
+import { DayScheduleField } from '@/components/organisation/DayScheduleField';
 import type { SelectOption } from '@/components/ui';
 import {
   GalleryEditor,
   INITIAL_WIZARD_STATE,
   OutreachPreviewCard,
   RoleBuilder,
+  firstDay,
   hasWizardErrors,
   swapAdjacent,
   toStoragePayload,
@@ -40,10 +42,12 @@ import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { SKILL_CATEGORIES } from '@/constants/skills';
 import {
   MAX_GALLERY_IMAGES,
+  useAddOutreachDays,
   useAddOutreachImages,
   useCreateOutreach,
   useReplaceOutreachRoles,
 } from '@/hooks';
+import { sortDayStrings } from '@/lib/outreachDays';
 // Direct import, not the hooks barrel: this reaches the native picker
 // modules. See the note in lib/cloudinary.ts.
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
@@ -63,6 +67,7 @@ export default function CreateOutreach() {
   const router = useRouter();
   const organisationId = useAuthStore((s) => s.user)?.id;
   const createOutreach = useCreateOutreach();
+  const addDays = useAddOutreachDays();
   const replaceRoles = useReplaceOutreachRoles();
   const flyerUpload = useFlyerUpload();
   const galleryUpload = useGalleryImageUpload();
@@ -174,13 +179,17 @@ export default function CreateOutreach() {
     // quietly stopped requiring verification.
     const payload = toStoragePayload(state);
     const usesRoles = payload.roles.length > 0;
+    // `outreaches.date` is the FIRST day and nothing else. The remaining days
+    // are written below, once the outreach has an id to hang them on, and the
+    // database re-derives this column from them by trigger.
+    const days = sortDayStrings(state.days);
 
     createOutreach.mutate(
       {
         organisationId,
         title: state.title.trim(),
         description: state.description.trim() ? state.description.trim() : null,
-        date: state.date,
+        date: firstDay(state),
         startTime: state.startTime ? state.startTime : null,
         endTime: state.endTime ? state.endTime : null,
         region: state.region,
@@ -195,6 +204,29 @@ export default function CreateOutreach() {
       },
       {
         onSuccess: async (outreach) => {
+          // Days 2..n are written after the outreach exists, because they need
+          // its id. Day ONE already exists — `trg_outreaches_default_day` wrote
+          // it in the same transaction as the outreach itself, so an outreach
+          // can never exist without a day even if everything below fails.
+          //
+          // Surfaced rather than swallowed, and before the roles, because an
+          // event that lost days 2..n is describing the wrong commitment to
+          // every volunteer who reads it. The editor can put them back.
+          if (days.length > 1) {
+            try {
+              await addDays.mutateAsync({ outreachId: outreach.id, days });
+            } catch (error) {
+              console.warn(
+                '[create-outreach] outreach saved but its extra days did not:',
+                error instanceof Error ? error.message : error
+              );
+              setRoleError(
+                'The outreach was saved, but only its first day was. Open it from the dashboard and add the other days again.'
+              );
+              return;
+            }
+          }
+
           // Roles are written after the outreach exists, because they need its
           // id. Best-effort in the sense that the outreach is already saved if
           // this fails — but NOT silent: a multi-role outreach with no roles is
@@ -417,15 +449,21 @@ export default function CreateOutreach() {
                 'YYYY-MM-DD' / 'HH:MM' strings the validation and the Layer 1
                 availability scorer already expect.
               */}
-              <DateTimeField
-                label="Event Date"
-                mode="date"
-                value={state.date}
-                onChange={(next) => update('date', next)}
-                minimumToday
-                error={errors.date}
-                accessibilityLabel="Event date"
-              />
+              {/*
+                A LIST OF DAYS, not one date. Single-day is the one-entry case,
+                so there is no mode to choose and nothing changes for the
+                organisation running an ordinary one-day clinic.
+              */}
+              <View style={styles.daysSection}>
+                <DayScheduleField
+                  days={state.days}
+                  onChange={(next) => update('days', next)}
+                  error={errors.date}
+                />
+              </View>
+              <Text style={styles.timesHint}>
+                These hours apply to every day of the outreach.
+              </Text>
               <View style={styles.timeRow}>
                 <View style={styles.timeField}>
                   <DateTimeField
@@ -614,6 +652,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.danger,
     marginTop: spacing.sm,
+  },
+  // The day list is a block of its own, not another field jammed into the
+  // stack — it carries chips, two buttons and a summary line, and needs room to
+  // read as one thing rather than as loose controls between the venue and the
+  // times.
+  daysSection: {
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+    paddingTop: spacing.base,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  timesHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   timeRow: {
     flexDirection: 'row',

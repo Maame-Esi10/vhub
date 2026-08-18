@@ -26,10 +26,13 @@ import {
 // routing it through '@/components/ui' would crash every screen on a dev
 // client that hasn't been rebuilt. See the note in components/ui/index.ts.
 import { DateTimeField } from '@/components/ui/DateTimeField';
+import { DayScheduleField } from '@/components/organisation/DayScheduleField';
 import type { SelectOption } from '@/components/ui';
 import {
   GalleryEditor,
   RoleBuilder,
+  daysChanged,
+  firstDay,
   hasWizardErrors,
   roleKey,
   rolesChanged,
@@ -49,11 +52,14 @@ import {
   useDeleteOutreachImage,
   useOutreach,
   useOutreachApplications,
+  useOutreachCommitments,
+  useOutreachDays,
   useOutreachImages,
   useOutreachRoles,
   useReorderOutreachImages,
   useSaveOutreach,
 } from '@/hooks';
+import { sortDayStrings } from '@/lib/outreachDays';
 // Direct import, not the hooks barrel: this reaches the native picker
 // modules. See the note in lib/cloudinary.ts.
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
@@ -85,6 +91,8 @@ export default function EditOutreach() {
 
   const outreachQuery = useOutreach(outreachId);
   const rolesQuery = useOutreachRoles(outreachId);
+  const daysQuery = useOutreachDays(outreachId);
+  const commitmentsQuery = useOutreachCommitments(outreachId);
   const applicationsQuery = useOutreachApplications(outreachId);
   const saveOutreach = useSaveOutreach();
   const flyerUpload = useFlyerUpload();
@@ -140,6 +148,23 @@ export default function EditOutreach() {
 
   const outreach = outreachQuery.data;
   const storedRoles = useMemo(() => rolesQuery.data ?? [], [rolesQuery.data]);
+  const storedDays = useMemo(() => daysQuery.data ?? [], [daysQuery.data]);
+  const storedDayStrings = useMemo(() => storedDays.map((day) => day.day), [storedDays]);
+
+  /**
+   * The days that already carry a commitment, as calendar dates.
+   *
+   * Shown locked in the day list, because the database refuses to delete them:
+   * `application_days` cascades from `outreach_days`, so removing a day would
+   * silently erase every promise made against it — and those rows are the
+   * evidence a V-Score is derived from. The refusal is at the database rather
+   * than only here, so a stale screen cannot get round it; this just means the
+   * organisation is told before they try rather than after.
+   */
+  const committedDayDates = useMemo(() => {
+    const committedDayIds = new Set(Object.values(commitmentsQuery.data ?? {}).flat());
+    return storedDays.filter((day) => committedDayIds.has(day.id)).map((day) => day.day);
+  }, [commitmentsQuery.data, storedDays]);
 
   /*
     HYDRATION IS KEYED ON THE OUTREACH, NOT ON "HAVE WE HYDRATED YET".
@@ -158,7 +183,11 @@ export default function EditOutreach() {
     array to be non-empty.
   */
   const hydratedFor = useRef<string | null>(null);
-  const ready = !!outreach && !rolesQuery.isPending;
+  // The DAYS query joins the wait for the same reason the roles one does:
+  // hydrating before it settles would populate the form with a single day
+  // derived from `outreaches.date`, and a save from there would delete every
+  // other day of a multi-day event.
+  const ready = !!outreach && !rolesQuery.isPending && !daysQuery.isPending;
   useEffect(() => {
     if (!ready || !outreach || !outreachId) return;
     // The query can still be serving the previous event's row for one render
@@ -167,7 +196,7 @@ export default function EditOutreach() {
     if (hydratedFor.current === outreachId) return;
 
     hydratedFor.current = outreachId;
-    setState(wizardStateFromOutreach(outreach, storedRoles));
+    setState(wizardStateFromOutreach(outreach, storedRoles, storedDays));
     // Everything derived from the previous event goes with it.
     setErrors({});
     setSaveError(null);
@@ -175,7 +204,7 @@ export default function EditOutreach() {
     setGalleryError(null);
     setRoleWarning(false);
     scrolledToSection.current = false;
-  }, [ready, outreach, outreachId, storedRoles]);
+  }, [ready, outreach, outreachId, storedRoles, storedDays]);
 
   /** The roles as they are stored, in the form's own shape, for change detection. */
   const storedRoleDrafts = useMemo(
@@ -348,6 +377,7 @@ export default function EditOutreach() {
   // one role and a database holding none are in agreement, not conflict.
   const payload = toStoragePayload(state);
   const roleListChanged = rolesChanged(storedRoleDrafts, payload.roles);
+  const dayListChanged = !!state && daysChanged(storedDayStrings, state.days);
 
   /**
    * Places can never fall below the volunteers already accepted — the database
@@ -407,7 +437,7 @@ export default function EditOutreach() {
   function attemptSave() {
     if (!state || !outreach) return;
 
-    const nextErrors = validateOutreachEdit(state, outreach.date);
+    const nextErrors = validateOutreachEdit(state, storedDayStrings);
     setErrors(nextErrors);
     if (hasWizardErrors(nextErrors)) return;
 
@@ -455,7 +485,7 @@ export default function EditOutreach() {
         organisationId,
         title: state.title.trim(),
         description: state.description.trim() ? state.description.trim() : null,
-        date: state.date,
+        date: firstDay(state),
         startTime: state.startTime ? state.startTime : null,
         endTime: state.endTime ? state.endTime : null,
         region: state.region,
@@ -473,6 +503,11 @@ export default function EditOutreach() {
         // would delete and reinsert rows for no reason, dropping the role link
         // off every application that pointed at them.
         roles: roleListChanged ? shape.roles : null,
+        // Same contract as the roles: null leaves the days alone, which is the
+        // common save. Sending an unchanged list would delete and re-insert
+        // rows for no reason — and `application_days` cascades from them, so
+        // that would destroy every commitment on the event.
+        days: dayListChanged ? sortDayStrings(state.days) : null,
       });
 
       // Confirmation belongs on the destination, not here: the organisation
@@ -630,17 +665,19 @@ export default function EditOutreach() {
             {/*
               minimumToday is deliberately NOT set here. An outreach that has
               already happened is an ordinary thing to edit, and pinning the
-              picker to today would make its own date unreachable. Moving the
-              date INTO the past is still refused by validateOutreachEdit.
+              picker to today would make its own days unreachable. Moving a day
+              INTO the past is still refused by validateOutreachEdit.
             */}
-            <DateTimeField
-              label="Event Date"
-              mode="date"
-              value={state.date}
-              onChange={(next) => update('date', next)}
-              error={errors.date}
-              accessibilityLabel="Event date"
-            />
+            <View style={styles.daysSection}>
+              <DayScheduleField
+                days={state.days}
+                onChange={(next) => update('days', next)}
+                error={errors.date}
+                minimumToday={false}
+                lockedDays={committedDayDates}
+              />
+            </View>
+            <Text style={styles.timesHint}>These hours apply to every day of the outreach.</Text>
             <View style={styles.timeRow}>
               <View style={styles.timeField}>
                 <DateTimeField
@@ -843,6 +880,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.danger,
     marginTop: spacing.sm,
+  },
+  // The day list is a block, not another field in the stack: chips, two
+  // buttons and a summary need room to read as one control rather than as
+  // loose pieces wedged between the venue and the times.
+  daysSection: {
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+    paddingTop: spacing.base,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  timesHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   timeRow: {
     flexDirection: 'row',

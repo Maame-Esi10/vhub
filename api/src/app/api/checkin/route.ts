@@ -81,6 +81,14 @@ const ResolveBody = z.object({
   volunteerId: z.string().uuid(),
   status: z.enum(["present", "absent"]),
   note: z.string().max(1000).optional(),
+  /**
+   * WHICH DAY the organiser is deciding about. Optional only because a
+   * single-day outreach leaves nothing to choose — see `resolveDayId`. On an
+   * outreach with several days this is required, and asking for it is refused
+   * rather than guessed: picking a day on the organiser's behalf would file a
+   * judgement against a day they were not looking at.
+   */
+  outreachDayId: z.string().uuid().optional(),
 });
 
 const CheckinRequestBody = z.discriminatedUnion("mode", [
@@ -111,7 +119,7 @@ export async function POST(request: Request) {
 // ---------------------------------------------------------------------------
 
 async function anchorVenue(caller: AuthedCaller, body: z.infer<typeof AnchorVenueBody>) {
-  const outreach = await assertOwnsOutreach(caller, body.outreachId);
+  await assertOwnsOutreach(caller, body.outreachId);
   const admin = getSupabaseAdmin();
 
   const anchoredAt = new Date().toISOString();
@@ -125,13 +133,25 @@ async function anchorVenue(caller: AuthedCaller, body: z.infer<typeof AnchorVenu
     .eq("id", body.outreachId);
   if (error) throw Errors.internal("Could not save the venue location.");
 
+  // Echoed so the QR screen can tell the organiser whether the anchor it just
+  // saved will actually be honoured -- an anchor captured on the wrong day is
+  // discarded rather than trusted.
+  //
+  // "The right day" is ANY day this outreach runs on, not `outreaches.date`,
+  // which is only the first. An organiser anchoring the venue on day three of
+  // a campaign was previously told their anchor would not count, which was
+  // wrong and would have made them stop bothering.
+  const { data: todayRow } = await admin
+    .from("outreach_days")
+    .select("day")
+    .eq("outreach_id", body.outreachId)
+    .eq("day", todayIsoDate())
+    .maybeSingle();
+
   return {
     outreachId: body.outreachId,
     anchoredAt,
-    // Echoed so the QR screen can tell the organiser whether the anchor it
-    // just saved will actually be honoured -- an anchor captured on the wrong
-    // day is discarded rather than trusted.
-    usableForEvent: isVenueAnchorUsable(anchoredAt, outreach.date as string | null),
+    usableForEvent: isVenueAnchorUsable(anchoredAt, (todayRow?.day as string | null) ?? null),
   };
 }
 
@@ -208,11 +228,24 @@ async function recordScan(
     );
   }
 
+  // WHICH DAY is being checked into: the one happening today. A scan is a
+  // physical act at a venue, so there is exactly one honest answer and no need
+  // to ask the volunteer — but there has to BE an answer, because attendance is
+  // now recorded per day and a single scan must never mark someone present for
+  // a month-long campaign.
+  const day = await todayDay(body.outreachId);
+
   // The silent location check. Coordinates enter here and go no further: the
   // verdict is all that survives this function.
+  //
+  // Checked against TODAY'S day rather than `outreaches.date`, which is only
+  // the FIRST day. On a four-day campaign the old comparison would have
+  // discarded the anchor on days two, three and four — every genuine on-site
+  // scan reading as unverified — because the anchor was correctly captured
+  // that morning rather than on day one.
   const anchorUsable = isVenueAnchorUsable(
     outreach.venue_anchored_at as string | null,
-    outreach.date as string | null
+    day.day
   );
   const venue = anchorUsable
     ? {
@@ -227,16 +260,19 @@ async function recordScan(
 
   const locationCheck: LocationCheck = classifyScanLocation(scan, venue);
 
+  const outreachDayId = day.id;
+
   const checkedInAt = new Date().toISOString();
   const { error: upsertError } = await admin.from("attendance").upsert(
     {
       outreach_id: body.outreachId,
       volunteer_id: userId,
+      outreach_day_id: outreachDayId,
       checked_in_at: checkedInAt,
       check_in_method: "qr_scan",
       location_check: locationCheck,
     },
-    { onConflict: "outreach_id,volunteer_id" }
+    { onConflict: "outreach_id,volunteer_id,outreach_day_id" }
   );
   if (upsertError) throw Errors.internal("Could not record your check-in.");
 
@@ -246,9 +282,50 @@ async function recordScan(
   // would also teach anyone gaming it exactly where the boundary sits.
   return {
     outreachId: body.outreachId,
+    outreachDayId,
     checkedInAt,
     present: true,
   };
+}
+
+/**
+ * The `outreach_days` row for TODAY, or a refusal naming why there isn't one.
+ *
+ * Ghana is GMT year-round, so the server's own UTC date is the local calendar
+ * date — no timezone conversion, and none should be added without also deciding
+ * whose timezone would win.
+ *
+ * Refusing a scan on a day the event does not run is a NEW bound, and a
+ * deliberate one. It follows from attendance being per day: there is no day to
+ * file the scan against, and inventing one (the first day? the nearest?) would
+ * put a record on a date the volunteer was demonstrably not there. It also
+ * matches the venue anchor, which is already honoured only on the day it was
+ * captured for.
+ */
+async function todayDay(outreachId: string): Promise<{ id: string; day: string }> {
+  const admin = getSupabaseAdmin();
+  const today = todayIsoDate();
+
+  const { data, error } = await admin
+    .from("outreach_days")
+    .select("id, day")
+    .eq("outreach_id", outreachId)
+    .eq("day", today)
+    .maybeSingle();
+
+  if (error) throw Errors.internal("Could not work out which day of this outreach today is.");
+  if (!data) {
+    throw Errors.forbidden(
+      "This outreach is not running today, so there is nothing to check in to. Check the dates on the event."
+    );
+  }
+
+  return { id: data.id as string, day: data.day as string };
+}
+
+/** Today as `YYYY-MM-DD`. Ghana is GMT year-round, so UTC is the local calendar date. */
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 // ---------------------------------------------------------------------------
@@ -270,24 +347,73 @@ async function resolveAttendance(caller: AuthedCaller, body: z.infer<typeof Reso
   await assertOwnsOutreach(caller, body.outreachId);
   const admin = getSupabaseAdmin();
 
+  const outreachDayId = await resolveDayId(body.outreachId, body.outreachDayId);
+
   const resolvedAt = new Date().toISOString();
   const { error } = await admin.from("attendance").upsert(
     {
       outreach_id: body.outreachId,
       volunteer_id: body.volunteerId,
+      outreach_day_id: outreachDayId,
       organiser_status: body.status,
       organiser_note: body.note ?? null,
       resolved_by: caller.userId,
       resolved_at: resolvedAt,
     },
-    { onConflict: "outreach_id,volunteer_id" }
+    { onConflict: "outreach_id,volunteer_id,outreach_day_id" }
   );
   if (error) throw Errors.internal("Could not save that attendance decision.");
 
   return {
     outreachId: body.outreachId,
+    outreachDayId,
     volunteerId: body.volunteerId,
     status: body.status,
     resolvedAt,
   };
+}
+
+/**
+ * Which day an organiser's decision belongs to.
+ *
+ * A day sent explicitly is checked against this outreach and used. A day left
+ * out is only acceptable when the outreach HAS one day, where there was never a
+ * choice to make — which is every outreach on the platform until somebody
+ * creates a multi-day one, and is why the field is optional at all. Beyond
+ * that, guessing is refused: filing an absence against the wrong day of a
+ * campaign is precisely the error the per-day model exists to prevent.
+ */
+async function resolveDayId(outreachId: string, requested: string | undefined): Promise<string> {
+  const admin = getSupabaseAdmin();
+
+  const { data, error } = await admin
+    .from("outreach_days")
+    .select("id")
+    .eq("outreach_id", outreachId)
+    .order("day", { ascending: true });
+
+  if (error) throw Errors.internal("Could not load the days of this outreach.");
+
+  const days = (data ?? []) as { id: string }[];
+  if (days.length === 0) {
+    // trg_outreaches_default_day makes this unreachable for anything created
+    // after 20260818_multi_day_app_support.sql, and the repair in that same
+    // migration covers everything created before it.
+    throw Errors.internal("This outreach has no days recorded, so attendance cannot be filed.");
+  }
+
+  if (requested) {
+    if (!days.some((day) => day.id === requested)) {
+      throw Errors.badRequest("That day does not belong to this outreach.");
+    }
+    return requested;
+  }
+
+  if (days.length > 1) {
+    throw Errors.badRequest(
+      "This outreach runs over several days, so say which day this decision is about."
+    );
+  }
+
+  return days[0]!.id;
 }

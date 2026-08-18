@@ -2,9 +2,11 @@ import {
   CONFIRM_RADIUS_METRES,
   MISMATCH_RADIUS_METRES,
   classifyScanLocation,
+  daysPresent,
   distanceInMetres,
   isPresent,
   isVenueAnchorUsable,
+  markedAbsentThroughout,
   needsAction,
   needsOrganiserReview,
 } from '../attendance';
@@ -206,5 +208,79 @@ describe('mismatch threshold is district-scaled', () => {
 
   it('still escalates a scan from another region entirely', () => {
     expect(classifyScanLocation(KUMASI, KORLE_BU)).toBe('mismatch');
+  });
+});
+
+describe('attendance across several days', () => {
+  // A four-day campaign. The volunteer committed to all four.
+  const ALL_FOUR = ['day-1', 'day-2', 'day-3', 'day-4'];
+
+  it('counts a day with no record as present, exactly as isPresent does', () => {
+    expect(daysPresent(ALL_FOUR, {})).toBe(4);
+  });
+
+  it('subtracts only the days the organiser actually flagged', () => {
+    expect(
+      daysPresent(ALL_FOUR, {
+        'day-2': { organiser_status: 'absent' },
+        'day-3': { checked_in_at: '2026-10-14T09:00:00Z' },
+      })
+    ).toBe(3);
+  });
+
+  it('ignores days outside the commitment entirely', () => {
+    // The Saturday-only student. Days 2, 3 and 4 were never promised, so being
+    // marked absent on them must cost nothing.
+    expect(
+      daysPresent(['day-1'], {
+        'day-1': { checked_in_at: '2026-10-12T09:00:00Z' },
+        'day-2': { organiser_status: 'absent' },
+        'day-3': { organiser_status: 'absent' },
+        'day-4': { organiser_status: 'absent' },
+      })
+    ).toBe(1);
+  });
+});
+
+describe('markedAbsentThroughout', () => {
+  const ALL_FOUR = ['day-1', 'day-2', 'day-3', 'day-4'];
+
+  it('is false when nothing has been recorded — silence is not a judgement', () => {
+    expect(markedAbsentThroughout(ALL_FOUR, {})).toBe(false);
+  });
+
+  it('is false for someone absent on one day who came on another', () => {
+    // Three days out of four is not a no-show, and opening their review at -15
+    // would be the wrong starting position to put in front of an organiser.
+    expect(
+      markedAbsentThroughout(ALL_FOUR, {
+        'day-1': { checked_in_at: '2026-10-12T09:00:00Z' },
+        'day-2': { organiser_status: 'absent' },
+      })
+    ).toBe(false);
+  });
+
+  it('is true when every recorded day is an absence', () => {
+    expect(
+      markedAbsentThroughout(ALL_FOUR, {
+        'day-1': { organiser_status: 'absent' },
+        'day-2': { organiser_status: 'absent' },
+      })
+    ).toBe(true);
+  });
+
+  it('is false when the only records are on days never committed to', () => {
+    expect(
+      markedAbsentThroughout(['day-1'], { 'day-2': { organiser_status: 'absent' } })
+    ).toBe(false);
+  });
+
+  it('is false when a day was resolved present, even with no scan', () => {
+    expect(
+      markedAbsentThroughout(ALL_FOUR, {
+        'day-1': { organiser_status: 'present' },
+        'day-2': { organiser_status: 'absent' },
+      })
+    ).toBe(false);
   });
 });

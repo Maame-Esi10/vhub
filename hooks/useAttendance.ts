@@ -22,6 +22,16 @@ export const attendanceKeys = {
 };
 
 /**
+ * Attendance for one outreach, keyed by volunteer and then by DAY.
+ *
+ * Two levels because attendance is now per day: `byVolunteerAndDay[volunteerId]
+ * [outreachDayId]`. A volunteer with no entry at all never scanned and has
+ * never been resolved on any day, which is the ordinary state of most people
+ * and still reads as present.
+ */
+export type AttendanceByVolunteerAndDay = Record<string, Record<string, Attendance>>;
+
+/**
  * The check-in code for one of the organisation's own outreaches — the secret
  * the QR encodes.
  *
@@ -62,35 +72,51 @@ export function useOutreachCheckinCode(outreachId: string | undefined) {
   });
 }
 
-/** The signed-in volunteer's own attendance row for one outreach, or null if they never checked in. */
+/**
+ * The signed-in volunteer's own attendance rows for one outreach, keyed by day.
+ *
+ * A LIST, not a row: attendance is per day, so a volunteer on a four-day
+ * campaign has up to four. An empty map means they have never checked in to any
+ * day of it.
+ */
 export function useMyAttendance(outreachId: string | undefined, volunteerId: string | undefined) {
   return useQuery({
     queryKey: attendanceKeys.mine(outreachId ?? 'unknown'),
     enabled: !!outreachId && !!volunteerId,
-    queryFn: async (): Promise<Attendance | null> => {
+    queryFn: async (): Promise<Record<string, Attendance>> => {
       const { data, error } = await supabase
         .from('attendance')
         .select('*')
         .eq('outreach_id', outreachId!)
-        .eq('volunteer_id', volunteerId!)
-        .maybeSingle();
+        .eq('volunteer_id', volunteerId!);
 
       if (error) {
         throw new Error(error.message || 'Could not load your check-in for this outreach.');
       }
-      return (data as Attendance | null) ?? null;
+
+      const byDay: Record<string, Attendance> = {};
+      for (const row of (data ?? []) as Attendance[]) {
+        byDay[row.outreach_day_id] = row;
+      }
+      return byDay;
     },
   });
 }
 
 /**
- * Every attendance row for one outreach, keyed by volunteer id.
+ * Every attendance row for one outreach, keyed by volunteer and then by day.
  *
- * Keyed by volunteer id rather than an array because the caller joins it against the accepted
+ * Keyed rather than an array because the caller joins it against the accepted
  * applicants: the roster is the list of people, and attendance is what is
  * KNOWN about each of them so far. Most will have no row at all — that is not
  * a gap to fill in, it is the ordinary state of someone who has not scanned,
  * and it still reads as present.
+ *
+ * THE SECOND LEVEL IS THE MULTI-DAY CHANGE. This used to be one row per
+ * volunteer, which is exactly what stopped being true when
+ * 20260812_multi_day_outreaches.sql made the unique key (outreach, volunteer,
+ * day): flattening several days back into one entry would have shown the
+ * organiser whichever day the database happened to return last.
  *
  * `attendance_select_own_or_org` scopes this to the outreach's owner, so an
  * organisation sees its own event and nothing else.
@@ -99,7 +125,7 @@ export function useOutreachAttendance(outreachId: string | undefined) {
   return useQuery({
     queryKey: attendanceKeys.byOutreach(outreachId ?? 'unknown'),
     enabled: !!outreachId,
-    queryFn: async (): Promise<Record<string, Attendance>> => {
+    queryFn: async (): Promise<AttendanceByVolunteerAndDay> => {
       const { data, error } = await supabase
         .from('attendance')
         .select('*')
@@ -109,18 +135,48 @@ export function useOutreachAttendance(outreachId: string | undefined) {
         throw new Error(error.message || 'Could not load attendance for this outreach.');
       }
 
-      const byVolunteer: Record<string, Attendance> = {};
+      const byVolunteerAndDay: AttendanceByVolunteerAndDay = {};
       for (const row of (data ?? []) as Attendance[]) {
-        byVolunteer[row.volunteer_id] = row;
+        const forVolunteer = byVolunteerAndDay[row.volunteer_id] ?? {};
+        forVolunteer[row.outreach_day_id] = row;
+        byVolunteerAndDay[row.volunteer_id] = forVolunteer;
       }
-      return byVolunteer;
+      return byVolunteerAndDay;
     },
   });
+}
+
+/**
+ * The slice of `useOutreachAttendance` for ONE day, keyed by volunteer — the
+ * shape the attendance screen actually works in, since an organiser resolves
+ * one day at a time.
+ *
+ * A plain selector rather than another query, so the screen's day switcher
+ * costs no network at all.
+ */
+export function attendanceForDay(
+  byVolunteerAndDay: AttendanceByVolunteerAndDay,
+  outreachDayId: string | undefined
+): Record<string, Attendance> {
+  if (!outreachDayId) return {};
+
+  const forDay: Record<string, Attendance> = {};
+  for (const [volunteerId, days] of Object.entries(byVolunteerAndDay)) {
+    const row = days[outreachDayId];
+    if (row) forDay[volunteerId] = row;
+  }
+  return forDay;
 }
 
 export interface ResolveAttendanceParams {
   outreachId: string;
   volunteerId: string;
+  /**
+   * Which day the decision is about. Optional only for a single-day outreach,
+   * where the server fills it in because there was nothing to choose; on
+   * anything longer, omitting it is refused rather than guessed.
+   */
+  outreachDayId?: string;
   status: OrganiserAttendanceStatus;
   note?: string;
 }
@@ -146,7 +202,13 @@ export function useResolveAttendance() {
 
   return useMutation({
     mutationFn: async (params: ResolveAttendanceParams): Promise<ResolveAttendanceResponse> =>
-      resolveAttendance(params.outreachId, params.volunteerId, params.status, params.note),
+      resolveAttendance({
+        outreachId: params.outreachId,
+        volunteerId: params.volunteerId,
+        outreachDayId: params.outreachDayId,
+        status: params.status,
+        note: params.note,
+      }),
     onSuccess: (_result, params) => {
       queryClient.invalidateQueries({ queryKey: attendanceKeys.byOutreach(params.outreachId) });
       queryClient.invalidateQueries({ queryKey: attendanceKeys.mine(params.outreachId) });

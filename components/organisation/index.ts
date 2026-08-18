@@ -16,9 +16,16 @@ export { GalleryEditor } from './GalleryEditor';
 export type { GalleryEditorProps } from './GalleryEditor';
 export { OutreachPreviewCard } from './OutreachPreviewCard';
 export type { OutreachPreviewCardProps } from './OutreachPreviewCard';
+// DayScheduleField is deliberately NOT exported here — it imports
+// @react-native-community/datetimepicker, a NATIVE module, and this barrel is
+// imported by the dashboard, applicant list, attendance and review screens,
+// none of which need a calendar. Import it directly:
+// `import { DayScheduleField } from '@/components/organisation/DayScheduleField';`
+// Same rule as DateTimeField in components/ui.
 export {
   INITIAL_WIZARD_STATE,
   INITIAL_ROLE,
+  firstDay,
   validateWizard,
   validateRoles,
   validateOutreachEdit,
@@ -26,6 +33,7 @@ export {
   wizardStateFromOutreach,
   toStoragePayload,
   rolesChanged,
+  daysChanged,
   swapAdjacent,
 } from './outreachWizard';
 export type {
