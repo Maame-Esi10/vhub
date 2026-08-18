@@ -162,6 +162,16 @@ export default function EditOutreach() {
    * organisation is told before they try rather than after.
    */
   const committedDayDates = useMemo(() => {
+    // A ONE-DAY OUTREACH IS NEVER LOCKED, and this is not an oversight.
+    //
+    // Its only day is committed the moment anybody applies, so locking it would
+    // mean an organisation could never change the date of a one-day event with
+    // applicants — which they have always been able to do, and which
+    // save_outreach() explicitly still supports by MOVING the row in place
+    // rather than deleting it. The padlock exists to stop a day being dropped
+    // from a set, and a one-day event has no set to drop from.
+    if (storedDays.length <= 1) return [];
+
     const committedDayIds = new Set(Object.values(commitmentsQuery.data ?? {}).flat());
     return storedDays.filter((day) => committedDayIds.has(day.id)).map((day) => day.day);
   }, [commitmentsQuery.data, storedDays]);
