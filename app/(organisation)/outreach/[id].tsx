@@ -24,7 +24,9 @@ import {
   useDeleteOutreach,
   useOutreach,
   useOutreachApplications,
+  useOutreachDays,
 } from '@/hooks';
+import { formatDaySpan, lastDay } from '@/lib/outreachDays';
 import { isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachStatus } from '@/types/database';
@@ -107,6 +109,15 @@ export default function OrganisationOutreachDetail() {
   const outreachQuery = useOutreach(id);
   const outreach = outreachQuery.data;
 
+  // Needed for "is it over?", which must read the LAST day rather than
+  // `outreaches.date`. Falls back to the outreach's own date while it loads,
+  // which is exactly right for the one-day event most of them are.
+  const daysQuery = useOutreachDays(id);
+  const eventDayStrings = useMemo(
+    () => (daysQuery.data ?? []).map((day) => day.day),
+    [daysQuery.data]
+  );
+
   const completeOrCancel = useCompleteOrCancelOutreach();
   const deleteOutreach = useDeleteOutreach();
   const [confirming, setConfirming] = useState<'completed' | 'cancelled' | 'delete' | null>(null);
@@ -170,7 +181,21 @@ export default function OrganisationOutreachDetail() {
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
   const place = [outreach.location_name, outreach.district, outreach.region].filter(Boolean).join(', ');
   const daysOut = daysUntilEvent(outreach.date);
-  const eventOver = hasEventEnded(outreach.date, outreach.end_time);
+  /*
+    OVER MEANS THE LAST DAY HAS ENDED, not the first.
+
+    `outreaches.date` is the first day, so a three-day clinic judged on it was
+    "over" from the evening of day one — which offered "Mark as completed" and
+    withdrew "Cancel this event" while the event still had two days to run. Both
+    are wrong in the same direction: they treat a running event as a finished
+    one.
+
+    `started` correctly keeps reading the FIRST day. An event has begun when its
+    first day begins, and that is what decides whether there is any attendance to
+    mark yet.
+  */
+  const finalDay = lastDay(eventDayStrings) ?? outreach.date;
+  const eventOver = hasEventEnded(finalDay, outreach.end_time);
   const started = !isUpcomingEvent(outreach.date, outreach.start_time);
   const isDraft = outreach.status === 'draft';
 
@@ -284,7 +309,7 @@ export default function OrganisationOutreachDetail() {
               router.push(`/(organisation)/edit-outreach/${outreach.id}?section=when`)
             }
           >
-            {formatEventDate(outreach.date)}
+            {formatDaySpan(eventDayStrings) || formatEventDate(outreach.date)}
             {timeRange ? ` · ${timeRange}` : ''}
           </DetailRow>
           {place ? (

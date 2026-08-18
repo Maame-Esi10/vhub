@@ -17,11 +17,13 @@ import {
   formatEventTimeRange,
 } from '@/components/ui';
 import { useOutreach } from '@/hooks/useOutreaches';
+import { useOutreachDays } from '@/hooks/useOutreachDays';
 import { useOutreachCheckinCode } from '@/hooks/useAttendance';
 // Separate module because it reaches expo-location — see the note at its top.
 import { useAnchorVenue } from '@/hooks/useCheckInScan';
 import { encodeCheckinQr } from '@/lib/checkin-qr';
 import { isVenueAnchorUsable } from '@/lib/attendance';
+import { formatDaySpan, lastDay, todayIso } from '@/lib/outreachDays';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
 /**
@@ -46,6 +48,7 @@ const QR_SIZE = 232;
 export default function OrganisationCheckinQr() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const outreachQuery = useOutreach(id);
+  const daysQuery = useOutreachDays(id);
   const codeQuery = useOutreachCheckinCode(id);
   const anchor = useAnchorVenue();
   const [confirmingAnchor, setConfirmingAnchor] = useState(false);
@@ -87,9 +90,29 @@ export default function OrganisationCheckinQr() {
   // against a table only this organisation can read.
   const qrValue = encodeCheckinQr({ outreachId: outreach.id, code: codeQuery.data });
 
-  const anchored = isVenueAnchorUsable(outreach.venue_anchored_at, outreach.date);
+  /*
+    THE ANCHOR IS JUDGED AGAINST TODAY, NOT AGAINST outreaches.date.
+
+    `date` is only the FIRST day. On day three of a campaign this badge read
+    `isVenueAnchorUsable(anchoredAt, firstDay)`, which is false however correctly
+    the organiser had just marked the venue that morning — so the screen told
+    them their anchor "was marked on a different day and will not be used" while
+    the server was in fact using it. An organiser told that twice stops
+    bothering, and the location check quietly dies.
+
+    Today is the right comparison because an anchor only ever counts on the day
+    it was captured, and the server resolves a scan against today's day row.
+    `todayIso()` falls back to nothing: when today is not one of the event's days
+    the badge reads "not marked", which is true — there is no scan to verify.
+  */
+  const eventDays = daysQuery.data ?? [];
+  const anchorDay = eventDays.some((day) => day.day === todayIso())
+    ? todayIso()
+    : (lastDay(eventDays.map((day) => day.day)) ?? outreach.date);
+  const anchored = isVenueAnchorUsable(outreach.venue_anchored_at, anchorDay);
   const anchoredSomeDay = !!outreach.venue_anchored_at;
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
+  const daySpan = formatDaySpan(eventDays.map((day) => day.day));
 
   // LocationUnavailableError's messages are written to be shown as-is (they
   // already name the fix — enable it in Settings, step outside), and the API
@@ -103,7 +126,7 @@ export default function OrganisationCheckinQr() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>{outreach.title}</Text>
         <Text style={styles.meta}>
-          {formatEventDate(outreach.date)}
+          {daySpan || formatEventDate(outreach.date)}
           {timeRange ? ` · ${timeRange}` : ''}
         </Text>
         {outreach.location_name ? (
