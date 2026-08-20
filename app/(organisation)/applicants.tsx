@@ -9,6 +9,7 @@ import {
   ErrorState,
   FilterChips,
   ListSkeleton,
+  Toast,
 } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { ApplicantCard, OutreachPicker, RosterSummaryCard } from '@/components/organisation';
@@ -41,6 +42,22 @@ const FILTERS: FilterChipOption<StatusFilter>[] = [
   { value: 'waitlisted', label: 'Waitlisted' },
   { value: 'rejected', label: 'Rejected' },
 ];
+
+/**
+ * What each decision says back, in the organisation's own terms.
+ *
+ * Written as sentences about the volunteer rather than about the record —
+ * "Kwame Boateng is on the roster" is what the organiser just did; "status
+ * updated" is what the database just did.
+ */
+const DECISION_CONFIRMATION: Record<OrganisationApplicationDecision, (name: string) => string> = {
+  accepted: (name) => `${name} is on the roster. They have been emailed.`,
+  // Reachable from the volunteer profile screen's decision controls rather
+  // than from the card, but the map has to be total.
+  pending: (name) => `${name} is back to pending.`,
+  waitlisted: (name) => `${name} is on the waitlist and has been told their place.`,
+  rejected: (name) => `${name} was not selected. They have been told.`,
+};
 
 export default function Applicants() {
   const router = useRouter();
@@ -121,6 +138,7 @@ export default function Applicants() {
   // single-role / role-less section). Null means no dialog is open.
   const [confirmingRoleId, setConfirmingRoleId] = useState<string | null>(null);
   const [batchOutcome, setBatchOutcome] = useState<string | null>(null);
+  const [decisionOutcome, setDecisionOutcome] = useState<string | null>(null);
 
   /*
     One projection of the applicant list into the shape lib/roster.ts ranks, so
@@ -273,9 +291,32 @@ export default function Applicants() {
     );
   }
 
+  /*
+    A DECISION NOW SAYS SO, AND THE SCREEN STAYS PUT.
+
+    Deciding used to fire the mutation and show nothing: the badge on the card
+    changed a moment later, which is easy to miss on a list of applicants, so an
+    organiser was left unsure whether the tap had registered. The toast names
+    the person and the decision, so it answers "did that work?" and "who did I
+    just decide?" at once.
+
+    STAYING ON THIS SCREEN IS DELIBERATE. Vetting is a run of decisions down a
+    list, not one decision per visit — navigating away after each would send the
+    organiser straight back here, losing their scroll position and their place
+    in the queue. The confirmation is what closes the loop instead.
+  */
   function handleDecide(application: ApplicationWithVolunteer, status: OrganisationApplicationDecision) {
     if (!selectedOutreachId) return;
-    updateStatus.mutate({ applicationId: application.id, outreachId: selectedOutreachId, status });
+    const name = application.volunteer?.profile?.full_name ?? 'This volunteer';
+    updateStatus.mutate(
+      { applicationId: application.id, outreachId: selectedOutreachId, status },
+      {
+        onSuccess: () => setDecisionOutcome(DECISION_CONFIRMATION[status](name)),
+        // Errors are deliberately NOT toasted: the card already shows the
+        // failure against the applicant it belongs to, which a floating message
+        // cannot do on a list.
+      }
+    );
   }
 
   /*
@@ -563,6 +604,8 @@ export default function Applicants() {
           }
         />
       )}
+
+      <Toast message={decisionOutcome} onDismiss={() => setDecisionOutcome(null)} />
     </SafeAreaView>
   );
 }

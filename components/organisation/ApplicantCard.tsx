@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar, Badge, VScoreBadge } from '@/components/ui';
+import { Avatar, Badge, ConfirmDialog, VScoreBadge } from '@/components/ui';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { EXPERIENCE_LEVELS, VOLUNTEER_CATEGORIES } from '@/constants/categories';
@@ -29,6 +30,17 @@ const VERIFICATION_TONE: Record<VerificationStatus, BadgeTone> = {
   verified: 'success',
   documents_pending: 'warning',
   unverified: 'neutral',
+};
+
+/**
+ * The one line that says what a decided applicant's position actually IS, so
+ * the buttons below it read as changes to that position rather than as an open
+ * choice between three equal options.
+ */
+const SETTLED_NOTE: Partial<Record<ApplicationStatus, string>> = {
+  accepted: 'On the roster. They have been told they are confirmed.',
+  waitlisted: 'On the waitlist. They have been told their place in the queue.',
+  rejected: 'Not selected. They have been told.',
 };
 
 const VERIFICATION_LABEL: Record<VerificationStatus, string> = {
@@ -75,6 +87,10 @@ export function ApplicantCard({
   const otherSkills = skillTags.filter((skill) => !requiredSet.has(skill));
   const shownSkills = [...matchedSkills, ...otherSkills].slice(0, 5);
   const extraCount = skillTags.length - shownSkills.length;
+
+  const isAccepted = application.status === 'accepted';
+  const isSettled = isAccepted || application.status === 'waitlisted' || application.status === 'rejected';
+  const [confirming, setConfirming] = useState<'waitlisted' | 'rejected' | null>(null);
 
   return (
     <View style={styles.card}>
@@ -154,35 +170,82 @@ export function ApplicantCard({
       {application.status === 'cancelled' ? (
         <Text style={styles.withdrawn}>This volunteer withdrew their application.</Text>
       ) : (
-      <View style={styles.actionsRow}>
-        <Pressable
-          onPress={() => onDecide('accepted')}
-          disabled={isPending || application.status === 'accepted'}
-          accessibilityRole="button"
-          accessibilityLabel={`Accept ${name}`}
-          style={[styles.actionButton, styles.acceptButton, (isPending || application.status === 'accepted') && styles.actionDisabled]}
-        >
-          <Text style={styles.acceptText}>Accept</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => onDecide('waitlisted')}
-          disabled={isPending || application.status === 'waitlisted'}
-          accessibilityRole="button"
-          accessibilityLabel={`Waitlist ${name}`}
-          style={[styles.actionButton, styles.waitlistButton, (isPending || application.status === 'waitlisted') && styles.actionDisabled]}
-        >
-          <Text style={styles.waitlistText}>Waitlist</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => onDecide('rejected')}
-          disabled={isPending || application.status === 'rejected'}
-          accessibilityRole="button"
-          accessibilityLabel={`Reject ${name}`}
-          style={[styles.actionButton, styles.rejectButton, (isPending || application.status === 'rejected') && styles.actionDisabled]}
-        >
-          <Text style={styles.rejectText}>Reject</Text>
-        </Pressable>
-      </View>
+        <>
+          {/*
+            THE CARD NOW SAYS WHERE THEY STAND BEFORE IT OFFERS TO MOVE THEM.
+
+            It used to render three equal buttons and grey out only the one
+            matching the current status, so an ACCEPTED volunteer still showed
+            live "Waitlist" and "Reject" buttons that looked exactly like the
+            ones on an undecided applicant. Both are legitimate — an
+            organisation must be able to take someone off a roster — but they
+            are not the same act as deciding a pending application: this person
+            has been emailed, told they are confirmed, and has the event on
+            their schedule. So the labels name the consequence and the tap asks
+            first.
+          */}
+          {isSettled ? <Text style={styles.settledNote}>{SETTLED_NOTE[application.status]}</Text> : null}
+
+          <View style={styles.actionsRow}>
+            <Pressable
+              onPress={() => onDecide('accepted')}
+              disabled={isPending || isAccepted}
+              accessibilityRole="button"
+              accessibilityLabel={isAccepted ? `${name} is already accepted` : `Accept ${name}`}
+              style={[styles.actionButton, styles.acceptButton, (isPending || isAccepted) && styles.actionDisabled]}
+            >
+              <Text style={styles.acceptText}>{isAccepted ? 'Accepted' : 'Accept'}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => (isAccepted ? setConfirming('waitlisted') : onDecide('waitlisted'))}
+              disabled={isPending || application.status === 'waitlisted'}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isAccepted ? `Move ${name} off the roster to the waitlist` : `Waitlist ${name}`
+              }
+              style={[styles.actionButton, styles.waitlistButton, (isPending || application.status === 'waitlisted') && styles.actionDisabled]}
+            >
+              <Text style={styles.waitlistText}>
+                {application.status === 'waitlisted' ? 'Waitlisted' : isAccepted ? 'To waitlist' : 'Waitlist'}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => (isAccepted ? setConfirming('rejected') : onDecide('rejected'))}
+              disabled={isPending || application.status === 'rejected'}
+              accessibilityRole="button"
+              accessibilityLabel={isAccepted ? `Remove ${name} from the roster` : `Reject ${name}`}
+              style={[styles.actionButton, styles.rejectButton, (isPending || application.status === 'rejected') && styles.actionDisabled]}
+            >
+              <Text style={styles.rejectText}>
+                {application.status === 'rejected' ? 'Rejected' : isAccepted ? 'Remove' : 'Reject'}
+              </Text>
+            </Pressable>
+          </View>
+
+          <ConfirmDialog
+            visible={confirming !== null}
+            icon={confirming === 'rejected' ? 'account-remove-outline' : 'account-clock-outline'}
+            tone={confirming === 'rejected' ? 'destructive' : 'default'}
+            title={
+              confirming === 'rejected'
+                ? `Remove ${name} from the roster?`
+                : `Move ${name} to the waitlist?`
+            }
+            message={
+              confirming === 'rejected'
+                ? 'They were told they are confirmed and have this event on their schedule. They will be told it has changed, and their place frees up for the waitlist.'
+                : 'They were told they are confirmed. They will be told they are back on the waitlist, and their place frees up for whoever is next.'
+            }
+            confirmLabel={confirming === 'rejected' ? 'Remove them' : 'Move them'}
+            cancelLabel="Leave them"
+            onConfirm={() => {
+              const next = confirming;
+              setConfirming(null);
+              if (next) onDecide(next);
+            }}
+            onCancel={() => setConfirming(null)}
+          />
+        </>
       )}
 
       {isPending ? (
@@ -279,6 +342,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.base,
+  },
+  // Real separation from the buttons it explains, and from the block above it.
+  // A note jammed against the row it qualifies reads as a caption on the first
+  // button rather than as a statement about the applicant.
+  settledNote: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginTop: spacing.base,
+    marginBottom: spacing.xs,
   },
   withdrawn: {
     fontFamily: fontFamily.regular,
