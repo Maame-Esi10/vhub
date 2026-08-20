@@ -9,6 +9,7 @@ import {
   dayStartTime,
   describeCommitment,
   formatDaySpan,
+  hasFirstDayArrived,
   isConsecutive,
   nextDayAfter,
   sortDayStrings,
@@ -145,11 +146,45 @@ describe('formatDaySpan', () => {
     );
   });
 
-  it('leads with the COUNT when the days are scattered, so it cannot be read as a range', () => {
-    // Four Saturdays. "Oct 3 to Oct 24" would suggest 22 days of work.
+  it('NAMES the days when they are scattered, and never uses a dash', () => {
+    // Four Saturdays. "Oct 3 – Oct 24" would suggest 22 days of work, and
+    // leading with the count was not enough to stop it being read that way.
     const span = formatDaySpan(['2026-10-03', '2026-10-10', '2026-10-17', '2026-10-24']);
-    expect(span).toBe('4 days · Sat, Oct 3 – Sat, Oct 24 2026');
+    expect(span).toBe('4 days · Sat, Oct 3 + Sat, Oct 10 + Sat, Oct 17 2026 and 1 more');
     expect(span.startsWith('4 days')).toBe(true);
+  });
+
+  it('never puts a dash in a scattered span, whatever its length', () => {
+    // The dash is the thing that reads as "through", so this is the property
+    // that actually matters rather than any one string above.
+    const cases = [
+      ['2026-08-31', '2026-09-03'],
+      ['2026-10-03', '2026-10-10', '2026-10-17'],
+      ['2026-10-03', '2026-10-10', '2026-10-17', '2026-10-24', '2026-11-07'],
+    ];
+    for (const days of cases) {
+      expect(formatDaySpan(days)).not.toContain('–');
+      expect(formatDaySpan(days)).not.toContain('-');
+    }
+  });
+
+  it('names every day when there are few enough, so a two-day event is unmistakable', () => {
+    // The reported case: Aug 31 and Sep 3 read as a four-day event.
+    expect(formatDaySpan(['2026-08-31', '2026-09-03'])).toBe(
+      '2 days · Mon, Aug 31 + Thu, Sep 3 2026'
+    );
+  });
+
+  it('counts the overflow rather than listing every day of a long scatter', () => {
+    const span = formatDaySpan([
+      '2026-10-03',
+      '2026-10-10',
+      '2026-10-17',
+      '2026-10-24',
+      '2026-10-31',
+      '2026-11-07',
+    ]);
+    expect(span).toBe('6 days · Sat, Oct 3 + Sat, Oct 10 + Sat, Oct 17 2026 and 3 more');
   });
 
   it('sorts before formatting, so the order they were added in does not matter', () => {
@@ -160,6 +195,36 @@ describe('formatDaySpan', () => {
 
   it('returns an empty string rather than throwing on no days', () => {
     expect(formatDaySpan([])).toBe('');
+  });
+});
+
+describe('hasFirstDayArrived', () => {
+  it('is true on the day itself, whatever the clock says', () => {
+    // The bug this exists for: an event starting at 06:00 today had no
+    // "Mark attendance" action at 01:00, while check-in — which is gated on
+    // the DAY — would already accept a scan.
+    expect(hasFirstDayArrived([todayIso()])).toBe(true);
+  });
+
+  it('is true once the first day is behind us, on a later day of the event', () => {
+    const yesterday = addCalendarDays(todayIso(), -1)!;
+    const tomorrow = addCalendarDays(todayIso(), 1)!;
+    expect(hasFirstDayArrived([yesterday, tomorrow])).toBe(true);
+  });
+
+  it('is false while every day is still ahead', () => {
+    const tomorrow = addCalendarDays(todayIso(), 1)!;
+    expect(hasFirstDayArrived([tomorrow])).toBe(false);
+  });
+
+  it('reads the FIRST day, not the order they were passed in', () => {
+    const yesterday = addCalendarDays(todayIso(), -1)!;
+    const tomorrow = addCalendarDays(todayIso(), 1)!;
+    expect(hasFirstDayArrived([tomorrow, yesterday])).toBe(true);
+  });
+
+  it('is false rather than throwing on no days', () => {
+    expect(hasFirstDayArrived([])).toBe(false);
   });
 });
 

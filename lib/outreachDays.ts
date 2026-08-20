@@ -178,6 +178,25 @@ export function lastDay(days: readonly string[]): string | null {
 }
 
 /** True when any day of the outreach is today. Ghana is GMT year-round. */
+/**
+ * True once the outreach's FIRST DAY HAS ARRIVED — the calendar day, not the
+ * clock.
+ *
+ * This is the "is there anything to mark yet?" question, and it has to be
+ * asked at day resolution because that is the resolution check-in is gated at.
+ * `/api/checkin` accepts a scan on any day the outreach runs, with no
+ * comparison against `start_time` — so on the morning of the event, before its
+ * stated start, a volunteer could already be checked in while the organiser's
+ * "Mark attendance" action was still hidden by a start-time test. The two must
+ * agree, and the day is the honest unit: an attendance record exists the moment
+ * anyone can create one.
+ */
+export function hasFirstDayArrived(days: readonly string[]): boolean {
+  const sorted = sortDayStrings(days.filter((day) => parseCalendarDate(day)));
+  const first = sorted[0];
+  return !!first && first <= todayIso();
+}
+
 export function isAnyDayToday(days: readonly string[]): boolean {
   const today = todayIso();
   return days.some((day) => day === today);
@@ -192,6 +211,12 @@ export function formatDayShort(date: string): string {
 }
 
 /**
+ * How many scattered days are named in full before the line gives up and
+ * counts the rest. Two fits a card at the width these lines are read on.
+ */
+const NAMED_SCATTERED_DAYS = 3;
+
+/**
  * How a day list reads as one line on a card.
  *
  * Three shapes, because a span and a scatter are genuinely different things and
@@ -199,11 +224,25 @@ export function formatDayShort(date: string): string {
  *
  *   1 day        -> "Wed, Oct 12 2026"
  *   consecutive  -> "Mon, Oct 12 – Wed, Oct 14 2026 · 3 days"
- *   scattered    -> "4 days · Oct 12 – Nov 2 2026"
+ *   scattered    -> "2 days · Mon, Aug 31 + Thu, Sep 3 2026"
+ *                -> "6 days · Sat, Oct 3 + Sat, Oct 10 + Sat, Oct 17 2026 and 3 more"
  *
- * The scattered form deliberately does NOT read as a range. Four Saturdays
- * spread over a month are not "Oct 12 to Nov 2", and a volunteer who read it
- * that way would think they were being asked for 22 days.
+ * THE SCATTERED FORM CONTAINS NO DASH, and that is the whole point of it.
+ *
+ * It used to read "2 days · Mon, Aug 31 – Thu, Sep 3 2026". Leading with the
+ * count was supposed to stop that being read as a range, and it does not: the
+ * dash is a stronger signal than the number in front of it, so a two-day event
+ * on the 31st and the 3rd looked like a four-day event running straight
+ * through. Reported from a real event.
+ *
+ * A dash means "through" in every other place this app uses one — the
+ * consecutive form above, and every time range. So a scatter cannot borrow it.
+ * `+` reads as "and also", which is exactly what a scattered day list means.
+ *
+ * The rejected alternative was "2 days between Aug 31 and Sep 3", which is
+ * accurate and still wrong for the same reason: "between X and Y" describes a
+ * window, and the days are not a window. Naming the actual days removes the
+ * ambiguity rather than wording around it.
  */
 export function formatDaySpan(days: readonly string[]): string {
   const sorted = sortDayStrings(days.filter((day) => parseCalendarDate(day)));
@@ -220,7 +259,15 @@ export function formatDaySpan(days: readonly string[]): string {
     return `${formatDayShort(first)} – ${formatFullDay(last)} · ${sorted.length} days`;
   }
 
-  return `${sorted.length} days · ${formatDayShort(first)} – ${formatFullDay(last)}`;
+  // Named days, then a count of whatever did not fit. The year rides on the
+  // last day actually named, so the line states it exactly once.
+  const named = sorted.slice(0, NAMED_SCATTERED_DAYS);
+  const remaining = sorted.length - named.length;
+  const list = named
+    .map((day, index) => (index === named.length - 1 ? formatFullDay(day) : formatDayShort(day)))
+    .join(' + ');
+
+  return `${sorted.length} days · ${list}${remaining > 0 ? ` and ${remaining} more` : ''}`;
 }
 
 /** True when the list is a run of adjacent calendar days with no gaps. */
