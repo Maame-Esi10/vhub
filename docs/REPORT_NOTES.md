@@ -2023,3 +2023,38 @@ cannot grant it to themselves — but it means the queue currently ends at
 built, approving a volunteer is a manual UPDATE run on the service-role
 connection in the Supabase SQL editor. There is also no notification when the
 status changes; the volunteer finds out by opening the screen.
+
+## Verified in production: the under-subscription ladder (2026-08-20)
+
+The owner received the push *"Your outreach still has places… Nima Eye Screening
+is in 3 days"* on her **existing** build, with no rebuild and no redeploy. That
+single notification is end-to-end evidence for four things that had until then
+only been proven by unit tests:
+
+1. **The daily Vercel cron fires at 08:00** and reaches the escalation job.
+2. **The staged ladder works and picked the right stage.** Three days out is the
+   middle rung of the 7 / 3 / 1 schedule, and the message named the interval
+   correctly rather than firing every stage at once.
+3. **The under-subscription test itself is right** — the outreach was `open` with
+   `slots_filled < slots_total`, and an event that was full would not have fired.
+4. **Push delivery works in production**, through Expo's service and FCM, to a
+   real device, from the service-role side of the app.
+
+It also confirms the copy holds the line the spec draws: the notification
+**states the position and stops**. It does not suggest reducing the slot count or
+moving the date. `lib/underSubscription.ts` has a unit test asserting the
+generated copy contains no such advice, and the production message matched it.
+
+Worth recording for the report's evaluation chapter: this is the first feature
+whose *scheduled server-side* path has been observed working against real data,
+rather than inferred from tests.
+
+## The lint pass, deferred (2026-08-20)
+
+`npx expo lint` had never been run in this repository — there was no
+`eslint.config.js` until one was generated on 2026-08-20. It reports 32 errors
+and 8 warnings, none of them in code written that day, mostly one React rule
+(`react-hooks/refs`, reading a ref during render) in `Toast.tsx`, `welcome.tsx`
+and a handful of others. Owner's decision: **a separate clean-up pass later**,
+once everything currently untested has been verified on a device and committed.
+Nothing here affects whether the app runs.
