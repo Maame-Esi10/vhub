@@ -11,7 +11,8 @@ import {
   formatEventDate,
 } from '@/components/ui';
 import { getRemarkLabel, getRemarkTone } from '@/constants/review-remarks';
-import { useMyReviews } from '@/hooks';
+import { useMyReviews, useOutreachDaysForMany } from '@/hooks';
+import { formatDaySpan } from '@/lib/outreachDays';
 import type { MyEventReview } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -40,6 +41,19 @@ export default function VolunteerFeedback() {
   const reviewsQuery = useMyReviews(volunteerId);
 
   const reviews = useMemo(() => reviewsQuery.data ?? [], [reviewsQuery.data]);
+
+  /*
+    The days each reviewed event ran on, batched. A review of a four-day
+    campaign printed the campaign's FIRST day, so a volunteer reading their own
+    history could not tell which piece of work a review was about when an
+    organisation ran several events in the same week.
+  */
+  const reviewDays = useOutreachDaysForMany(
+    useMemo(
+      () => reviews.map((review) => review.outreach?.id).filter((id): id is string => !!id),
+      [reviews]
+    )
+  );
 
   if (reviewsQuery.isLoading) {
     return (
@@ -91,7 +105,14 @@ export default function VolunteerFeedback() {
             </View>
           ) : null
         }
-        renderItem={({ item }) => <ReviewCard review={item} />}
+        renderItem={({ item }) => (
+          <ReviewCard
+            review={item}
+            days={
+              item.outreach ? reviewDays.data?.[item.outreach.id]?.map((day) => day.day) : undefined
+            }
+          />
+        )}
         ListEmptyComponent={
           <EmptyState
             icon="message-star-outline"
@@ -104,7 +125,7 @@ export default function VolunteerFeedback() {
   );
 }
 
-function ReviewCard({ review }: { review: MyEventReview }) {
+function ReviewCard({ review, days }: { review: MyEventReview; days?: readonly string[] }) {
   // A no-show is shown plainly rather than hidden. It moved their V-Score, so
   // concealing it would leave the volunteer with a number they cannot explain.
   const noShow = review.attended === false;
@@ -115,7 +136,9 @@ function ReviewCard({ review }: { review: MyEventReview }) {
         {review.outreach?.title ?? 'Outreach'}
       </Text>
       {review.outreach ? (
-        <Text style={styles.eventDate}>{formatEventDate(review.outreach.date)}</Text>
+        <Text style={styles.eventDate}>
+          {days && days.length > 0 ? formatDaySpan(days) : formatEventDate(review.outreach.date)}
+        </Text>
       ) : null}
 
       {noShow ? (

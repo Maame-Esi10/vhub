@@ -7,9 +7,11 @@ import type { FilterChipOption } from '@/components/ui';
 import { VolunteerApplicationCard, WithdrawSheet } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import {
+  useApplicationDaysForMany,
   useCancelApplication,
   useMyWaitlistPositions,
   useOrganisationLogos,
+  useOutreachDaysForMany,
   useVolunteerApplications,
 } from '@/hooks';
 import type { VolunteerApplication } from '@/hooks';
@@ -55,6 +57,30 @@ export default function Applications() {
   // application from rendering.
   const waitlistPositions = useMyWaitlistPositions(volunteerId);
   const applications = useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
+
+  /*
+    THE EVENT'S DAYS AND THIS VOLUNTEER'S OWN COMMITMENT, TWO BATCHED QUERIES.
+
+    Both are `.in()` lookups over the whole list rather than one query per card:
+    a volunteer with twenty applications must not cost forty round trips.
+
+    They are separate because they answer different questions and fail
+    independently — the span is a fact about the event, the commitment is a
+    promise this volunteer made, and a card that cannot load the second should
+    still print the first.
+  */
+  const applicationDays = useOutreachDaysForMany(
+    useMemo(
+      () =>
+        applications
+          .map((application) => application.outreach?.id)
+          .filter((id): id is string => !!id),
+      [applications]
+    )
+  );
+  const committedDays = useApplicationDaysForMany(
+    useMemo(() => applications.map((application) => application.id), [applications])
+  );
 
   const [statusFilter, setStatusFilter] = useState<StatusGroup>('all');
 
@@ -177,6 +203,12 @@ export default function Applications() {
               onPress={() => router.push(`/(volunteer)/outreach/${item.application.outreach_id}?from=/(volunteer)/applications`)}
               onWithdraw={() => setWithdrawing(item.application)}
               waitlistPosition={waitlistPositions.data?.[item.application.id]}
+              eventDays={
+                item.application.outreach
+                  ? applicationDays.data?.[item.application.outreach.id]?.map((day) => day.day)
+                  : undefined
+              }
+              committedDays={committedDays.data?.[item.application.id]}
             />
           )
         }

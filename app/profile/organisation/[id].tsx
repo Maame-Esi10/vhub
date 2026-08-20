@@ -15,9 +15,11 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { GalleryStrip } from '@/components/volunteer';
 import {
   useOrganisationGallery,
+  useOutreachDaysForMany,
   usePublicOrganisationOutreaches,
   usePublicOrganisationProfile,
 } from '@/hooks';
+import { formatDaySpan } from '@/lib/outreachDays';
 import { useAuthStore } from '@/stores/authStore';
 import type { Outreach } from '@/types/database';
 
@@ -64,6 +66,17 @@ export default function PublicOrganisationProfile() {
   const past = outreaches.filter(
     (outreach) => outreach.status === 'completed' || outreach.status === 'closed'
   );
+
+  /*
+    One batched day lookup for BOTH sections. A volunteer weighing up an
+    organisation is reading these rows to judge what taking part would actually
+    cost them, and "Sat, Oct 3" for a four-week campaign answers that wrongly.
+  */
+  const rowDays = useOutreachDaysForMany(
+    useMemo(() => outreaches.map((outreach) => outreach.id), [outreaches])
+  );
+  const daysFor = (outreachId: string): string[] | undefined =>
+    rowDays.data?.[outreachId]?.map((day) => day.day);
 
   if (profileQuery.isLoading) {
     return (
@@ -198,6 +211,7 @@ export default function PublicOrganisationProfile() {
               <OutreachRow
                 key={outreach.id}
                 outreach={outreach}
+                days={daysFor(outreach.id)}
                 onPress={
                   canOpenOutreach
                     ? () => router.push(`/(volunteer)/outreach/${outreach.id}?from=/(volunteer)/feed`)
@@ -214,7 +228,12 @@ export default function PublicOrganisationProfile() {
             <Text style={styles.sectionEmpty}>No completed outreaches yet.</Text>
           ) : (
             past.map((outreach) => (
-              <OutreachRow key={outreach.id} outreach={outreach} onPress={undefined} />
+              <OutreachRow
+                key={outreach.id}
+                outreach={outreach}
+                days={daysFor(outreach.id)}
+                onPress={undefined}
+              />
             ))
           )}
         </View>
@@ -228,8 +247,18 @@ function normaliseUrl(raw: string): string {
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
-function OutreachRow({ outreach, onPress }: { outreach: Outreach; onPress?: () => void }) {
+function OutreachRow({
+  outreach,
+  days,
+  onPress,
+}: {
+  outreach: Outreach;
+  /** Every day it runs on. Empty or absent falls back to its first day. */
+  days?: readonly string[];
+  onPress?: () => void;
+}) {
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
+  const dateLabel = days && days.length > 0 ? formatDaySpan(days) : formatEventDate(outreach.date);
   const content = (
     <>
       <View style={styles.rowText}>
@@ -237,7 +266,7 @@ function OutreachRow({ outreach, onPress }: { outreach: Outreach; onPress?: () =
           {outreach.title}
         </Text>
         <Text style={styles.rowMeta} numberOfLines={1}>
-          {formatEventDate(outreach.date)}
+          {dateLabel}
           {timeRange ? ` · ${timeRange}` : ''}
         </Text>
         <Text style={styles.rowMeta} numberOfLines={1}>

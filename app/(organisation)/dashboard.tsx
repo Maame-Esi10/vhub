@@ -14,7 +14,7 @@ import {
 import type { FilterChipOption } from '@/components/ui';
 import { OutreachCard } from '@/components/organisation';
 import { colors, fontFamily, spacing } from '@/constants/theme';
-import { useOrganisationOutreaches, useUpdateOutreachStatus } from '@/hooks';
+import { useOrganisationOutreaches, useOutreachDaysForMany, useUpdateOutreachStatus } from '@/hooks';
 import type { OutreachWithCounts } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachStatus } from '@/types/database';
@@ -40,7 +40,23 @@ export default function Dashboard() {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  const outreaches = outreachesQuery.data ?? [];
+  // Memoised, not `query.data ?? []` inline: that expression is a NEW empty
+  // array on every render while the query is loading, which re-ran every
+  // useMemo below it — including the day lookup, whose dependency is this list.
+  const outreaches = useMemo(() => outreachesQuery.data ?? [], [outreachesQuery.data]);
+
+  /*
+    THE DAYS OF EVERY EVENT IN THE QUEUE, IN ONE QUERY.
+
+    One `.in()` rather than one query per card, the same batching the volunteer
+    feed uses — a dashboard with thirty events must not become thirty round
+    trips. The card falls back to `outreaches.date` for anything missing from
+    the map, which is both the correct answer for a one-day event and what
+    shows for the moment before this lands.
+  */
+  const dashboardDays = useOutreachDaysForMany(
+    useMemo(() => outreaches.map((outreach) => outreach.id), [outreaches])
+  );
 
   const metrics = useMemo(() => {
     const activePostings = outreaches.filter((o) => o.status === 'open').length;
@@ -179,6 +195,7 @@ export default function Dashboard() {
         renderItem={({ item }) => (
           <OutreachCard
             outreach={item}
+            days={dashboardDays.data?.[item.id]?.map((day) => day.day)}
             onPress={() => goToOutreach(item.id)}
             quickAction={quickActionFor(item)}
             quickActionPending={updateStatus.isPending && updateStatus.variables?.outreachId === item.id}

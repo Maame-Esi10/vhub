@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { outreachKeys } from '@/hooks/useOutreaches';
-import { sortDays } from '@/lib/outreachDays';
+import { sortDayStrings, sortDays } from '@/lib/outreachDays';
 import type { OutreachDay } from '@/types/database';
 
 export const outreachDayKeys = {
@@ -152,6 +152,58 @@ export function useApplicationDays(applicationId: string | undefined) {
 
       const rows = (data ?? []) as unknown as { day: OutreachDay | null }[];
       return sortDays(rows.map((row) => row.day).filter((day): day is OutreachDay => !!day));
+    },
+  });
+}
+
+/**
+ * The days MANY of the volunteer's own applications promised, keyed by
+ * application id — the list screens' version of `useApplicationDays`.
+ *
+ * One `.in()` rather than one query per row, the same batching as
+ * `useOutreachDaysForMany`: the applications tracker and the schedule both
+ * render every application a volunteer has, and a query per card would turn
+ * either screen into dozens of round trips.
+ *
+ * Returns the day STRINGS rather than the rows, because that is all a card
+ * needs to say "you are on 2 of 4 days" and it keeps the shape small enough to
+ * sit in the persisted query cache without carrying whole day records around.
+ */
+export function useApplicationDaysForMany(applicationIds: readonly string[]) {
+  const key = [...applicationIds].sort().join(',');
+
+  return useQuery({
+    queryKey: [...outreachDayKeys.all, 'commitments-many', key] as const,
+    enabled: applicationIds.length > 0,
+    queryFn: async (): Promise<Record<string, string[]>> => {
+      const { data, error } = await supabase
+        .from('application_days')
+        .select('application_id, day:outreach_days (day)')
+        .in('application_id', applicationIds as string[]);
+
+      if (error) {
+        throw new Error(error.message || 'Could not load the days you committed to.');
+      }
+
+      const byApplication: Record<string, string[]> = {};
+      for (const row of (data ?? []) as unknown as {
+        application_id: string;
+        day: { day: string } | null;
+      }[]) {
+        if (!row.day) continue;
+        byApplication[row.application_id] = [
+          ...(byApplication[row.application_id] ?? []),
+          row.day.day,
+        ];
+      }
+
+      // Sorted here rather than by the query, because the order that matters is
+      // the DAY's, and the day is on the embedded row rather than on
+      // application_days itself.
+      for (const id of Object.keys(byApplication)) {
+        byApplication[id] = sortDayStrings(byApplication[id]!);
+      }
+      return byApplication;
     },
   });
 }

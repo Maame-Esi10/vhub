@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar, Badge, formatEventDate, formatEventTimeRange, isUpcomingEvent } from '@/components/ui';
 import type { BadgeTone } from '@/components/ui';
+import { describeCommitment, formatDaySpan } from '@/lib/outreachDays';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { VolunteerApplication } from '@/hooks';
 import type { ApplicationStatus } from '@/types/database';
@@ -36,6 +37,16 @@ export interface VolunteerApplicationCardProps {
   organisationLogoUrl?: string | null;
   /** Live queue place, for waitlisted applications only. Absent while it loads. */
   waitlistPosition?: { position: number; waitlistSize: number };
+  /**
+   * Every day the EVENT runs on, and the subset of them this application
+   * promised — both `YYYY-MM-DD`, both looked up for the whole list at once.
+   *
+   * Absent falls back to `outreaches.date`, which is the first day: right for
+   * the one-day event most of these are, and what shows while the query is in
+   * flight.
+   */
+  eventDays?: readonly string[];
+  committedDays?: readonly string[];
 }
 
 /**
@@ -50,9 +61,35 @@ export function VolunteerApplicationCard({
   onWithdraw,
   waitlistPosition,
   organisationLogoUrl,
+  eventDays,
+  committedDays,
 }: VolunteerApplicationCardProps) {
   const outreach = application.outreach;
   const timeRange = outreach ? formatEventTimeRange(outreach.start_time, outreach.end_time) : null;
+  /*
+    THE WHOLE SPAN, NOT THE FIRST DAY.
+
+    `outreaches.date` is the first day of the event, so a four-day campaign read
+    here as a single Monday — and the volunteer had no way to tell, from the
+    screen that exists to track what they have signed up for, that they had
+    promised four days rather than one.
+
+    `upcoming` below deliberately still asks about the FIRST day. It gates
+    withdrawal, and the rule is "you cannot withdraw once the event has begun" —
+    which is a question about the start, not the end. Withdrawal is also
+    all-or-nothing: there is no per-day withdrawal, so allowing it mid-campaign
+    would cancel days already attended.
+  */
+  const days = eventDays && eventDays.length > 0 ? eventDays : outreach ? [outreach.date] : [];
+  const dateLabel = outreach
+    ? days.length > 0
+      ? formatDaySpan(days)
+      : formatEventDate(outreach.date)
+    : '';
+  const commitment =
+    days.length > 1 && committedDays && committedDays.length > 0
+      ? describeCommitment(committedDays.length, days.length)
+      : '';
   const upcoming = outreach ? isUpcomingEvent(outreach.date, outreach.start_time) : false;
 
   /*
@@ -115,8 +152,26 @@ export function VolunteerApplicationCard({
         <View style={styles.metaRow}>
           <MaterialCommunityIcons name="calendar-outline" size={13} color={colors.textSecondary} />
           <Text style={styles.meta} numberOfLines={1}>
-            {formatEventDate(outreach.date)}
+            {dateLabel}
             {timeRange ? ` · ${timeRange}` : ''}
+          </Text>
+        </View>
+      ) : null}
+
+      {/*
+        Only on an event that runs more than one day, and only once the
+        commitment has loaded. On a one-day event it would say nothing the date
+        line has not already said.
+      */}
+      {commitment ? (
+        <View style={styles.metaRow}>
+          <MaterialCommunityIcons
+            name="calendar-check-outline"
+            size={13}
+            color={colors.textSecondary}
+          />
+          <Text style={styles.meta} numberOfLines={1}>
+            You are on {commitment.toLowerCase()}
           </Text>
         </View>
       ) : null}

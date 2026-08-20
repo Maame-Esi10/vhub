@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Badge, FlyerBackground, daysUntilEvent, formatEventDate, formatEventTimeRange } from '@/components/ui';
+import { formatDaySpan } from '@/lib/outreachDays';
 import { UNDER_SUBSCRIPTION_STAGES, isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -25,6 +26,12 @@ const STATUS_LABEL: Record<OutreachStatus, string> = {
 
 export interface OutreachCardProps {
   outreach: OutreachWithCounts;
+  /**
+   * Every day this outreach runs on, `YYYY-MM-DD`. Omitted or empty falls back
+   * to `outreaches.date`, which is the FIRST day — right for the one-day event
+   * most of these are, and what shows while the day query is still in flight.
+   */
+  days?: readonly string[];
   onPress: () => void;
   /** Publish (draft -> open) or close (open -> closed) quick action, when applicable. */
   quickAction?: { label: string; onPress: () => void };
@@ -44,7 +51,11 @@ export interface OutreachCardProps {
  * brought along. An organisation looking at its own event should see the event
  * as volunteers see it, flyer included.
  */
-export function OutreachCard({ outreach, onPress, quickAction, quickActionPending }: OutreachCardProps) {
+export function OutreachCard({ outreach, days, onPress, quickAction, quickActionPending }: OutreachCardProps) {
+  // The whole span, not the first day. An organisation scanning its own queue
+  // could not tell a one-day clinic from a three-week campaign, because both
+  // printed the single date the campaign happens to START on.
+  const dateLabel = days && days.length > 0 ? formatDaySpan(days) : formatEventDate(outreach.date);
   // Venue first, for the same reason as the volunteer feed card: an
   // organisation running several events at different sites recognises them by
   // where they are, not by which district they fall in.
@@ -107,7 +118,7 @@ export function OutreachCard({ outreach, onPress, quickAction, quickActionPendin
         <View style={styles.metaRow}>
           <MaterialCommunityIcons name="calendar" size={14} color={colors.textSecondary} />
           <Text style={styles.metaText} numberOfLines={1}>
-            {formatEventDate(outreach.date)}
+            {dateLabel}
             {timeRange ? ` · ${timeRange}` : ''}
           </Text>
         </View>

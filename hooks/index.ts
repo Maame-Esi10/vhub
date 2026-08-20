@@ -88,6 +88,7 @@ export {
   useOutreachDaysForMany,
   useAddOutreachDays,
   useApplicationDays,
+  useApplicationDaysForMany,
   useOutreachCommitments,
 } from './useOutreachDays';
 export type { AddOutreachDaysParams, CommittedDay } from './useOutreachDays';

@@ -15,11 +15,12 @@ import {
 } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
+  useApplicationDaysForMany,
   useOrganisationLogos,
   useOutreachDaysForMany,
   useVolunteerApplications,
 } from '@/hooks';
-import { isAnyDayToday, lastDay } from '@/lib/outreachDays';
+import { describeCommitment, formatDaySpan, isAnyDayToday, lastDay } from '@/lib/outreachDays';
 import type { VolunteerApplication } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -83,6 +84,18 @@ export default function Schedule() {
     (outreachId: string, fallbackDate: string): string[] =>
       scheduleDays.data?.[outreachId]?.map((day) => day.day) ?? [fallbackDate],
     [scheduleDays.data]
+  );
+
+  /*
+    WHICH OF THOSE DAYS THIS VOLUNTEER ACTUALLY PROMISED.
+
+    The span alone would overstate the commitment: a student who signed up for
+    the two Saturdays of a three-week campaign should not read "Oct 3 - Oct 24"
+    on their own diary and think they are due every day in between. Batched over
+    every accepted application for the same reason as the days above.
+  */
+  const scheduleCommitments = useApplicationDaysForMany(
+    useMemo(() => accepted.map((application) => application.id), [accepted])
   );
 
   const { upcoming, past } = useMemo(() => {
@@ -248,6 +261,26 @@ export default function Schedule() {
           const endLabel = formatEventTime(outreach.end_time);
           const place = [outreach.location_name, outreach.district].filter(Boolean).join(', ');
 
+          /*
+            THE SPAN, AND WHAT THIS VOLUNTEER OWES OF IT.
+
+            The date group header above says when the event STARTS, which is the
+            right way to group a diary but says nothing about how long the event
+            runs. A four-day campaign sat under "Mon, Oct 12" looking exactly
+            like the one-day clinic beneath it.
+
+            Shown only when there is more than one day: on a single-day event
+            the header has already said everything, and repeating it would be
+            noise on the screen a volunteer checks most often.
+          */
+          const eventDays = dayStringsFor(outreach.id, outreach.date);
+          const committed = scheduleCommitments.data?.[item.application.id];
+          const spanLabel = eventDays.length > 1 ? formatDaySpan(eventDays) : null;
+          const commitmentLabel =
+            eventDays.length > 1 && committed && committed.length > 0
+              ? describeCommitment(committed.length, eventDays.length)
+              : null;
+
           // A finished event is never "today" for the purpose of checking in —
           // the scan action must not reappear on it after the fact.
           // ANY day of the event, not just the first: day three of a campaign
@@ -323,6 +356,23 @@ export default function Schedule() {
                   <Text style={styles.cancelledLine}>
                     The organisation cancelled this event. You do not need to attend.
                   </Text>
+                ) : null}
+
+                {spanLabel ? (
+                  <View style={styles.detailRow}>
+                    <View style={styles.detailIconColumn}>
+                      <MaterialCommunityIcons
+                        name="calendar-range"
+                        size={15}
+                        color={colors.textSecondary}
+                        style={styles.detailIcon}
+                      />
+                    </View>
+                    <Text style={styles.detailText} numberOfLines={2}>
+                      {spanLabel}
+                      {commitmentLabel ? ` · you are on ${commitmentLabel.toLowerCase()}` : ''}
+                    </Text>
+                  </View>
                 ) : null}
 
                 {outreach.organisation?.org_name ? (
