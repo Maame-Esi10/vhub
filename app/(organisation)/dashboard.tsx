@@ -118,7 +118,18 @@ export default function Dashboard() {
   const header = (
     <View>
       <View style={styles.headerRow}>
-        <Avatar name={profile?.full_name ?? 'Organisation'} size={44} />
+        {/*
+          `uri` was simply never passed here — the only <Avatar> in the app
+          missing it, so this header alone fell back to initials while every
+          other surface showed the logo. The URL was always in reach:
+          `profile` is the organisation's own `profiles` row from the auth
+          store, and `avatar_url` is the column the logo upload writes.
+        */}
+        <Avatar
+          name={profile?.full_name ?? 'Organisation'}
+          uri={profile?.avatar_url}
+          size={44}
+        />
         <View style={styles.headerText}>
           <Text style={styles.eyebrow}>Command Center</Text>
           <Text style={styles.greeting} numberOfLines={1}>
