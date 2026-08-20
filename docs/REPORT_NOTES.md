@@ -527,15 +527,15 @@ because its regex was accidentally more permissive."
   tier) — replaced with the volunteer's actual V-Score band, which is a real
   status they hold.
 
-- **The Identity Verification row in Settings is deliberately read-only.**
-  The only identity-verification screen is `app/(auth)/verify-identity.tsx`,
-  which is a *step of the onboarding wizard*: it reads `useOnboardingStore`
-  (empty outside that flow) and submits `useCompleteOnboarding`. Linking a
-  settings row to it would let an already-onboarded volunteer overwrite their
-  saved category, skill_tags, specialties and availability_slots with blanks —
-  silent data loss. The row shows status only. A standalone re-verification
-  screen must exist before it can become tappable; that is the same Phase 4
-  pass as the change-password flow above.
+- **The Identity Verification row in Settings was read-only, and is not any
+  more (resolved).** It was read-only because the only identity-verification
+  screen was `app/(auth)/verify-identity.tsx`, a *step of the onboarding
+  wizard*: it reads `useOnboardingStore` (empty outside that flow) and submits
+  `useCompleteOnboarding`, so linking a settings row to it would let an
+  already-onboarded volunteer overwrite their saved category, skill_tags,
+  specialties and availability_slots with blanks. The standalone screen
+  `app/(volunteer)/verify-identity.tsx` now exists, shares no submit path with
+  the wizard, and the row opens it.
 
 - **Re-applying after a withdrawal (2026-07-31).** `applications` has
   `unique (outreach_id, volunteer_id)`, so a withdrawn application keeps
@@ -588,12 +588,15 @@ because its regex was accidentally more permissive."
   signature. The same trap was already closed on the Settings row earlier the
   same day; this was the second, missed entry point.
 
-  **Still to build (Phase 4):** a standalone re-verification screen that does
-  NOT reuse the wizard's submit path — it should upload a credential document
-  (Cloudinary) and move `verification_status` to `documents_pending`, leaving
-  every other column untouched. Until it exists, nothing may link to
-  `(auth)/verify-identity` from outside the onboarding wizard. Both the
-  Settings row and this gate are waiting on it.
+  **Built (2026-08-20).** The standalone screen
+  `app/(volunteer)/verify-identity.tsx` does not reuse the wizard's submit
+  path: it signs the declaration, uploads a credential document to Cloudinary,
+  and `/api/verification-document` moves `verification_status` to
+  `documents_pending` on the service-role key, leaving every other column
+  untouched. The clinical gate now links THERE — see "The verification loop
+  closes" below. The rule that nothing may link to `(auth)/verify-identity`
+  from outside the onboarding wizard still stands and is still enforced by
+  `persistAndFinish`'s refusal.
 
 ## Planned, not built (decided 2026-07-31)
 
@@ -1941,3 +1944,82 @@ The approved change that scales `event_outcome` by days attended over days
 committed is NOT built, and neither is continuous availability. `attendedRatio`
 exists as a pure function for display and is wired to nothing in the V-Score
 path, so no score has moved.
+
+## A day span wherever a date is shown (2026-08-20)
+
+When multi-day outreaches were built, every screen that DECIDES something was
+moved onto the correct day — is the event over, which day is this scan, which
+day is this absence against. Five surfaces that only DISPLAY a date were left
+printing `outreaches.date`, which is the first day: the organisation dashboard
+card, the volunteer's Applications tracker, the organisation's public profile
+(both its active and its past events), the volunteer's own feedback list, and
+the Schedule.
+
+They under-reported rather than misbehaved — a four-day campaign looked exactly
+like the one-day clinic beneath it — but on the Applications tracker and the
+Schedule that is a real problem rather than a cosmetic one, because those two
+screens exist to tell a volunteer what they have promised.
+
+All five now read the day rows. Each list fetches them with ONE batched `.in()`
+query (`useOutreachDaysForMany`) rather than one query per card, and every
+surface falls back to `outreaches.date` when the map has no entry — correct for
+the one-day event most of them are, and what shows in the moment before the
+query lands.
+
+Two of them additionally show the volunteer's own COMMITMENT, not just the
+event's span, through a new batched hook `useApplicationDaysForMany`. The span
+alone would overstate what was promised: a student who signed up for the two
+Saturdays of a three-week campaign should not read "Oct 3 – Oct 24" on their own
+diary. They see "you are on 2 of 4 days" beside it.
+
+**The date group headers on the Schedule deliberately still show a single
+date.** They group the diary by the day an event STARTS, and one header can
+cover several events; turning it into a span would attach one event's length to
+a heading that is not about that event. The span moved onto the event card
+instead, where it belongs to exactly one event.
+
+**Withdrawal is still judged on the FIRST day, deliberately.** The Applications
+card gates its withdraw button on `isUpcomingEvent(outreach.date, …)`, which is
+the rule "you cannot withdraw once the event has begun" — a question about the
+start, not the end. Withdrawal is also all-or-nothing: there is no per-day
+withdrawal, so allowing it mid-campaign would cancel days already attended and
+recorded. **Known limitation, not built:** a volunteer on a scattered campaign
+therefore cannot withdraw from the remaining days once the first one has begun.
+Per-day withdrawal would need a new concept in `application_days` and is not in
+the schema.
+
+## The verification loop closes (2026-08-20)
+
+Identity verification had every piece except the connections between them. The
+standalone screen existed, the Cloudinary upload worked, and
+`/api/verification-document` moved `verification_status` to
+`documents_pending` on the service-role key. But the two places a volunteer
+actually meets verification still described the world as it was before any of
+that was built.
+
+**The clinical gate was a dead end.** An unverified volunteer opening a clinical
+outreach was told they needed verification, offered "How do I get verified?",
+and shown a dialog saying verification "isn't open yet". The app turned them
+away and then told them there was nothing they could do. That link now opens
+`app/(volunteer)/verify-identity.tsx` — never `(auth)/verify-identity`, for the
+profile-wiping reason logged above. A volunteer whose document is already in
+review reads that instead of being invited to start something they have
+finished, and the link takes them to where their document lives.
+
+**Onboarding advertised a COMING SOON box.** Step 5 of the wizard showed a dead
+placeholder where the credential upload would one day be. The upload cannot
+happen on that screen — `/api/verification-document` refuses a document until
+`declaration_signed` is true, and the declaration is only written when that
+screen submits, so the order has to be sign-then-upload. The placeholder now
+says exactly that, and the completion screen after it offers the upload to the
+volunteer who signed, linking to the standalone screen. Someone who chose
+"Complete Later" is not offered it and is not nagged.
+
+**What is still not built, and is the admin side:** nothing in the app can move
+a volunteer to `verified`. That is deliberate — the whole point of keeping
+`verification_status` out of the client's column GRANTs is that a volunteer
+cannot grant it to themselves — but it means the queue currently ends at
+`documents_pending` with no reviewer surface. Until the deferred admin side is
+built, approving a volunteer is a manual UPDATE run on the service-role
+connection in the Supabase SQL editor. There is also no notification when the
+status changes; the volunteer finds out by opening the screen.

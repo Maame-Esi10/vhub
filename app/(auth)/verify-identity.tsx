@@ -18,10 +18,19 @@ import { useCompleteOnboarding } from '@/hooks';
  * No license number field: Ghana has no public licensing-registry API
  * (Nursing & Midwifery Council, Medical & Dental Council, Pharmacy
  * Council), so a self-entered number would prove nothing. Verification is
- * document-based with human org-admin review instead
- * (volunteer_profiles.verification_status) — the document upload itself is
- * a placeholder here until Cloudinary is wired in a later phase. See
- * docs/REPORT_NOTES.md.
+ * document-based with human review instead
+ * (volunteer_profiles.verification_status).
+ *
+ * THE DOCUMENT IS NOT UPLOADED HERE, and that is a constraint rather than a
+ * gap. /api/verification-document refuses a document until
+ * `declaration_signed` is true, because a credential attached to no
+ * declaration is evidence nobody has vouched for — and the declaration is
+ * only written when THIS screen submits. So the order is: sign here, upload
+ * on app/(volunteer)/verify-identity.tsx, which the next screen links to.
+ *
+ * It previously said "COMING SOON" over a dead placeholder box. That was true
+ * before Cloudinary was wired; it has been false since, and it told a volunteer
+ * who wanted to get verified that there was nothing to do.
  */
 export default function VerifyIdentity() {
   const router = useRouter();
@@ -57,7 +66,7 @@ export default function VerifyIdentity() {
     // wizard's submit path; until it exists, nothing should link here.
     if (onboarding.category === null && volunteerProfile?.category != null) {
       setValidationError(
-        'Your profile is already set up. Identity verification is reviewed by the V-HUB team and is not available here yet.'
+        'Your profile is already set up. To manage your identity verification, go to Settings and open Identity Verification.'
       );
       return;
     }
@@ -133,15 +142,17 @@ export default function VerifyIdentity() {
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.cardLabel}>Credential Document</Text>
-            <View style={styles.comingSoonBadge}>
-              <Text style={styles.comingSoonBadgeText}>COMING SOON</Text>
+            <View style={styles.nextStepBadge}>
+              <Text style={styles.nextStepBadgeText}>NEXT STEP</Text>
             </View>
           </View>
 
           <View style={styles.uploadPlaceholder}>
-            <MaterialCommunityIcons name="tray-arrow-up" size={22} color={colors.textSecondary} />
+            <MaterialCommunityIcons name="tray-arrow-up" size={22} color={colors.primary} />
             <Text style={styles.uploadPlaceholderText}>
-              Document upload will be available once credential storage is wired up
+              Sign the declaration below, then upload your licence, certificate or council
+              registration on the next screen. Your declaration has to be on file before a document
+              can be attached to it.
             </Text>
           </View>
 
@@ -287,17 +298,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textPrimary,
   },
-  comingSoonBadge: {
-    backgroundColor: colors.border,
+  // Tinted rather than grey: this now describes something that happens next
+  // rather than something that does not exist.
+  nextStepBadge: {
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  comingSoonBadgeText: {
+  nextStepBadgeText: {
     fontFamily: fontFamily.semiBold,
     fontSize: 10,
     letterSpacing: 0.5,
-    color: colors.textSecondary,
+    color: colors.primary,
   },
   uploadPlaceholder: {
     alignItems: 'center',

@@ -9,7 +9,25 @@ import { useAuthStore } from '@/stores/authStore';
 export default function OnboardingComplete() {
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
+  const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const firstName = profile?.full_name?.trim().split(' ')[0] || 'volunteer';
+
+  /*
+    THE OTHER HALF OF VERIFICATION, OFFERED WHERE THE VOLUNTEER STILL HAS IT IN MIND.
+
+    Signing the declaration on the previous step is only half of getting
+    verified; the credential document is the other half, and it cannot be
+    uploaded there because /api/verification-document refuses a document until
+    the declaration is on file — which is what that step's submit writes.
+
+    So it is offered here, one screen later, to exactly the people it applies
+    to: someone who signed and is not verified yet. Anyone who chose "Complete
+    Later" is not nagged, and the same screen is reachable at any time from
+    Settings.
+  */
+  const offerDocumentUpload =
+    volunteerProfile?.declaration_signed === true &&
+    volunteerProfile?.verification_status === 'unverified';
 
   function goToFeed() {
     router.replace('/(volunteer)/feed');
@@ -49,6 +67,26 @@ export default function OnboardingComplete() {
           You're now part of a collective mission to transform healthcare through volunteerism.
         </Text>
 
+        {offerDocumentUpload ? (
+          <View style={styles.verifyPrompt}>
+            <View style={styles.verifyPromptHeader}>
+              <MaterialCommunityIcons name="shield-half-full" size={18} color={colors.primary} />
+              <Text style={styles.verifyPromptTitle}>One step left to unlock clinical roles</Text>
+            </View>
+            <Text style={styles.verifyPromptBody}>
+              You have signed the declaration. Upload your licence, certificate or council
+              registration and the V-HUB team will review it. You can browse everything and join
+              support-role outreaches in the meantime.
+            </Text>
+            <Button
+              title="Upload my document"
+              variant="outline"
+              onPress={() => router.replace('/(volunteer)/verify-identity')}
+              style={styles.verifyPromptButton}
+            />
+          </View>
+        ) : null}
+
         <Button
           title="Find Your First Opportunity"
           variant="solid"
@@ -83,6 +121,38 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  // Real separation from the body copy above and the primary action below, so
+  // it reads as its own offer rather than as a caption on either.
+  verifyPrompt: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+    padding: spacing.base,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+    gap: spacing.sm,
+  },
+  verifyPromptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  verifyPromptTitle: {
+    flex: 1,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  verifyPromptBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+  },
+  verifyPromptButton: {
+    marginTop: spacing.sm,
   },
   hero: {
     minHeight: 320,

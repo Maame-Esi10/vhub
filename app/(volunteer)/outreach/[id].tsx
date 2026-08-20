@@ -7,7 +7,6 @@ import {
   Avatar,
   Badge,
   Button,
-  ConfirmDialog,
   ErrorState,
   FlyerBackground,
   ListSkeleton,
@@ -64,7 +63,6 @@ export default function OutreachDetail() {
 
   const [fullFormVisible, setFullFormVisible] = useState(false);
   const [withdrawVisible, setWithdrawVisible] = useState(false);
-  const [verifyNotice, setVerifyNotice] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
 
   /*
@@ -125,6 +123,10 @@ export default function OutreachDetail() {
   const organisationProfileQuery = usePublicOrganisationProfile(outreach?.organisation?.id);
   const isClinical = outreach?.role_type === 'clinical';
   const isVerified = volunteerProfile?.verification_status === 'verified';
+  // A document already sent and waiting on a human. Distinguished from plain
+  // 'unverified' because the two need opposite things said to them: one has
+  // something to do, the other has already done it and is waiting.
+  const awaitingReview = volunteerProfile?.verification_status === 'documents_pending';
   // CLAUDE.md's Phase 2 eligibility rule: an unverified volunteer may browse
   // everything and Quick Join support roles, but may not submit a full
   // application to a clinical outreach. applications_insert_own enforces this
@@ -466,23 +468,49 @@ export default function OutreachDetail() {
                   : 'This is a clinical outreach, so you need a verified profile before you can apply. Support-role events are open to you now.'}
               </Text>
               {/*
-                Deliberately NOT linking to (auth)/verify-identity. That screen
-                is a STEP OF THE ONBOARDING WIZARD: it reads useOnboardingStore
-                (which is reset() once onboarding finishes, so it is empty for
-                anyone who already onboarded) and submits useCompleteOnboarding.
-                Sending an onboarded volunteer there wiped their category,
-                skills, specialties, availability, region and district, and the
-                now-null category made useAuthGuard drag them back through the
-                whole wizard. A standalone re-verification screen has to exist
-                before this can navigate anywhere -- see docs/REPORT_NOTES.md.
+                A volunteer who has already sent a document is told so HERE,
+                rather than being invited to start something they have finished.
+                The wait is a human reading it, and saying that plainly is the
+                difference between "we are working on it" and silence.
+              */}
+              {awaitingReview ? (
+                <Text style={[styles.gateBody, styles.gateBodySecond]}>
+                  Your document is with the V-HUB team. Applications to clinical roles open as soon
+                  as it has been reviewed.
+                </Text>
+              ) : null}
+              {/*
+                THIS NOW GOES SOMEWHERE. It used to open a dialog saying
+                verification "isn't open yet", which stopped being true when
+                app/(volunteer)/verify-identity.tsx was built: a volunteer can
+                sign the declaration and upload a credential document there
+                today. Leaving the dead end in place meant the app turned
+                someone away from a clinical outreach and then told them there
+                was nothing they could do about it.
+
+                It links to the VOLUNTEER-group screen, never (auth)/verify-identity.
+                That one is a step of the onboarding wizard: it reads
+                useOnboardingStore, which is reset() once onboarding finishes,
+                and submitting it from outside the wizard wiped a volunteer's
+                category, skills, specialties, availability, region and
+                district -- and the now-null category made useAuthGuard drag
+                them back through the whole thing.
+
+                A volunteer whose documents are already in review is sent to the
+                same screen rather than being given a decision they cannot act
+                on: it is where their document, and its status, actually live.
               */}
               <Pressable
-                onPress={() => setVerifyNotice(true)}
+                onPress={() => router.push('/(volunteer)/verify-identity')}
                 accessibilityRole="button"
-                accessibilityLabel="How to get verified"
+                accessibilityLabel={
+                  awaitingReview ? 'See your verification status' : 'Start identity verification'
+                }
                 style={styles.gateAction}
               >
-                <Text style={styles.gateActionText}>How do I get verified?</Text>
+                <Text style={styles.gateActionText}>
+                  {awaitingReview ? 'See your verification status' : 'Get verified'}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -555,17 +583,6 @@ export default function OutreachDetail() {
           </View>
         )}
       </View>
-
-      <ConfirmDialog
-        visible={verifyNotice}
-        icon="shield-alert-outline"
-        title="Verification isn't open yet"
-        message="Identity verification is reviewed by the V-HUB team and isn't available in the app yet. You can still browse every outreach and join support-role events in the meantime."
-        confirmLabel="Got It"
-        cancelLabel="Close"
-        onConfirm={() => setVerifyNotice(false)}
-        onCancel={() => setVerifyNotice(false)}
-      />
 
       <FullApplicationSheet
         visible={fullFormVisible}
@@ -879,9 +896,16 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
+  // A real paragraph break. The 2pt that separates the title from the first
+  // line is a hairline, and two body paragraphs stacked on it read as one
+  // run-on sentence.
+  gateBodySecond: {
+    marginTop: spacing.sm,
+  },
   gateAction: {
     minHeight: 44,
     justifyContent: 'center',
+    marginTop: spacing.xs,
   },
   gateActionText: {
     fontFamily: fontFamily.semiBold,
