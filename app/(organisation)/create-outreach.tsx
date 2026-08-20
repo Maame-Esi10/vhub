@@ -149,7 +149,8 @@ export default function CreateOutreach() {
     setErrors(nextErrors);
     if (step === 1 && nextErrors.title) return;
     if (step === 2 && (nextErrors.date || nextErrors.startTime || nextErrors.endTime)) return;
-    if (step === 3 && nextErrors.roles) return;
+    // Skills and staffing are both step 3, so both hold the step.
+    if (step === 3 && (nextErrors.roles || nextErrors.requiredSkills)) return;
     setStep((s) => Math.min(TOTAL_STEPS, s + 1));
   }
 
@@ -158,7 +159,7 @@ export default function CreateOutreach() {
       setStep(1);
     } else if (fieldErrors.date || fieldErrors.startTime || fieldErrors.endTime) {
       setStep(2);
-    } else if (fieldErrors.roles) {
+    } else if (fieldErrors.roles || fieldErrors.requiredSkills) {
       setStep(3);
     }
   }
@@ -498,6 +499,9 @@ export default function CreateOutreach() {
                 sections={SKILL_SECTIONS}
                 onChange={(next) => update('requiredSkills', next)}
               />
+              {errors.requiredSkills ? (
+                <Text style={styles.fieldError}>{errors.requiredSkills}</Text>
+              ) : null}
 
               {/*
                 ONE LIST, NO MODE. This was a toggle between "Any volunteers"

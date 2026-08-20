@@ -20,6 +20,26 @@ function stateWith(overrides: Partial<OutreachWizardState>): OutreachWizardState
   return { ...INITIAL_WIZARD_STATE, title: 'Screening day', days: [FUTURE_DATE], ...overrides };
 }
 
+describe('required skills are not optional', () => {
+  it('refuses an outreach with no required skills', () => {
+    // Skills are 35 of the 100 match points, and an empty requirement scores
+    // 1.0 for EVERY applicant — so publishing with none does not relax the
+    // match, it stops the largest component discriminating at all.
+    expect(validateWizard(stateWith({ requiredSkills: [] })).requiredSkills).toBeDefined();
+  });
+
+  it('accepts a single skill', () => {
+    expect(
+      validateWizard(stateWith({ requiredSkills: ['Vital Signs'] })).requiredSkills
+    ).toBeUndefined();
+  });
+
+  it('applies when EDITING too, so an outreach posted before this rule gets repaired', () => {
+    const state = stateWith({ requiredSkills: [], days: [PAST_DATE] });
+    expect(validateOutreachEdit(state, [PAST_DATE]).requiredSkills).toBeDefined();
+  });
+});
+
 describe('validateOutreachEdit', () => {
   it('allows an outreach that already happened to be saved unchanged', () => {
     const state = stateWith({ days: [PAST_DATE] });

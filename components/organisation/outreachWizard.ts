@@ -123,7 +123,7 @@ export const INITIAL_WIZARD_STATE: OutreachWizardState = {
 };
 
 export type WizardFieldError = Partial<
-  Record<'title' | 'date' | 'startTime' | 'endTime' | 'roles', string>
+  Record<'title' | 'date' | 'startTime' | 'endTime' | 'roles' | 'requiredSkills', string>
 >;
 
 /**
@@ -174,6 +174,32 @@ export function validateWizard(state: OutreachWizardState): WizardFieldError {
   const roleError = validateRoles(state.roles);
   if (roleError) {
     errors.roles = roleError;
+  }
+
+  /*
+    AT LEAST ONE REQUIRED SKILL, AND THIS IS A MATCHING RULE RATHER THAN A FORM
+    PREFERENCE.
+
+    Skills are 35 of the 100 points in the match score — the single largest
+    component. The scorer treats an outreach with no required skills as a
+    perfect skills match for everyone (matched ÷ required, with an empty
+    requirement scoring 1.0), which is the right arithmetic and the wrong
+    outcome: every applicant collects the full 35, the biggest component stops
+    discriminating between them, and the ranking collapses onto category,
+    location, availability and experience. An outreach published with no skills
+    is therefore not a relaxed outreach, it is one the matching engine cannot
+    rank properly.
+
+    Nothing checked this before, so it could be published with none.
+
+    The alternative — allow zero and REDISTRIBUTE the 35 points across the
+    other components — is arguably more correct and is deliberately not taken
+    here: it changes the matching engine, which is gated, and it would move
+    every score already stored on every application.
+  */
+  if (state.requiredSkills.length === 0) {
+    errors.requiredSkills =
+      'Pick at least one required skill. Skills are the largest part of the match score, so an outreach with none cannot rank its applicants.';
   }
 
   return errors;

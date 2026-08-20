@@ -724,6 +724,15 @@ export default function EditOutreach() {
               sections={SKILL_SECTIONS}
               onChange={(next) => update('requiredSkills', next)}
             />
+            {/*
+              An outreach created before the skills rule existed will hit this
+              on its first save. That is the intended repair path rather than a
+              side effect: those events cannot rank their applicants, and the
+              editor is where they get fixed.
+            */}
+            {errors.requiredSkills ? (
+              <Text style={styles.fieldError}>{errors.requiredSkills}</Text>
+            ) : null}
 
             {/*
               ONE LIST, NO MODE. The "Any volunteers / Specific roles" toggle
