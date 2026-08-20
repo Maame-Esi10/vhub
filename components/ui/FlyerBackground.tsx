@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Animated, Image, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/theme';
 
 export interface FlyerBackgroundProps {
@@ -66,7 +67,37 @@ export function FlyerBackground({ uri, style, children }: FlyerBackgroundProps) 
             <View style={styles.scrim} />
           </Animated.View>
         </>
-      ) : null}
+      ) : (
+        /*
+          THE NO-FLYER STATE IS DESIGNED, NOT BLANK.
+
+          It was a flat navy rectangle. On a feed card that reads as a plain
+          band, but on the Manage event hero it is a large empty box holding a
+          status pill and a title, and it looked unfinished rather than
+          deliberate — reported from a device.
+
+          What is drawn: two soft off-edge discs and the app's own heart-pulse
+          motif, all at low opacity in existing tokens. The motif is the mark
+          the app already uses for an outreach, so an event with no flyer reads
+          as a V-HUB event rather than as a missing image. Nothing here is a new
+          colour, and nothing is a placeholder icon of the "image not found"
+          kind, which would tell an organisation something is wrong when
+          nothing is.
+
+          Deliberately behind `content` and non-interactive, and deliberately
+          absent whenever there IS a flyer: this must never dirty a real image.
+        */
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <View style={styles.glowWarm} />
+          <View style={styles.glowCool} />
+          <MaterialCommunityIcons
+            name="heart-pulse"
+            size={132}
+            color={colors.primary}
+            style={styles.motif}
+          />
+        </View>
+      )}
 
       {/* Content sits above both the image and the scrim. */}
       <View style={styles.content}>{children}</View>
@@ -89,6 +120,40 @@ const styles = StyleSheet.create({
     // Enough to hold white type legible over a bright photo, light enough that
     // the flyer is still clearly the flyer.
     opacity: 0.55,
+  },
+  /*
+    The empty-state decoration. Every value here is deliberately low: the band
+    carries white type at every size it is used, and the point is to give the
+    navy some structure, not to compete with the title sitting on it.
+
+    The discs run off the edges so they read as part of a larger shape rather
+    than as two circles someone placed. `overflow: 'hidden'` on the container
+    does the cropping.
+  */
+  glowWarm: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    right: -76,
+    top: -104,
+    backgroundColor: 'rgba(255, 107, 107, 0.13)',
+  },
+  glowCool: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    left: -66,
+    bottom: -78,
+    backgroundColor: 'rgba(255, 255, 255, 0.045)',
+  },
+  motif: {
+    position: 'absolute',
+    right: 10,
+    bottom: -26,
+    opacity: 0.15,
+    transform: [{ rotate: '-8deg' }],
   },
   content: {
     position: 'relative',
