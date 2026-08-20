@@ -26,7 +26,7 @@ import {
   useOutreachApplications,
   useOutreachDays,
 } from '@/hooks';
-import { formatDaySpan, lastDay } from '@/lib/outreachDays';
+import { formatDaySpan, hasFirstDayArrived, lastDay } from '@/lib/outreachDays';
 import { isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachStatus } from '@/types/database';
@@ -196,7 +196,24 @@ export default function OrganisationOutreachDetail() {
   */
   const finalDay = lastDay(eventDayStrings) ?? outreach.date;
   const eventOver = hasEventEnded(finalDay, outreach.end_time);
-  const started = !isUpcomingEvent(outreach.date, outreach.start_time);
+  /*
+    STARTED IS A DAY QUESTION, NOT A CLOCK QUESTION.
+
+    This was `!isUpcomingEvent(outreach.date, outreach.start_time)` — has the
+    event's stated start time passed. That disagreed with check-in, which is
+    gated on the calendar DAY alone: `/api/checkin` finds today's row in
+    `outreach_days` and never looks at `start_time`.
+
+    So on the morning of an event, before its stated start, a volunteer could
+    scan and be recorded present while this screen still hid "Mark attendance"
+    from the organiser — attendance existing that the organiser could not open.
+    Reported from a device on 2026-08-20.
+
+    The day is the honest unit, because it is the unit attendance is keyed on.
+  */
+  const started = hasFirstDayArrived(
+    eventDayStrings.length > 0 ? eventDayStrings : [outreach.date]
+  );
   const isDraft = outreach.status === 'draft';
 
   /*
