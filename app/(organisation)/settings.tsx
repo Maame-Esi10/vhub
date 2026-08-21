@@ -51,6 +51,12 @@ export default function OrganisationSettings() {
         */}
         {/* Short fixed label — see the volunteer twin for why not the email. */}
         <SettingsRow
+          icon="bell-outline"
+          label="Notifications"
+          value="Applicants, reminders and alerts"
+          onPress={() => router.push('/(organisation)/notifications')}
+        />
+        <SettingsRow
           icon="lock-outline"
           label="Account & Security"
           value="Login email & password"

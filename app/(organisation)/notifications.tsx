@@ -1,67 +1,76 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { EmptyState, ErrorState, ListSkeleton, ScreenHeader } from '@/components/ui';
+// The row is generic — icon, title, body, unread cues — and only lives under
+// components/volunteer because that side had an inbox first. Imported rather
+// than copied so the two inboxes cannot drift apart visually.
 import { NotificationRow } from '@/components/volunteer';
 import {
-  filterNotifications,
   toNotificationRows,
   unreadCount,
   useMarkNotificationsRead,
   useNotifications,
   type AppNotification,
-  type NotificationFilter,
 } from '@/hooks/useNotifications';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 
-const TABS: Array<{ value: NotificationFilter; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'matches', label: 'Matches' },
-  { value: 'updates', label: 'Updates' },
-];
-
-
-export default function Notifications() {
+/**
+ * The organisation's inbox.
+ *
+ * WHY THIS EXISTS. The organisation side had no notifications screen at all,
+ * which was not obvious because pushes still ARRIVED — the under-subscription
+ * escalation reached a real device on 2026-08-20. Every one of those also
+ * writes a `notifications` row, and until now nothing in the organisation's app
+ * could read one: miss the push, and the message was gone.
+ *
+ * NO TABS, unlike the volunteer screen. Its three are All / Matches / Updates,
+ * and "Matches" is `new_match`, which is only ever sent to volunteers. Offering
+ * an organisation a tab that is structurally always empty would be a worse
+ * screen, not a more consistent one.
+ *
+ * No design ref exists for this screen (design-refs/Notifications.png is the
+ * volunteer one), so it deliberately reuses that screen's language — the same
+ * ScreenHeader, the same dated group headings, the same row — rather than
+ * inventing a second visual style for the same content.
+ */
+export default function OrganisationNotifications() {
   const router = useRouter();
-  const [filter, setFilter] = useState<NotificationFilter>('all');
   const notificationsQuery = useNotifications();
   const markRead = useMarkNotificationsRead();
 
   const notifications = useMemo(() => notificationsQuery.data ?? [], [notificationsQuery.data]);
-  const rows = useMemo(
-    () => toNotificationRows(filterNotifications(notifications, filter)),
-    [notifications, filter]
-  );
+  const rows = useMemo(() => toNotificationRows(notifications), [notifications]);
   const unread = unreadCount(notifications);
 
   /**
-   * Tapping marks read and routes on the payload the server attached. The
-   * `type` values are the contract in lib/push.ts, kept in step with the four
-   * dispatch sites in api/.
+   * Tapping marks read and routes on what the server attached.
+   *
+   * A new applicant goes to the vetting queue for THAT event rather than to the
+   * event page: the notification exists because there is someone to decide on,
+   * and the decision is one screen further in.
    */
   function handlePress(notification: AppNotification) {
     if (!notification.read_at) {
       markRead.mutate(notification.id);
     }
 
-    // outreach_id is a real column, so it stays correct even for a payload
-    // shape that predates a later change to `data`.
-    if (notification.outreach_id) {
-      router.push(`/(volunteer)/outreach/${notification.outreach_id}?from=/(volunteer)/notifications`);
+    const kind = (notification.data as { kind?: string } | null)?.kind;
+    if (kind === 'new_application' && notification.outreach_id) {
+      router.push(`/(organisation)/applicants?outreachId=${notification.outreach_id}`);
       return;
     }
-    if (notification.type === 'application_status') {
-      router.push('/(volunteer)/applications');
+    if (notification.outreach_id) {
+      router.push(`/(organisation)/outreach/${notification.outreach_id}`);
     }
-    // A 'test' notification routes nowhere: it exists only to prove delivery.
   }
 
   const header = (
     <ScreenHeader
       title="Notifications"
-      fallback="/(volunteer)/feed"
+      fallback="/(organisation)/dashboard"
       trailing={
         <Pressable
           onPress={() => markRead.mutate(undefined)}
@@ -114,28 +123,10 @@ export default function Notifications() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {header}
 
-      <View style={styles.tabs}>
-        {TABS.map((tab) => {
-          const active = tab.value === filter;
-          return (
-            <Pressable
-              key={tab.value}
-              onPress={() => setFilter(tab.value)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              style={styles.tab}
-            >
-              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{tab.label}</Text>
-              <View style={[styles.tabUnderline, active && styles.tabUnderlineActive]} />
-            </Pressable>
-          );
-        })}
-      </View>
-
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={rows.length === 0 ? styles.emptyContent : undefined}
+        contentContainerStyle={rows.length === 0 ? styles.emptyContent : styles.listContent}
         refreshControl={
           <RefreshControl
             refreshing={notificationsQuery.isRefetching}
@@ -153,21 +144,13 @@ export default function Notifications() {
           )
         }
         ListEmptyComponent={
-          notifications.length === 0 ? (
-            <EmptyState
-              icon="bell-outline"
-              title="No notifications yet"
-              message="When an outreach matches your profile or an organisation responds to an application, you'll hear about it here."
-              actionLabel="Browse outreaches"
-              onAction={() => router.push('/(volunteer)/feed')}
-            />
-          ) : (
-            <EmptyState
-              icon="filter-variant"
-              title="Nothing in this tab"
-              message="You have no notifications of this kind yet."
-            />
-          )
+          <EmptyState
+            icon="bell-outline"
+            title="Nothing yet"
+            message="New applicants, events short of volunteers and reminders about your own outreaches all land here."
+            actionLabel="Go to your events"
+            onAction={() => router.push('/(organisation)/dashboard')}
+          />
         }
       />
     </SafeAreaView>
@@ -181,52 +164,29 @@ const styles = StyleSheet.create({
   },
   centerFill: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: {
-    opacity: 0.7,
-  },
-  tabs: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.xl,
-    gap: spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  tab: {
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  tabLabel: {
-    fontFamily: fontFamily.medium,
-    fontSize: 14,
-    color: colors.textSecondary,
+  // Real breathing room at both ends of the list rather than rows running into
+  // the header and the tab bar.
+  listContent: {
     paddingTop: spacing.sm,
-  },
-  tabLabelActive: {
-    fontFamily: fontFamily.semiBold,
-    color: colors.primary,
-  },
-  tabUnderline: {
-    height: 2,
-    alignSelf: 'stretch',
-    backgroundColor: 'transparent',
-  },
-  tabUnderlineActive: {
-    backgroundColor: colors.primary,
-  },
-  groupHeader: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 12,
-    letterSpacing: 0.5,
-    color: colors.textSecondary,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.xxl,
   },
   emptyContent: {
     flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  groupHeader: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    marginHorizontal: spacing.xl,
+  },
+  pressed: {
+    opacity: 0.6,
   },
 });

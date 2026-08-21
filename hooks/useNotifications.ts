@@ -71,6 +71,57 @@ export function filterNotifications(
   return notifications.filter((n) => n.type !== 'new_match');
 }
 
+/** A dated section heading, or one notification under it. */
+export type NotificationListRow =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'notification'; key: string; notification: AppNotification };
+
+function startOfLocalDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/**
+ * TODAY / YESTERDAY / an explicit date, as in design-refs/Notifications.png.
+ *
+ * Compared on local calendar date rather than elapsed hours: something sent at
+ * 23:50 is "yesterday" at 00:10, not "22 minutes ago and also today".
+ */
+export function notificationGroupHeading(iso: string): string {
+  const created = new Date(iso);
+  if (Number.isNaN(created.getTime())) return 'EARLIER';
+
+  const dayDiff = Math.round((startOfLocalDay(new Date()) - startOfLocalDay(created)) / 86_400_000);
+  if (dayDiff <= 0) return 'TODAY';
+  if (dayDiff === 1) return 'YESTERDAY';
+  return created
+    .toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+    .toUpperCase();
+}
+
+/**
+ * Flattens a sorted notification list into headed rows for one FlatList.
+ *
+ * Lives here rather than on the volunteer screen because the organisation has
+ * an inbox too, and two copies of a date-grouping rule is two places for
+ * "YESTERDAY" to start meaning different things.
+ */
+export function toNotificationRows(
+  notifications: readonly AppNotification[]
+): NotificationListRow[] {
+  const rows: NotificationListRow[] = [];
+  let lastHeading: string | null = null;
+
+  for (const notification of notifications) {
+    const heading = notificationGroupHeading(notification.created_at);
+    if (heading !== lastHeading) {
+      rows.push({ kind: 'header', key: `header-${heading}`, label: heading });
+      lastHeading = heading;
+    }
+    rows.push({ kind: 'notification', key: notification.id, notification });
+  }
+  return rows;
+}
+
 export function unreadCount(notifications: readonly AppNotification[]): number {
   return notifications.reduce((total, n) => (n.read_at ? total : total + 1), 0);
 }
