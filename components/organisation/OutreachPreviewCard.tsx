@@ -56,37 +56,79 @@ export function OutreachPreviewCard({ state }: OutreachPreviewCardProps) {
       <View style={styles.body}>
         <Text style={styles.title}>{state.title || 'Untitled outreach'}</Text>
 
-        <View style={styles.infoRow}>
-          <View style={styles.infoPill}>
-            <MaterialCommunityIcons name="calendar" size={14} color={colors.primary} />
-            {/*
-              formatDaySpan rather than formatEventDate: it reads a one-day
-              outreach exactly as the old single date did, and says "3 days"
-              or "4 days · Oct 3 – Oct 24" for the rest, so the preview shows
-              the same thing the volunteer's card will.
-            */}
-            <Text style={styles.infoText}>
-              {state.days.length > 0 ? formatDaySpan(state.days) : 'No date set'}
-              {timeRange ? ` · ${timeRange}` : ''}
-            </Text>
+        {/*
+          THE META ROWS SHARE ONE RAIL, ONE COLOUR AND THE CARD'S WIDTH.
+
+          Three faults, all reported from a device, all in this block:
+
+          The text ran past the right edge. A Text inside a flex row does not
+          shrink on its own — without `flex: 1` it lays out at its natural
+          width and simply overflows. Every meta value now sits in a flexed
+          block, so a long venue wraps inside the card instead of escaping it.
+
+          The icons sat beside the SECOND line. The row centred its children,
+          so once the text wrapped the glyph centred against the whole block.
+          They are top-aligned now, in a fixed 20pt column with the glyph's
+          line height matched to the text's, so icon and first line share one
+          line box — and because the column is a fixed width, the calendar and
+          the pin start at the same left edge despite being different widths.
+
+          The colours disagreed: date and venue were black while the
+          description beneath them was grey, so the meta block read as two
+          unrelated things. One grey now. Only the title is black.
+
+          This is lifted from the Outreach Detail card's rail, which already
+          solved all three. The volunteer feed card and Outreach Detail itself
+          are deliberately untouched.
+        */}
+        <View style={styles.metaRow}>
+          <View style={styles.metaIconColumn}>
+            <MaterialCommunityIcons
+              name="calendar"
+              size={14}
+              color={colors.primary}
+              style={styles.metaIcon}
+            />
           </View>
+          {/*
+            formatDaySpan rather than formatEventDate: it reads a one-day
+            outreach exactly as the old single date did, and names the days for
+            a scatter, so the preview shows the same thing the volunteer's card
+            will.
+          */}
+          <Text style={styles.metaText}>
+            {state.days.length > 0 ? formatDaySpan(state.days) : 'No date set'}
+            {timeRange ? ` · ${timeRange}` : ''}
+          </Text>
         </View>
 
         {location ? (
-          <View style={styles.infoRow}>
-            <View style={styles.infoPill}>
-              <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.primary} />
-              <Text style={styles.infoText}>{location}</Text>
+          <View style={styles.metaRow}>
+            <View style={styles.metaIconColumn}>
+              <MaterialCommunityIcons
+                name="map-marker-outline"
+                size={14}
+                color={colors.primary}
+                style={styles.metaIcon}
+              />
             </View>
+            <Text style={styles.metaText}>{location}</Text>
           </View>
         ) : null}
 
         {state.description ? <Text style={styles.description}>{state.description}</Text> : null}
 
         {roleSummary ? (
-          <View style={styles.roleSummaryRow}>
-            <MaterialCommunityIcons name="account-group-outline" size={14} color={colors.primary} />
-            <Text style={styles.roleSummaryText}>{roleSummary}</Text>
+          <View style={[styles.metaRow, styles.roleSummaryRow]}>
+            <View style={styles.metaIconColumn}>
+              <MaterialCommunityIcons
+                name="account-group-outline"
+                size={14}
+                color={colors.primary}
+                style={styles.metaIcon}
+              />
+            </View>
+            <Text style={styles.metaText}>{roleSummary}</Text>
           </View>
         ) : null}
 
@@ -142,18 +184,34 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginBottom: spacing.sm,
   },
-  infoRow: {
+  metaRow: {
+    flexDirection: 'row',
+    // Top-aligned so the glyph anchors to the FIRST line. Centring stranded
+    // the calendar beside line two of a wrapped date.
+    alignItems: 'flex-start',
+    gap: spacing.sm,
     marginBottom: spacing.xs,
   },
-  infoPill: {
-    flexDirection: 'row',
+  // The rail. Glyphs do not share an advance width -- the calendar is wider
+  // than the pin -- so a fixed-width container is what makes the two rows
+  // start at the same left edge. Sizing the glyph itself would not.
+  metaIconColumn: {
+    width: 20,
     alignItems: 'center',
-    gap: spacing.xs,
   },
-  infoText: {
+  // Matched to metaText's line height so the icon and the first line of text
+  // occupy one line box and read as one line.
+  metaIcon: {
+    lineHeight: 19,
+  },
+  metaText: {
+    // Without this the Text lays out at its natural width inside the row and
+    // runs off the card. This is the whole overflow fix.
+    flex: 1,
     fontFamily: fontFamily.medium,
     fontSize: 13,
-    color: colors.textPrimary,
+    lineHeight: 19,
+    color: colors.textSecondary,
   },
   description: {
     fontFamily: fontFamily.regular,
@@ -162,17 +220,11 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
   },
+  // The staffing breakdown is the same kind of row as the date and the venue,
+  // so it uses the same rail and only adds the space that separates it from
+  // the description above.
   roleSummaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
     marginTop: spacing.base,
-  },
-  roleSummaryText: {
-    flex: 1,
-    fontFamily: fontFamily.medium,
-    fontSize: 13,
-    color: colors.textPrimary,
   },
   tagsRow: {
     flexDirection: 'row',
