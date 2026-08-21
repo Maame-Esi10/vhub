@@ -268,6 +268,83 @@ export function applyVScorePenalty(score: number, penalty: VScorePenaltyType): n
 }
 
 /**
+ * The deduction for a LATE PER-DAY RELEASE, approved by the owner 2026-08-21.
+ *
+ * A volunteer may drop a future day they committed to (lib/outreachDays.ts).
+ * Dropping one inside 24 hours of that day is a late cancellation, and this is
+ * what it costs — but only once it becomes a pattern.
+ *
+ * WHY IT IS FREE THE FIRST TWO TIMES. Per-day release exists because the app
+ * used to punish people for something it gave them no way to avoid: withdrawal
+ * was all-or-nothing and closed once an event began, so a volunteer who could
+ * not make one Saturday of four had to abandon the campaign or take a -15
+ * no-show. Charging for the first honest use of the escape hatch would rebuild
+ * the trap. Two free in a rolling 90 days covers real life twice a quarter;
+ * three is a pattern rather than an accident.
+ *
+ * WHY THE WINDOW ROLLS. A lifetime counter can never be worked off, and a
+ * penalty nobody can escape stops changing behaviour. Somebody unreliable last
+ * year and dependable since is dependable.
+ *
+ * WHY THIS SHAPE, AND WHY -8 IS THE COEFFICIENT. The scale already has two
+ * anchors: -8 for abandoning a whole event late, -15 for not turning up at all.
+ * Releasing every remaining day IS a withdrawal and already routes to the -8,
+ * so the per-day cost has to approach -8 as the share released approaches the
+ * whole and be materially smaller for one day of many. `-8 x share` meets the
+ * existing scale exactly at its own edge, which is the argument for it over any
+ * other coefficient:
+ *
+ *   1 of 4 days  ->  -2    the organiser is short one day, not four
+ *   2 of 4 days  ->  -4
+ *   3 of 4 days  ->  -6
+ *   4 of 4 days  ->  a withdrawal, and takes the existing -8 by that path
+ *
+ * The FLOOR of -2 stops one day of a twenty-day campaign rounding to nothing,
+ * which would make repeated late drops on long events free. The CAP of -8 keeps
+ * it from ever exceeding abandoning the event outright, and well clear of the
+ * -15 reserved for not showing up — which is right, because somebody who
+ * releases a day told you.
+ */
+export const LATE_RELEASE_FREE_ALLOWANCE = 2;
+export const LATE_RELEASE_MAX_PENALTY = -8;
+export const LATE_RELEASE_MIN_PENALTY = -2;
+
+export interface LateReleasePenaltyInput {
+  /** How many late releases this volunteer has already made in the window. */
+  priorLateReleases: number;
+  /** Days released in THIS act. */
+  daysReleased: number;
+  /** Days they had committed to before it. */
+  daysCommitted: number;
+}
+
+/**
+ * The points to add for one late release — 0 while the allowance holds, and a
+ * negative number after it.
+ *
+ * Returns 0 rather than null for "no penalty", because this is a term in a sum
+ * rather than an outcome that might be absent. `computeEventOutcome` returns
+ * null for a genuinely unscorable review; this always has an answer.
+ */
+export function lateReleasePenalty(input: LateReleasePenaltyInput): number {
+  if (input.priorLateReleases < LATE_RELEASE_FREE_ALLOWANCE) return 0;
+  if (input.daysCommitted <= 0 || input.daysReleased <= 0) return 0;
+
+  const share = Math.min(1, input.daysReleased / input.daysCommitted);
+  const raw = LATE_RELEASE_MAX_PENALTY * share;
+
+  // Rounded to one decimal so a score stays legible; clamped between the floor
+  // and the cap in magnitude.
+  const bounded = Math.max(LATE_RELEASE_MAX_PENALTY, Math.min(LATE_RELEASE_MIN_PENALTY, raw));
+  return Math.round(bounded * 10) / 10;
+}
+
+/** Applies one late release to a score, clamped to [0, 100]. */
+export function applyLateReleasePenalty(score: number, input: LateReleasePenaltyInput): number {
+  return clampScore(score + lateReleasePenalty(input));
+}
+
+/**
  * Applies multiple penalties in sequence (e.g. a volunteer who racked up more
  * than one no-show before their score was ever recomputed), clamping after
  * each step so intermediate values never go negative before the next penalty

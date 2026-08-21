@@ -1,4 +1,8 @@
 import {
+  applyLateReleasePenalty,
+  lateReleasePenalty,
+  LATE_RELEASE_MAX_PENALTY,
+  LATE_RELEASE_MIN_PENALTY,
   NEW_VOLUNTEER_V_SCORE,
   RELIABILITY_MULTIPLIERS,
   V_SCORE_PENALTIES,
@@ -372,5 +376,69 @@ describe('computeRankingScore', () => {
 
   it('applies the mild Developing nudge', () => {
     expect(computeRankingScore(80, 50)).toBeCloseTo(72);
+  });
+});
+
+describe('the late per-day release penalty', () => {
+  const committed4 = { daysCommitted: 4, daysReleased: 1 };
+
+  it('costs nothing for the first two in the window', () => {
+    // Per-day release exists BECAUSE the app used to punish people for
+    // something it gave them no way to avoid. Charging for the first honest
+    // use of the escape hatch would rebuild the trap.
+    expect(lateReleasePenalty({ priorLateReleases: 0, ...committed4 })).toBe(0);
+    expect(lateReleasePenalty({ priorLateReleases: 1, ...committed4 })).toBe(0);
+  });
+
+  it('starts deducting on the third', () => {
+    expect(lateReleasePenalty({ priorLateReleases: 2, ...committed4 })).toBeLessThan(0);
+  });
+
+  it('scales with how much of the commitment was dropped', () => {
+    const p = (daysReleased: number) =>
+      lateReleasePenalty({ priorLateReleases: 2, daysCommitted: 4, daysReleased });
+    expect(p(1)).toBe(-2);
+    expect(p(2)).toBe(-4);
+    expect(p(3)).toBe(-6);
+  });
+
+  it('meets the existing scale exactly at its edge', () => {
+    // Releasing the whole commitment IS a withdrawal and takes -8 by that path,
+    // which is the argument for -8 as the coefficient rather than any other.
+    expect(lateReleasePenalty({ priorLateReleases: 2, daysCommitted: 4, daysReleased: 4 })).toBe(
+      V_SCORE_PENALTIES.late_cancellation
+    );
+  });
+
+  it('never rounds a long campaign down to nothing', () => {
+    // One day of twenty is a 5% share, which is -0.4 before the floor. Without
+    // the floor, repeated late drops on long events would be free.
+    expect(lateReleasePenalty({ priorLateReleases: 5, daysCommitted: 20, daysReleased: 1 })).toBe(
+      LATE_RELEASE_MIN_PENALTY
+    );
+  });
+
+  it('never costs more than abandoning the event, let alone a no-show', () => {
+    const worst = lateReleasePenalty({
+      priorLateReleases: 99,
+      daysCommitted: 2,
+      daysReleased: 40,
+    });
+    expect(worst).toBe(LATE_RELEASE_MAX_PENALTY);
+    expect(worst).toBeGreaterThan(V_SCORE_PENALTIES.no_show);
+  });
+
+  it('moves nothing when the numbers are nonsense', () => {
+    expect(lateReleasePenalty({ priorLateReleases: 9, daysCommitted: 0, daysReleased: 1 })).toBe(0);
+    expect(lateReleasePenalty({ priorLateReleases: 9, daysCommitted: 4, daysReleased: 0 })).toBe(0);
+  });
+
+  it('applies to a score and cannot push it below zero', () => {
+    expect(
+      applyLateReleasePenalty(70, { priorLateReleases: 2, daysCommitted: 4, daysReleased: 1 })
+    ).toBe(68);
+    expect(
+      applyLateReleasePenalty(1, { priorLateReleases: 2, daysCommitted: 4, daysReleased: 4 })
+    ).toBe(0);
   });
 });
