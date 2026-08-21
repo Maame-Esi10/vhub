@@ -29,10 +29,19 @@ not meet it:
   `Linking.openURL`.
 
 So anyone holding the URL string can fetch the document, with no session and no
-authorisation check. **Verify this against the Cloudinary console before building**
-— the plan should not rest on a reading of the code alone — but if it holds, this
-is a live privacy gap, not a future one, and real documents may already exist
-(the verification flow shipped 2026-08-20 and has been device-tested since).
+authorisation check. **Verify this against the Cloudinary console before
+building** — the plan should not rest on a reading of the code alone.
+
+**Nothing has been exposed.** The owner confirmed on 2026-08-21 that **no real
+credential document has ever been uploaded to this app**: everything in the
+credentials folder is test PDFs she uploaded while exercising the upload flow. No
+volunteer's licence or ID has been at risk at any point.
+
+That distinction matters for how this is treated. It is a **gap to close before
+real documents arrive**, not a breach to remediate — no notification duty, no
+audit of who fetched what, no migration of assets worth preserving. What remains
+is ordinary engineering with a deadline attached to it: packages C and D are what
+cause real documents to be uploaded at volume, so the fix lands before them.
 
 **Consequence for the order: section 6(a) moves to the front, before the two
 features that cause documents to be uploaded and reviewed at volume.** This is
@@ -145,12 +154,19 @@ ever stored or returned.
 4. The verification screen and both admin queues fetch through it. Nothing
    renders a document from a stored string again.
 
-**Migration of existing rows.** Whatever documents already exist were uploaded
-public. They cannot be made private by a database change alone — the asset has to
-be moved in Cloudinary or re-uploaded. Smallest honest option: mark existing
-credentials as needing re-upload and tell those volunteers, since the volume is
-tiny (single figures). **Decide this with the owner rather than silently
-migrating or silently leaving them public.**
+**Existing assets: delete them (owner's decision, 2026-08-21).** They are test
+PDFs, so there is nothing to preserve and no volunteer to notify. Delete the
+Cloudinary assets and clear `credential_document_url` (and
+`verification_status` back to `unverified`) on any row pointing at them.
+
+**Confirm what is actually in the folder first**, from the Cloudinary console,
+rather than deleting on the strength of an assumption about what should be there.
+If anything unexpected has landed in `vhub/credentials/`, stop and report it
+before removing anything.
+
+Order matters: do the deletion **after** the private-upload path is in place, so
+a re-upload during testing lands as a private asset rather than recreating the
+problem.
 
 **Access rules (§6(b)), enforced at the API, not the UI**
 - A volunteer sees their own documents, always.
@@ -326,13 +342,67 @@ audit-and-repair job rather than a code fix.
 
 ---
 
-## What to decide before building starts
+## How `organisation_profiles.verified` is derived
 
-1. **Existing public credential documents** — re-upload, migrate in Cloudinary,
-   or leave. Needs a decision; do not choose silently.
-2. **`organisation_profiles.verified`** — replaced by the new state column, or
-   derived from it and kept for compatibility.
-3. **Order** — confirm the two changes argued above: §6(a) before the queues, and
-   the audit trail built in package A rather than last.
-4. **V-Score reversal** — stays gated, and stays out of package G unless
-   separately approved after its own report.
+**Decided 2026-08-21: derive it from the new state column and keep it.** Replacing
+it would mean touching every reader at once and risking a miss; deriving keeps
+every existing reader working while `verification_state` becomes the truth, and
+the boolean can be dropped later once nothing reads it.
+
+**What derives it: a STORED generated column.**
+
+```sql
+-- PASTE 2 territory (it references the new enum), and the view has to go first
+-- because a column cannot be dropped while a view selects it.
+drop view if exists public_organisation_profiles;
+
+alter table organisation_profiles drop column verified;
+alter table organisation_profiles
+  add column verified boolean
+  generated always as (verification_state = 'verified') stored;
+
+-- then recreate public_organisation_profiles exactly as it was; it selects
+-- op.verified and does not need to change.
+```
+
+A trigger would also work and is more forgiving, but a generated column is the
+right instrument for the same reason CLAUDE.md already gives about the multi-role
+flag: **a boolean that must agree with something else will eventually disagree
+with it** unless the database is the one computing it. Generated is the version
+that cannot drift.
+
+**The consequence to design around: nothing may write `verified` ever again.**
+Postgres rejects a write to a generated column. Today the column is service-role
+only — absent from every client grant — so the only writers are server-side, and
+they all move to setting `verification_state`. That is a strict improvement:
+approval becomes one write to one column with one meaning.
+
+**Where it is read** (all keep working untouched):
+
+| Reader | What it does |
+|---|---|
+| `app/(organisation)/settings.tsx` | "Verified" / "Awaiting verification" on the identity block, and the Organisation Verification row |
+| `app/(organisation)/edit-profile.tsx` | the badge and its icon |
+| `app/profile/organisation/[id].tsx` | the public "Verified organisation" badge |
+| `public_organisation_profiles` (view) | exposes `op.verified` to volunteers |
+| `api/.../match/route.ts` | selects it inside the organisation embed |
+| `lib/api-client.ts`, `types/database.ts` | the two type declarations |
+
+Eight sites across the app, the API, a view and two type files — which is exactly
+why deriving beat replacing.
+
+## Decisions — all four confirmed 2026-08-21
+
+1. **Existing credential documents: delete them.** Test PDFs only; nothing real
+   has ever been uploaded. Confirm the folder contents in the Cloudinary console
+   first, and delete after the private path exists.
+2. **`verified` is derived and kept**, as a stored generated column — see above.
+3. **Both order changes confirmed**: §6(a) before the review queues, audit trail
+   in package A.
+4. **V-Score reversal stays outside package G**, its own approval gate, with the
+   full report on storage, computation, migration, breakage risk and re-testing
+   before a yes is asked for. Disputes ship against the current model.
+
+**Also confirmed:** the two-paste enum rule applies to every admin migration that
+adds a role value — the same constraint already hit with `not_selected` and
+`cancelled`.
