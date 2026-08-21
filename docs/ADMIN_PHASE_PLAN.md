@@ -45,8 +45,10 @@ cause real documents to be uploaded at volume, so the fix lands before them.
 
 **Consequence for the order: section 6(a) moves to the front, before the two
 features that cause documents to be uploaded and reviewed at volume.** This is
-the owner's own principle from the brief — "do document privacy before any real
-documents are uploaded" — applied to the fact that some already are.
+the owner's own principle from the brief, "do document privacy before any real
+documents are uploaded", read literally: the moment real ones start arriving is
+the moment packages C and D ship, so the fix has to land before them rather than
+after.
 
 ### 2. The role enum cannot be extended and used in one paste
 
@@ -82,7 +84,7 @@ disagreement with reasons. Two changes, both argued above and below:
 | # | Package | Why here |
 |---|---|---|
 | **A** | §1 admin role + `(admin)` group + §12 audit trail | Hard prerequisite. Nothing else can be built or tested without an admin to be. |
-| **B** | §6(a) private documents + signed URLs | Moved BEFORE the review queues. Documents already exist and are currently fetchable by URL. |
+| **B** | §6(a) private documents + signed URLs | Moved BEFORE the review queues, which are what bring real documents in. Nothing real has been exposed; the path is simply not private yet. |
 | **C** | §3 organisation verification | The blocking half of the trust chain. |
 | **D** | §4 volunteer credentials, Gate 1 | The other blocking half; closes the "verified without applying anywhere" gap. |
 | **E** | §6(b)(c) access control + consent, §5 guidelines | Finishes the document story around the queues that now exist. |
