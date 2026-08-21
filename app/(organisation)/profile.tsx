@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Avatar } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -24,12 +25,32 @@ export default function OrganisationProfile() {
         </Pressable>
       </View>
 
+      {/*
+        THE LOGO BELONGS ON THE SCREEN THAT IS ABOUT WHO YOU ARE.
+
+        This card had no image at all — not a broken one, an absent one — so
+        the organisation's own Profile tab was the only identity surface in
+        the app that never showed the logo it had uploaded. Settings, one tap
+        away, always did.
+
+        Initials come from the same `full_name` rendered beside them, so the
+        fallback can never show different letters from the name on the card.
+      */}
       <View style={styles.card}>
-        <Text style={styles.name}>{profile?.full_name ?? 'Organisation'}</Text>
-        {profile?.email ? <Text style={styles.email}>{profile.email}</Text> : null}
-        <View style={styles.badgeRow}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>Organisation</Text>
+        <Avatar name={profile?.full_name ?? 'Organisation'} uri={profile?.avatar_url} size={56} />
+        <View style={styles.identityText}>
+          <Text style={styles.name} numberOfLines={2}>
+            {profile?.full_name ?? 'Organisation'}
+          </Text>
+          {profile?.email ? (
+            <Text style={styles.email} numberOfLines={1}>
+              {profile.email}
+            </Text>
+          ) : null}
+          <View style={styles.badgeRow}>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>Organisation</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -105,9 +126,19 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // Real space between the logo and the text it labels, rather than the two
+    // sitting flush against each other.
+    gap: spacing.base,
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.base,
+  },
+  identityText: {
+    // Takes the remaining width so a long organisation name wraps inside the
+    // card instead of pushing the badge off its edge.
+    flex: 1,
   },
   name: {
     fontFamily: fontFamily.semiBold,
