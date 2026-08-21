@@ -99,6 +99,16 @@ export interface ShortfallCopyParams {
   daysOut: number;
   /** How many volunteers this stage has told, if any. */
   volunteersNotified?: number;
+  /**
+   * The specific day that is short, `YYYY-MM-DD`, when it is not the outreach's
+   * only day.
+   *
+   * Omitted for a one-day outreach, where naming the day would repeat what the
+   * "in 3 days" already said. Present for a multi-day one, where "your outreach
+   * is short" without a day leaves the organisation to work out which of five
+   * days it means.
+   */
+  day?: string;
 }
 
 /**
@@ -114,16 +124,20 @@ export function organisationShortfallMessage({
   slotsTotal,
   daysOut,
   volunteersNotified,
+  day,
 }: ShortfallCopyParams): string {
   const when = daysOut === 1 ? 'is tomorrow' : `is in ${daysOut} days`;
   const filled = `${slotsFilled} of ${slotsTotal} ${slotsTotal === 1 ? 'place' : 'places'} filled`;
+  // Which day, when the event runs on more than one. Still a statement and
+  // still not advice.
+  const which = day ? ` The day short of volunteers is ${day}.` : '';
 
   const reach =
     volunteersNotified && volunteersNotified > 0
       ? ` ${volunteersNotified} matching ${volunteersNotified === 1 ? 'volunteer has' : 'volunteers have'} been told about it.`
       : '';
 
-  return `${outreachTitle} ${when}, with ${filled}.${reach}`;
+  return `${outreachTitle} ${when}, with ${filled}.${which}${reach}`;
 }
 
 /** The volunteer's message: an event near them that still has room. */

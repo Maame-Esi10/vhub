@@ -1,7 +1,8 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Badge, FlyerBackground, daysUntilEvent, formatEventDate, formatEventTimeRange } from '@/components/ui';
-import { formatDaySpan } from '@/lib/outreachDays';
+import { dayShortfallSummary, hasHiddenDayShortfall, type DayCoverage } from '@/lib/dayCoverage';
+import { formatDayShort, formatDaySpan } from '@/lib/outreachDays';
 import { UNDER_SUBSCRIPTION_STAGES, isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -32,6 +33,11 @@ export interface OutreachCardProps {
    * most of these are, and what shows while the day query is still in flight.
    */
   days?: readonly string[];
+  /**
+   * Per-day staffing, derived from live commitments. Absent on a single-day
+   * outreach and while the query is in flight.
+   */
+  dayCoverage?: readonly DayCoverage[];
   onPress: () => void;
   /** Publish (draft -> open) or close (open -> closed) quick action, when applicable. */
   quickAction?: { label: string; onPress: () => void };
@@ -51,7 +57,14 @@ export interface OutreachCardProps {
  * brought along. An organisation looking at its own event should see the event
  * as volunteers see it, flyer included.
  */
-export function OutreachCard({ outreach, days, onPress, quickAction, quickActionPending }: OutreachCardProps) {
+export function OutreachCard({
+  outreach,
+  days,
+  dayCoverage,
+  onPress,
+  quickAction,
+  quickActionPending,
+}: OutreachCardProps) {
   // The whole span, not the first day. An organisation scanning its own queue
   // could not tell a one-day clinic from a three-week campaign, because both
   // printed the single date the campaign happens to START on.
@@ -88,6 +101,27 @@ export function OutreachCard({ outreach, days, onPress, quickAction, quickAction
     slotsFilled: outreach.slots_filled,
     slotsTotal: outreach.slots_total,
   });
+
+  /*
+    WHEN "5 OF 5 FILLED" AND A SHORT DAY ARE BOTH TRUE.
+
+    `slots_filled` counts accepted PEOPLE. Once a volunteer can release one day
+    of a multi-day outreach, five people can be accepted while Saturday has
+    four on it — so the footer says the event is full and a day of it is not.
+
+    Neither number is wrong, and showing only one of them is what would make
+    this read as a bug. The card states the day figure explicitly whenever it
+    disagrees with the event figure, so the organisation sees both and the
+    difference is named rather than discovered.
+  */
+  const coverage = dayCoverage ?? [];
+  const dayGapLine =
+    coverage.length > 1 ? dayShortfallSummary(coverage, formatDayShort) : null;
+  const hiddenGap = hasHiddenDayShortfall(
+    coverage,
+    outreach.slots_filled,
+    outreach.slots_total
+  );
 
   return (
     <Pressable
@@ -128,6 +162,25 @@ export function OutreachCard({ outreach, days, onPress, quickAction, quickAction
             <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textSecondary} />
             <Text style={styles.metaText} numberOfLines={1}>
               {location}
+            </Text>
+          </View>
+        ) : null}
+
+        {/*
+          Shown ABOVE the general shortfall note when the event reads full,
+          because in that case it is the only thing telling the organisation
+          anything is wrong at all.
+        */}
+        {dayGapLine ? (
+          <View style={[styles.shortfall, hiddenGap && styles.shortfallDay]}>
+            <MaterialCommunityIcons
+              name="calendar-alert"
+              size={14}
+              color={hiddenGap ? colors.warning : colors.textSecondary}
+            />
+            <Text style={styles.shortfallText}>
+              {dayGapLine}
+              {hiddenGap ? ' · the event itself is full' : ''}
             </Text>
           </View>
         ) : null}
@@ -247,6 +300,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.surfaceSubtle,
+  },
+  // Tinted only when it is the ONLY warning on the card — an event reading full
+  // while a day is short is the case nothing else would surface.
+  shortfallDay: {
+    backgroundColor: 'rgba(245, 158, 11, 0.10)',
   },
   shortfallText: {
     flex: 1,

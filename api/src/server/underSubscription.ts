@@ -86,34 +86,59 @@ export async function escalateUnderSubscribedOutreaches(): Promise<UnderSubscrip
     volunteersNotified: 0,
   };
 
+  /*
+    THE LADDER CLIMBS PER DAY, NOT PER EVENT.
+
+    It used to select on `outreaches.date`, which is the FIRST day, and judge
+    the shortfall on `slots_filled`, which counts accepted PEOPLE. Two things
+    fell through that:
+
+      * A campaign short on day five never escalated at all, because only its
+        first day was ever three days away.
+      * Once a volunteer could release one day of a multi-day outreach, an
+        event could read "5 of 5 filled" while a day of it had four. The
+        ladder read the full number and stayed silent about the short day.
+
+    Now each DAY is its own rung: the job looks for days landing exactly
+    stage.daysOut away, counts who is still committed to that day, and
+    escalates the ones below the outreach's target. Nothing new is stored --
+    the count is derived from commitment rows that already exist. See
+    lib/dayCoverage.ts for why a per-day slot column was rejected, and note
+    that the TARGET is still the event's own `slots_total`: per-day targets are
+    a statement of intent and cannot be derived from anything.
+
+    Deduped on stage + day id, so each day escalates once on its own schedule
+    rather than one day silencing the rest -- the same lesson the check-in
+    reminders learned.
+  */
   for (const stage of UNDER_SUBSCRIPTION_STAGES) {
-    const { data: outreaches, error } = await admin
-      .from("outreaches")
+    const { data: dayRows, error } = await admin
+      .from("outreach_days")
       .select(
-        "id, organisation_id, title, date, status, region, district, role_type, required_skills, required_category, start_time, end_time, slots_total, slots_filled"
+        "id, day, outreach_id, outreaches!inner (id, organisation_id, title, date, status, region, district, role_type, required_skills, required_category, start_time, end_time, slots_total, slots_filled)"
       )
-      .eq("status", "open")
-      .eq("date", dateInDays(stage.daysOut));
+      .eq("day", dateInDays(stage.daysOut))
+      .eq("outreaches.status", "open");
     if (error) throw Errors.internal("Could not load outreaches for the under-subscription check.");
 
-    for (const row of (outreaches ?? []) as unknown as OutreachRow[]) {
-      if (
-        !isUnderSubscribed({
-          status: row.status,
-          slotsFilled: row.slots_filled,
-          slotsTotal: row.slots_total,
-        })
-      ) {
-        continue;
-      }
+    for (const dayRow of (dayRows ?? []) as unknown as OutreachDayRow[]) {
+      const row = dayRow.outreaches;
+      if (!row || row.slots_total <= 0) continue;
 
-      if (await alreadyEscalated(row.id, stage.key)) continue;
+      const filledThisDay = await countLiveCommitments(dayRow.id);
+      if (filledThisDay >= row.slots_total) continue;
+
+      if (await alreadyEscalated(row.id, stage.key, dayRow.id)) continue;
 
       // Volunteers first, so the organisation's message can report how many
       // people were actually reached rather than promising a fan-out that may
       // have found nobody.
       const volunteersNotified = await notifyNearbyVolunteers(row, stage);
-      await notifyOrganisation(row, stage, volunteersNotified);
+      await notifyOrganisation(row, stage, volunteersNotified, {
+        outreachDayId: dayRow.id,
+        day: dayRow.day,
+        filledThisDay,
+      });
 
       result.outreachesEscalated += 1;
       result.organisationsNotified += 1;
@@ -124,15 +149,46 @@ export async function escalateUnderSubscribedOutreaches(): Promise<UnderSubscrip
   return result;
 }
 
+interface OutreachDayRow {
+  id: string;
+  day: string;
+  outreach_id: string;
+  outreaches: OutreachRow | null;
+}
+
 /**
- * Has this outreach already been escalated at this stage?
+ * Accepted volunteers still committed to one specific day.
+ *
+ * `!inner` is what makes the status filter apply to the parent application
+ * rather than merely nulling the embed, and `released_at is null` is what makes
+ * a released day actually go short -- without it this would count promises that
+ * have since been withdrawn.
+ */
+async function countLiveCommitments(outreachDayId: string): Promise<number> {
+  const admin = getSupabaseAdmin();
+  const { count } = await admin
+    .from("application_days")
+    .select("id, applications!inner (status)", { count: "exact", head: true })
+    .eq("outreach_day_id", outreachDayId)
+    .eq("applications.status", "accepted")
+    .is("released_at", null);
+
+  return count ?? 0;
+}
+
+/**
+ * Has this outreach already been escalated at this stage, for this day?
  *
  * Keyed on the outreach and the stage, not on the recipient: the organisation
  * notification is the one row guaranteed to exist for every escalation (the
  * volunteer fan-out can legitimately reach nobody), so it is the reliable
  * marker that this rung has been climbed.
  */
-async function alreadyEscalated(outreachId: string, stageKey: string): Promise<boolean> {
+async function alreadyEscalated(
+  outreachId: string,
+  stageKey: string,
+  outreachDayId: string
+): Promise<boolean> {
   const admin = getSupabaseAdmin();
   const { data } = await admin
     .from("notifications")
@@ -140,13 +196,27 @@ async function alreadyEscalated(outreachId: string, stageKey: string): Promise<b
     .eq("outreach_id", outreachId)
     .eq("type", "event_reminder");
 
-  return (data ?? []).some((row) => (row.data as Record<string, unknown> | null)?.stage === stageKey);
+  return (data ?? []).some((row) => {
+    const payload = row.data as Record<string, unknown> | null;
+    if (payload?.stage !== stageKey) return false;
+    // A row written before days were part of this key carried no day at all.
+    // Treating it as covering every day keeps an old escalation from being
+    // repeated once for each day of the outreach.
+    return payload?.outreachDayId === undefined || payload?.outreachDayId === outreachDayId;
+  });
+}
+
+interface EscalatedDay {
+  outreachDayId: string;
+  day: string;
+  filledThisDay: number;
 }
 
 async function notifyOrganisation(
   outreach: OutreachRow,
   stage: UnderSubscriptionStage,
-  volunteersNotified: number
+  volunteersNotified: number,
+  escalatedDay: EscalatedDay
 ): Promise<void> {
   const admin = getSupabaseAdmin();
 
@@ -160,16 +230,26 @@ async function notifyOrganisation(
       userId: outreach.organisation_id,
       type: "event_reminder",
       title: stage.daysOut === 1 ? "Tomorrow, still short of volunteers" : "Your outreach still has places",
+      // The count is THIS DAY's, not the event's. On a one-day outreach the
+      // two are identical, which is why nothing changes for the ordinary case.
       body: organisationShortfallMessage({
         outreachTitle: outreach.title,
-        slotsFilled: outreach.slots_filled,
+        slotsFilled: escalatedDay.filledThisDay,
         slotsTotal: outreach.slots_total,
         daysOut: stage.daysOut,
         volunteersNotified,
+        day: outreach.date === escalatedDay.day ? undefined : escalatedDay.day,
       }),
       outreachId: outreach.id,
-      // `stage` is the dedupe key read back by alreadyEscalated().
-      data: { outreachId: outreach.id, stage: stage.key, slotsFilled: outreach.slots_filled, slotsTotal: outreach.slots_total },
+      // `stage` + `outreachDayId` are the dedupe key read back by
+      // alreadyEscalated(), so each day climbs the ladder on its own.
+      data: {
+        outreachId: outreach.id,
+        stage: stage.key,
+        outreachDayId: escalatedDay.outreachDayId,
+        slotsFilled: escalatedDay.filledThisDay,
+        slotsTotal: outreach.slots_total,
+      },
       tokens: (tokens ?? []).map((t) => t.expo_push_token as string),
     },
   ]);

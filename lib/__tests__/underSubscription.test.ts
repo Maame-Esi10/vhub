@@ -172,3 +172,30 @@ describe('volunteerShortfallMessage', () => {
     expect(message).toContain('1 place open tomorrow');
   });
 });
+
+describe('naming the short day on a multi-day outreach', () => {
+  const base = {
+    outreachTitle: 'Saturday Screening',
+    slotsFilled: 3,
+    slotsTotal: 5,
+    daysOut: 3,
+  };
+
+  it('names the day when one is given', () => {
+    const message = organisationShortfallMessage({ ...base, day: '2026-10-10' });
+    expect(message).toContain('2026-10-10');
+  });
+
+  it('says nothing about a day on a one-day outreach', () => {
+    // The "in 3 days" has already said when. Repeating it as a date would be
+    // noise on the ordinary case, which is every outreach with one day.
+    expect(organisationShortfallMessage(base)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it('still refuses to advise, with a day named', () => {
+    // The boundary is absolute: state the position and stop. Naming a day is
+    // more information, not a suggestion about what to do with it.
+    const message = organisationShortfallMessage({ ...base, day: '2026-10-10' });
+    expect(message).not.toMatch(/consider|should|try|reduce|lower|reschedule|move the date|why not/i);
+  });
+});

@@ -122,6 +122,55 @@ export function useAddOutreachDays() {
   });
 }
 
+/**
+ * How many ACCEPTED volunteers are still committed to each day, for many
+ * outreaches at once — keyed outreach id → day id → count.
+ *
+ * This is the derived half of the day-shortfall picture (lib/dayCoverage.ts).
+ * Nothing is stored: `slots_filled` counts accepted PEOPLE, so once a volunteer
+ * can release one day of an outreach the event can read "5 of 5 filled" while a
+ * day of it has four. Counting live commitments per day answers that without a
+ * new column to keep in step.
+ *
+ * `!inner` on applications is what makes the status and outreach filters apply
+ * to the parent rows rather than merely nulling the embed — the same trick
+ * `useOutreachCommitments` needs, and the same trap if it is left off.
+ */
+export function useDayCoverageForMany(outreachIds: readonly string[]) {
+  const key = [...outreachIds].sort().join(',');
+
+  return useQuery({
+    queryKey: [...outreachDayKeys.all, 'coverage', key] as const,
+    enabled: outreachIds.length > 0,
+    queryFn: async (): Promise<Record<string, Record<string, number>>> => {
+      const { data, error } = await supabase
+        .from('application_days')
+        .select('outreach_day_id, applications!inner (outreach_id, status)')
+        .in('applications.outreach_id', outreachIds as string[])
+        .eq('applications.status', 'accepted')
+        // A released day is not a commitment, which is the entire point: it is
+        // what makes a day go short while the event still reads full.
+        .is('released_at', null);
+
+      if (error) {
+        throw new Error(error.message || 'Could not work out how each day is staffed.');
+      }
+
+      const byOutreach: Record<string, Record<string, number>> = {};
+      for (const row of (data ?? []) as unknown as {
+        outreach_day_id: string;
+        applications: { outreach_id: string } | null;
+      }[]) {
+        const outreachId = row.applications?.outreach_id;
+        if (!outreachId) continue;
+        const days = (byOutreach[outreachId] ??= {});
+        days[row.outreach_day_id] = (days[row.outreach_day_id] ?? 0) + 1;
+      }
+      return byOutreach;
+    },
+  });
+}
+
 export interface ReleaseDayParams {
   applicationId: string;
   outreachDayId: string;

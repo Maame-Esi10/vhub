@@ -15,7 +15,13 @@ import {
 import type { FilterChipOption } from '@/components/ui';
 import { OutreachCard } from '@/components/organisation';
 import { colors, fontFamily, spacing } from '@/constants/theme';
-import { useOrganisationOutreaches, useOutreachDaysForMany, useUpdateOutreachStatus } from '@/hooks';
+import {
+  useDayCoverageForMany,
+  useOrganisationOutreaches,
+  useOutreachDaysForMany,
+  useUpdateOutreachStatus,
+} from '@/hooks';
+import { buildDayCoverage, type DayCoverage } from '@/lib/dayCoverage';
 import type { OutreachWithCounts } from '@/hooks';
 import { unreadCount, useNotifications } from '@/hooks/useNotifications';
 import { useAuthStore } from '@/stores/authStore';
@@ -57,9 +63,18 @@ export default function Dashboard() {
     the map, which is both the correct answer for a one-day event and what
     shows for the moment before this lands.
   */
-  const dashboardDays = useOutreachDaysForMany(
-    useMemo(() => outreaches.map((outreach) => outreach.id), [outreaches])
-  );
+  const outreachIds = useMemo(() => outreaches.map((outreach) => outreach.id), [outreaches]);
+  const dashboardDays = useOutreachDaysForMany(outreachIds);
+  // Live commitments per day, so a card can say that a DAY is short even when
+  // the event's own count reads full. Nothing here is stored — see
+  // lib/dayCoverage.ts for why a per-day slot column was rejected.
+  const dayCoverage = useDayCoverageForMany(outreachIds);
+
+  function coverageFor(outreach: OutreachWithCounts): DayCoverage[] | undefined {
+    const days = dashboardDays.data?.[outreach.id];
+    if (!days || days.length <= 1) return undefined;
+    return buildDayCoverage(days, dayCoverage.data?.[outreach.id] ?? {}, outreach.slots_total);
+  }
 
   const metrics = useMemo(() => {
     const activePostings = outreaches.filter((o) => o.status === 'open').length;
@@ -228,6 +243,7 @@ export default function Dashboard() {
           <OutreachCard
             outreach={item}
             days={dashboardDays.data?.[item.id]?.map((day) => day.day)}
+            dayCoverage={coverageFor(item)}
             onPress={() => goToOutreach(item.id)}
             quickAction={quickActionFor(item)}
             quickActionPending={updateStatus.isPending && updateStatus.variables?.outreachId === item.id}

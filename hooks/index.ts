@@ -86,6 +86,7 @@ export {
   outreachDayKeys,
   useOutreachDays,
   useOutreachDaysForMany,
+  useDayCoverageForMany,
   useAddOutreachDays,
   useApplicationDays,
   useApplicationDaysForMany,
