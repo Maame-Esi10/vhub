@@ -36,6 +36,7 @@ export const API_ROUTES = {
   match: '/api/match',
   vscore: '/api/vscore',
   applicationStatus: '/api/application-status',
+  applicationReceived: '/api/application-received',
   notifications: '/api/notifications',
   checkin: '/api/checkin',
   uploadSignature: '/api/upload-signature',
@@ -769,6 +770,25 @@ export function recordVerificationDocument(
   return apiPost<{ verificationStatus: 'documents_pending' }>(
     API_ROUTES.verificationDocument,
     { action: 'record', publicId, secureUrl },
+    options
+  );
+}
+
+/**
+ * Tells the organisation that this volunteer has just applied.
+ *
+ * Called AFTER the application is safely written, never as part of writing it:
+ * the application is the thing that must not be lost, and a notification that
+ * fails to send costs nothing recoverable. The caller should therefore let this
+ * fail quietly rather than surfacing an error over a successful application.
+ */
+export function announceApplication(
+  applicationId: string,
+  options?: RequestOptions
+): Promise<{ notified: boolean; reason?: string }> {
+  return apiPost<{ notified: boolean; reason?: string }>(
+    API_ROUTES.applicationReceived,
+    { applicationId },
     options
   );
 }

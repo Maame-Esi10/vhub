@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PostgrestError } from '@supabase/supabase-js';
 import {
+  announceApplication,
   fetchWaitlistPositions,
   scoreMyApplication,
   setApplicationStatus,
@@ -465,6 +466,23 @@ export function useCreateApplication() {
       }
     },
     onSuccess: (application, params) => {
+      /*
+        TELL THE ORGANISATION SOMEBODY APPLIED.
+
+        Deliberately fire-and-forget, and deliberately AFTER the application is
+        written. Nothing flowed volunteer -> organisation before this, so an
+        organisation found out about a new applicant by opening the vetting
+        screen and noticing the number had changed.
+
+        The catch is not laziness: the application already exists and is the
+        thing that matters. Failing the mutation because a notification could
+        not be sent would tell a volunteer their application did not go through
+        when it did, which is a strictly worse outcome than a missed alert.
+      */
+      void announceApplication(application.id).catch(() => {
+        // Swallowed on purpose — see above.
+      });
+
       queryClient.invalidateQueries({
         queryKey: applicationKeys.mine(params.volunteerId, params.outreachId),
       });
