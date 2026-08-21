@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { LayoutChangeEvent } from 'react-native';
 import {
   Image,
   KeyboardAvoidingView,
@@ -30,8 +31,13 @@ import {
   INITIAL_WIZARD_STATE,
   OutreachPreviewCard,
   RoleBuilder,
+  WIZARD_FIELD_STEP,
+  errorsForStep,
   firstDay,
+  firstFieldWithError,
+  firstStepWithError,
   hasWizardErrors,
+  summariseStepErrors,
   swapAdjacent,
   toStoragePayload,
   validateWizard,
@@ -75,8 +81,61 @@ export default function CreateOutreach() {
 
   const [step, setStep] = useState(1);
   const [state, setState] = useState<OutreachWizardState>(INITIAL_WIZARD_STATE);
-  const [errors, setErrors] = useState<WizardFieldError>({});
   const [roleError, setRoleError] = useState<string | null>(null);
+
+  /*
+    ERRORS ARE DERIVED, NOT STORED. This is the fix for a reported bug: a day
+    was picked, the chip appeared, and "Pick at least one day" stayed on screen
+    underneath it.
+
+    The cause was that `errors` was a useState snapshot written only by
+    handleNext and handleSubmit. Nothing recomputed it when a field changed, so
+    every message survived until the next tap of Next — stale by construction,
+    and stale for EVERY field, not only the day list.
+
+    Now the errors are recomputed from state on every render, and a separate
+    `attempted` set decides whether a step's errors are SHOWN. So a message
+    appears when you try to leave a step that is not ready, and disappears the
+    instant you fix it.
+  */
+  const [attempted, setAttempted] = useState<Record<number, boolean>>({});
+  const liveErrors = useMemo(() => validateWizard(state), [state]);
+  const errors = useMemo<WizardFieldError>(
+    () =>
+      Object.fromEntries(
+        Object.entries(liveErrors).filter(
+          ([key]) => attempted[WIZARD_FIELD_STEP[key as keyof WizardFieldError]]
+        )
+      ),
+    [liveErrors, attempted]
+  );
+
+  /*
+    WHERE EACH FIELD SITS ON THE SCROLL, so a failed step can take the
+    organisation TO the problem.
+
+    Tapping Next with no skills chosen used to do nothing visible at all: the
+    step refused to advance and the message rendered below the fold, so the
+    button read as dead. Measuring each field on layout is what lets the screen
+    scroll to the first one that is wrong.
+  */
+  const scrollRef = useRef<ScrollView>(null);
+  const fieldTops = useRef<Partial<Record<keyof WizardFieldError, number>>>({});
+
+  function captureFieldTop(field: keyof WizardFieldError) {
+    return (event: LayoutChangeEvent) => {
+      fieldTops.current[field] = event.nativeEvent.layout.y;
+    };
+  }
+
+  function revealFirstError(fieldErrors: WizardFieldError, onStep: number) {
+    const field = firstFieldWithError(fieldErrors, onStep);
+    if (!field) return;
+    const top = fieldTops.current[field];
+    // A little above the field, so its label is on screen rather than flush
+    // against the top edge.
+    scrollRef.current?.scrollTo({ y: Math.max(0, (top ?? 0) - 24), animated: true });
+  }
 
   function update<K extends keyof OutreachWizardState>(key: K, value: OutreachWizardState[K]) {
     setState((prev) => ({ ...prev, [key]: value }));
@@ -131,6 +190,8 @@ export default function CreateOutreach() {
     }));
   }
 
+  const stepSummary = attempted[step] ? summariseStepErrors(liveErrors, step) : null;
+
   const districtOptions: SelectOption[] =
     GHANA_REGIONS.find((r) => r.name === state.region)?.districts.map((d) => ({ value: d, label: d })) ?? [];
 
@@ -144,30 +205,36 @@ export default function CreateOutreach() {
     setStep((s) => s - 1);
   }
 
+  /*
+    One rule for every step, rather than a hand-written list of which fields
+    hold which step. The list was the reason a field could be added to the form
+    and quietly not block anything — six of them had been.
+  */
   function handleNext() {
     const nextErrors = validateWizard(state);
-    setErrors(nextErrors);
-    if (step === 1 && nextErrors.title) return;
-    if (step === 2 && (nextErrors.date || nextErrors.startTime || nextErrors.endTime)) return;
-    // Skills and staffing are both step 3, so both hold the step.
-    if (step === 3 && (nextErrors.roles || nextErrors.requiredSkills)) return;
+    setAttempted((prev) => ({ ...prev, [step]: true }));
+
+    if (Object.keys(errorsForStep(nextErrors, step)).length > 0) {
+      revealFirstError(nextErrors, step);
+      return;
+    }
     setStep((s) => Math.min(TOTAL_STEPS, s + 1));
   }
 
   function jumpToOffendingStep(fieldErrors: WizardFieldError) {
-    if (fieldErrors.title) {
-      setStep(1);
-    } else if (fieldErrors.date || fieldErrors.startTime || fieldErrors.endTime) {
-      setStep(2);
-    } else if (fieldErrors.roles || fieldErrors.requiredSkills) {
-      setStep(3);
-    }
+    const target = firstStepWithError(fieldErrors);
+    if (target === null) return;
+    // Every step up to the problem counts as attempted: the organisation has
+    // just tried to publish, which is an attempt at all of them.
+    setAttempted((prev) => ({ ...prev, 1: true, 2: true, 3: true }));
+    setStep(target);
+    // After the step swaps, so the measurements belong to the step being shown.
+    requestAnimationFrame(() => revealFirstError(fieldErrors, target));
   }
 
   function handleSubmit(status: 'draft' | 'open') {
     if (!organisationId) return;
     const finalErrors = validateWizard(state);
-    setErrors(finalErrors);
     if (hasWizardErrors(finalErrors)) {
       jumpToOffendingStep(finalErrors);
       return;
@@ -272,7 +339,10 @@ export default function CreateOutreach() {
           }
 
           setState(INITIAL_WIZARD_STATE);
-          setErrors({});
+          // No error state to clear any more — errors derive from `state`, and
+          // resetting the state resets them. `attempted` goes back too, so a
+          // fresh wizard does not open showing the last one's complaints.
+          setAttempted({});
           setStep(1);
           // Straight to the new event's own screen rather than the dashboard,
           // carrying the confirmation with it. Publishing used to land on a
@@ -334,6 +404,7 @@ export default function CreateOutreach() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -342,22 +413,29 @@ export default function CreateOutreach() {
 
           {step === 1 ? (
             <View style={styles.fieldGroup}>
-              <Input
-                label="Campaign Title"
-                placeholder="e.g. Community Health Screening 2024"
-                value={state.title}
-                onChangeText={(text) => update('title', text)}
-                error={errors.title}
-                accessibilityLabel="Campaign title"
-              />
-              <Input
-                label="Program Description"
-                placeholder="Goals and target audience..."
-                value={state.description}
-                onChangeText={(text) => update('description', text)}
-                multiline
-                accessibilityLabel="Program description"
-              />
+              <View onLayout={captureFieldTop('title')}>
+                <Input
+                  label="Campaign Title"
+                  required
+                  placeholder="e.g. Community Health Screening 2024"
+                  value={state.title}
+                  onChangeText={(text) => update('title', text)}
+                  error={errors.title}
+                  accessibilityLabel="Campaign title"
+                />
+              </View>
+              <View onLayout={captureFieldTop('description')}>
+                <Input
+                  label="Program Description"
+                  required
+                  placeholder="Goals and target audience..."
+                  value={state.description}
+                  onChangeText={(text) => update('description', text)}
+                  error={errors.description}
+                  multiline
+                  accessibilityLabel="Program description"
+                />
+              </View>
 
               <View>
                 <Text style={styles.flyerLabel}>Flyer (optional)</Text>
@@ -418,31 +496,45 @@ export default function CreateOutreach() {
 
           {step === 2 ? (
             <View style={styles.fieldGroup}>
-              <SelectField
-                label="Region"
-                placeholder="Select a region"
-                value={state.region}
-                options={REGION_OPTIONS}
-                searchable
-                onSelect={(value) => setState((prev) => ({ ...prev, region: value, district: null }))}
-              />
-              <SelectField
-                label="District"
-                placeholder="Select a district"
-                value={state.district}
-                options={districtOptions}
-                searchable
-                disabled={!state.region}
-                disabledHint="Select a region first."
-                onSelect={(value) => update('district', value)}
-              />
-              <Input
-                label="Location Name"
-                placeholder="e.g. Main Campus"
-                value={state.locationName}
-                onChangeText={(text) => update('locationName', text)}
-                accessibilityLabel="Venue name"
-              />
+              <View onLayout={captureFieldTop('region')}>
+                <SelectField
+                  label="Region"
+                  required
+                  placeholder="Select a region"
+                  value={state.region}
+                  options={REGION_OPTIONS}
+                  searchable
+                  error={errors.region}
+                  onSelect={(value) =>
+                    setState((prev) => ({ ...prev, region: value, district: null }))
+                  }
+                />
+              </View>
+              <View onLayout={captureFieldTop('district')}>
+                <SelectField
+                  label="District"
+                  required
+                  placeholder="Select a district"
+                  value={state.district}
+                  options={districtOptions}
+                  searchable
+                  disabled={!state.region}
+                  disabledHint="Select a region first."
+                  error={errors.district}
+                  onSelect={(value) => update('district', value)}
+                />
+              </View>
+              <View onLayout={captureFieldTop('locationName')}>
+                <Input
+                  label="Location Name"
+                  required
+                  placeholder="e.g. Main Campus"
+                  value={state.locationName}
+                  onChangeText={(text) => update('locationName', text)}
+                  error={errors.locationName}
+                  accessibilityLabel="Venue name"
+                />
+              </View>
               {/*
                 Native pickers rather than masked text entry: the organiser no
                 longer types punctuation, and an impossible date like 2026-13-45
@@ -455,7 +547,7 @@ export default function CreateOutreach() {
                 so there is no mode to choose and nothing changes for the
                 organisation running an ordinary one-day clinic.
               */}
-              <View style={styles.daysSection}>
+              <View style={styles.daysSection} onLayout={captureFieldTop('date')}>
                 <DayScheduleField
                   days={state.days}
                   onChange={(next) => update('days', next)}
@@ -466,9 +558,10 @@ export default function CreateOutreach() {
                 These hours apply to every day of the outreach.
               </Text>
               <View style={styles.timeRow}>
-                <View style={styles.timeField}>
+                <View style={styles.timeField} onLayout={captureFieldTop('startTime')}>
                   <DateTimeField
                     label="Start Time"
+                    required
                     mode="time"
                     value={state.startTime}
                     onChange={(next) => update('startTime', next)}
@@ -476,9 +569,10 @@ export default function CreateOutreach() {
                     accessibilityLabel="Start time"
                   />
                 </View>
-                <View style={styles.timeField}>
+                <View style={styles.timeField} onLayout={captureFieldTop('endTime')}>
                   <DateTimeField
                     label="End Time"
+                    required
                     mode="time"
                     value={state.endTime}
                     onChange={(next) => update('endTime', next)}
@@ -492,16 +586,17 @@ export default function CreateOutreach() {
 
           {step === 3 ? (
             <View style={styles.fieldGroup}>
-              <MultiSelectField
-                label="Required Skills"
-                placeholder="Select the skills volunteers need"
-                selected={state.requiredSkills}
-                sections={SKILL_SECTIONS}
-                onChange={(next) => update('requiredSkills', next)}
-              />
-              {errors.requiredSkills ? (
-                <Text style={styles.fieldError}>{errors.requiredSkills}</Text>
-              ) : null}
+              <View onLayout={captureFieldTop('requiredSkills')}>
+                <MultiSelectField
+                  label="Required Skills"
+                  required
+                  placeholder="Select the skills volunteers need"
+                  selected={state.requiredSkills}
+                  sections={SKILL_SECTIONS}
+                  error={errors.requiredSkills}
+                  onChange={(next) => update('requiredSkills', next)}
+                />
+              </View>
 
               {/*
                 ONE LIST, NO MODE. This was a toggle between "Any volunteers"
@@ -532,6 +627,13 @@ export default function CreateOutreach() {
         </ScrollView>
 
         <View style={styles.footer}>
+          {/*
+            Named, above the button that refused to work. Scrolling to the field
+            answers "where", and this answers "what" without the organisation
+            having to find it — the two together are what replaced a button that
+            simply did nothing.
+          */}
+          {stepSummary ? <Text style={styles.stepSummary}>{stepSummary}</Text> : null}
           {step < TOTAL_STEPS ? (
             <Button
               title={`Next: ${STEP_TITLES[step] ?? ''}`}
@@ -603,6 +705,15 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
+  },
+  // Its own line above the action, with room on both sides: a warning packed
+  // against a button reads as part of the button's label.
+  stepSummary: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.danger,
+    marginBottom: spacing.md,
   },
   stepTitle: {
     fontFamily: fontFamily.bold,

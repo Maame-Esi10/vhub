@@ -15,6 +15,8 @@ export interface DateTimeFieldProps {
   onChange: (next: string) => void;
   placeholder?: string;
   error?: string;
+  /** Renders a red asterisk beside the label. */
+  required?: boolean;
   /** Date mode only: blocks days before today, since outreaches are future events. */
   minimumToday?: boolean;
   accessibilityLabel?: string;
@@ -38,6 +40,7 @@ export interface DateTimeFieldProps {
  */
 export function DateTimeField({
   label,
+  required,
   mode,
   value,
   onChange,
@@ -71,7 +74,10 @@ export function DateTimeField({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>
+        {label}
+        {required ? <Text style={styles.requiredMark}> *</Text> : null}
+      </Text>
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityRole="button"
@@ -144,6 +150,11 @@ function toInitialDate(value: string, mode: DateTimeFieldMode): Date {
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+  },
+  // The asterisk carries the "you must fill this in" signal, so the message
+  // below the field can be one short line about what is wrong.
+  requiredMark: {
+    color: colors.danger,
   },
   label: {
     fontFamily: fontFamily.medium,

@@ -35,6 +35,11 @@ export {
   rolesChanged,
   daysChanged,
   swapAdjacent,
+  WIZARD_FIELD_STEP,
+  errorsForStep,
+  firstStepWithError,
+  firstFieldWithError,
+  summariseStepErrors,
 } from './outreachWizard';
 export type {
   OutreachWizardState,

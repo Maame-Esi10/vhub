@@ -139,19 +139,19 @@ export function validateDays(
   options: { requireFuture: boolean }
 ): string | null {
   if (days.length === 0) {
-    return 'Pick at least one day for this outreach.';
+    return 'Pick at least one day.';
   }
 
   if (days.length > MAX_OUTREACH_DAYS) {
-    return `An outreach can span at most ${MAX_OUTREACH_DAYS} days. Check the last date you added.`;
+    return `That is more than ${MAX_OUTREACH_DAYS} days — check the last date.`;
   }
 
   if (days.some((day) => !parseCalendarDate(day))) {
-    return 'Every day needs a valid date (YYYY-MM-DD).';
+    return 'One of these dates is not valid.';
   }
 
   if (new Set(days).size !== days.length) {
-    return 'The same day is listed twice. Remove the duplicate.';
+    return 'The same day is listed twice.';
   }
 
   if (options.requireFuture) {

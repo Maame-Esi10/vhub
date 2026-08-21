@@ -18,6 +18,8 @@ export interface SelectFieldProps {
   onSelect: (value: string) => void;
   searchable?: boolean;
   error?: string;
+  /** Renders a red asterisk beside the label. */
+  required?: boolean;
   disabled?: boolean;
   /** Shown under the field when disabled, e.g. "Choose a region first". */
   disabledHint?: string;
@@ -32,6 +34,7 @@ export function SelectField({
   onSelect,
   searchable = false,
   error,
+  required,
   disabled = false,
   disabledHint,
 }: SelectFieldProps) {
@@ -54,7 +57,10 @@ export function SelectField({
 
   return (
     <View>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>
+        {label}
+        {required ? <Text style={styles.requiredMark}> *</Text> : null}
+      </Text>
       <Pressable
         onPress={() => !disabled && setOpen(true)}
         disabled={disabled}
@@ -124,6 +130,12 @@ export function SelectField({
 }
 
 const styles = StyleSheet.create({
+  // The asterisk carries the "you must fill this in" signal, so the message
+  // below the field no longer has to explain that it is required and can be one
+  // short line about what is wrong.
+  requiredMark: {
+    color: colors.danger,
+  },
   label: {
     fontFamily: fontFamily.medium,
     fontSize: 13,

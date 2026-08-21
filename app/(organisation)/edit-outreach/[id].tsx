@@ -119,7 +119,16 @@ export default function EditOutreach() {
   const [galleryError, setGalleryError] = useState<string | null>(null);
 
   const [state, setState] = useState<OutreachWizardState | null>(null);
-  const [errors, setErrors] = useState<WizardFieldError>({});
+  /*
+    DERIVED, NOT STORED — the same fix as the create wizard, and the same bug:
+    a message written once by attemptSave survived until the next tap of Save,
+    so a field could read as invalid after it had been corrected.
+
+    `attempted` is a single flag rather than a per-step map because the editor
+    is one page: there is one Save, so there is one moment at which the
+    organisation has asked to be told what is wrong.
+  */
+  const [attempted, setAttempted] = useState(false);
   const [slotsFloorError, setSlotsFloorError] = useState<string | null>(null);
   const [roleWarning, setRoleWarning] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -150,6 +159,11 @@ export default function EditOutreach() {
   const storedRoles = useMemo(() => rolesQuery.data ?? [], [rolesQuery.data]);
   const storedDays = useMemo(() => daysQuery.data ?? [], [daysQuery.data]);
   const storedDayStrings = useMemo(() => storedDays.map((day) => day.day), [storedDays]);
+
+  // Recomputed every render once Save has been attempted, so correcting a field
+  // clears its message immediately instead of at the next tap of Save.
+  const errors: WizardFieldError =
+    attempted && state ? validateOutreachEdit(state, storedDayStrings) : {};
 
   /**
    * The days that already carry a commitment, as calendar dates.
@@ -208,7 +222,7 @@ export default function EditOutreach() {
     hydratedFor.current = outreachId;
     setState(wizardStateFromOutreach(outreach, storedRoles, storedDays));
     // Everything derived from the previous event goes with it.
-    setErrors({});
+    setAttempted(false);
     setSaveError(null);
     setSlotsFloorError(null);
     setGalleryError(null);
@@ -448,7 +462,7 @@ export default function EditOutreach() {
     if (!state || !outreach) return;
 
     const nextErrors = validateOutreachEdit(state, storedDayStrings);
-    setErrors(nextErrors);
+    setAttempted(true);
     if (hasWizardErrors(nextErrors)) return;
 
     const floorProblem = findSlotsFloorProblem(state);
@@ -574,6 +588,7 @@ export default function EditOutreach() {
           <View style={styles.section}>
             <Input
               label="Campaign Title"
+              required
               placeholder="e.g. Community Health Screening 2024"
               value={state.title}
               onChangeText={(text) => update('title', text)}
@@ -582,9 +597,11 @@ export default function EditOutreach() {
             />
             <Input
               label="Program Description"
+              required
               placeholder="Goals and target audience..."
               value={state.description}
               onChangeText={(text) => update('description', text)}
+              error={errors.description}
               multiline
               accessibilityLabel="Program description"
             />
@@ -720,8 +737,10 @@ export default function EditOutreach() {
             <MultiSelectField
               label="Required Skills"
               placeholder="Select the skills volunteers need"
+              required
               selected={state.requiredSkills}
               sections={SKILL_SECTIONS}
+              error={errors.requiredSkills}
               onChange={(next) => update('requiredSkills', next)}
             />
             {/*
@@ -730,9 +749,7 @@ export default function EditOutreach() {
               side effect: those events cannot rank their applicants, and the
               editor is where they get fixed.
             */}
-            {errors.requiredSkills ? (
-              <Text style={styles.fieldError}>{errors.requiredSkills}</Text>
-            ) : null}
+
 
             {/*
               ONE LIST, NO MODE. The "Any volunteers / Specific roles" toggle

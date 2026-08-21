@@ -20,6 +20,8 @@ export interface MultiSelectFieldProps {
   sections: MultiSelectSection[];
   onChange: (next: string[]) => void;
   error?: string;
+  /** Renders a red asterisk beside the label. */
+  required?: boolean;
 }
 
 /**
@@ -39,6 +41,7 @@ export function MultiSelectField({
   sections,
   onChange,
   error,
+  required,
 }: MultiSelectFieldProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -72,7 +75,10 @@ export function MultiSelectField({
 
   return (
     <View>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>
+        {label}
+        {required ? <Text style={styles.requiredMark}> *</Text> : null}
+      </Text>
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityRole="button"
@@ -154,6 +160,12 @@ export function MultiSelectField({
 }
 
 const styles = StyleSheet.create({
+  // The asterisk carries the "you must fill this in" signal, so the message
+  // below the field no longer has to explain that it is required and can be one
+  // short line about what is wrong.
+  requiredMark: {
+    color: colors.danger,
+  },
   label: {
     fontFamily: fontFamily.medium,
     fontSize: 13,

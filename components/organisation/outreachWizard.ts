@@ -123,7 +123,19 @@ export const INITIAL_WIZARD_STATE: OutreachWizardState = {
 };
 
 export type WizardFieldError = Partial<
-  Record<'title' | 'date' | 'startTime' | 'endTime' | 'roles' | 'requiredSkills', string>
+  Record<
+    | 'title'
+    | 'description'
+    | 'region'
+    | 'district'
+    | 'locationName'
+    | 'date'
+    | 'startTime'
+    | 'endTime'
+    | 'roles'
+    | 'requiredSkills',
+    string
+  >
 >;
 
 /**
@@ -177,32 +189,156 @@ export function validateWizard(state: OutreachWizardState): WizardFieldError {
   }
 
   /*
-    AT LEAST ONE REQUIRED SKILL, AND THIS IS A MATCHING RULE RATHER THAN A FORM
-    PREFERENCE.
+    WHAT "REQUIRED" MEANS HERE, since the database enforces almost none of it.
 
-    Skills are 35 of the 100 points in the match score — the single largest
-    component. The scorer treats an outreach with no required skills as a
-    perfect skills match for everyone (matched ÷ required, with an empty
-    requirement scoring 1.0), which is the right arithmetic and the wrong
-    outcome: every applicant collects the full 35, the biggest component stops
-    discriminating between them, and the ranking collapses onto category,
-    location, availability and experience. An outreach published with no skills
-    is therefore not a relaxed outreach, it is one the matching engine cannot
-    rank properly.
+    Only title, date and slots_total are NOT NULL on `outreaches`. Everything
+    below is required because the APP breaks without it, not because Postgres
+    says so, and each one earns its place:
 
-    Nothing checked this before, so it could be published with none.
+      description   what a volunteer reads to decide. Nothing else on the card
+                    explains what the day actually involves.
+      region        20 of the 100 match points AND the feed pre-filter, which
+                    selects candidates by region and its neighbours. An
+                    outreach with no region cannot appear in a ranked feed at
+                    all — it is not merely scored badly, it is invisible.
+      district      the difference between a 1.0 and a 0.5 location score. A
+                    volunteer on the same street would score as merely
+                    same-region.
+      locationName  a volunteer has to know where to go, and the check-in venue
+                    anchor is captured against this event.
+      startTime /
+      endTime       15 of the 100 points. Availability is scored by which slot
+                    (morning / afternoon / evening) the event overlaps, and
+                    that is derived from these two. Both also gate attendance
+                    and "is it over".
+      requiredSkills 35 of the 100 points, the largest component. An empty
+                    requirement scores 1.0 for EVERY applicant, so the biggest
+                    component stops discriminating and the ranking collapses.
 
-    The alternative — allow zero and REDISTRIBUTE the 35 points across the
-    other components — is arguably more correct and is deliberately not taken
-    here: it changes the matching engine, which is gated, and it would move
-    every score already stored on every application.
+    The alternative for skills — allow zero and REDISTRIBUTE those 35 points —
+    is arguably more correct and deliberately not taken: it changes the
+    matching engine, which is gated, and would move every score already stored.
+
+    Messages are ONE SHORT LINE each. The red asterisk on the field carries
+    "this is required", so the message only has to say what is wrong.
   */
+  if (!state.description.trim()) {
+    errors.description = 'Add a short description.';
+  }
+
+  if (!state.region) {
+    errors.region = 'Choose a region.';
+  }
+
+  if (!state.district) {
+    errors.district = 'Choose a district.';
+  }
+
+  if (!state.locationName.trim()) {
+    errors.locationName = 'Name the venue.';
+  }
+
+  if (!state.startTime) {
+    errors.startTime = 'Set a start time.';
+  }
+
+  if (!state.endTime) {
+    errors.endTime = 'Set an end time.';
+  }
+
   if (state.requiredSkills.length === 0) {
-    errors.requiredSkills =
-      'Pick at least one required skill. Skills are the largest part of the match score, so an outreach with none cannot rank its applicants.';
+    errors.requiredSkills = 'Pick at least one skill.';
   }
 
   return errors;
+}
+
+/**
+ * Which step each field lives on.
+ *
+ * Exported because two different things need it and must not disagree: the
+ * screen decides whether to SHOW an error from it, and the submit path decides
+ * which step to jump BACK to. A second hand-written copy of this mapping would
+ * eventually send someone to a step that does not contain the problem.
+ */
+export const WIZARD_FIELD_STEP: Record<keyof WizardFieldError, number> = {
+  title: 1,
+  description: 1,
+  region: 2,
+  district: 2,
+  locationName: 2,
+  date: 2,
+  startTime: 2,
+  endTime: 2,
+  requiredSkills: 3,
+  roles: 3,
+};
+
+/** Just the errors belonging to one step, in the order the fields appear on it. */
+export function errorsForStep(errors: WizardFieldError, step: number): WizardFieldError {
+  const out: WizardFieldError = {};
+  for (const key of Object.keys(errors) as (keyof WizardFieldError)[]) {
+    if (WIZARD_FIELD_STEP[key] === step && errors[key]) out[key] = errors[key];
+  }
+  return out;
+}
+
+/** The earliest step carrying a problem, or null when there is none. */
+export function firstStepWithError(errors: WizardFieldError): number | null {
+  const steps = (Object.keys(errors) as (keyof WizardFieldError)[])
+    .filter((key) => errors[key])
+    .map((key) => WIZARD_FIELD_STEP[key]);
+  return steps.length > 0 ? Math.min(...steps) : null;
+}
+
+/**
+ * The field a failed step should scroll to: the first one with a problem, in
+ * the order the fields are laid out rather than the order the object happens to
+ * enumerate them in.
+ */
+const FIELD_ORDER: (keyof WizardFieldError)[] = [
+  'title',
+  'description',
+  'region',
+  'district',
+  'locationName',
+  'date',
+  'startTime',
+  'endTime',
+  'requiredSkills',
+  'roles',
+];
+
+export function firstFieldWithError(
+  errors: WizardFieldError,
+  step: number
+): keyof WizardFieldError | null {
+  return FIELD_ORDER.find((key) => WIZARD_FIELD_STEP[key] === step && errors[key]) ?? null;
+}
+
+/** "Region, district and venue" — what a step is still missing, said in one line. */
+export function summariseStepErrors(errors: WizardFieldError, step: number): string | null {
+  const names: Partial<Record<keyof WizardFieldError, string>> = {
+    title: 'a title',
+    description: 'a description',
+    region: 'a region',
+    district: 'a district',
+    locationName: 'a venue',
+    date: 'a day',
+    startTime: 'a start time',
+    endTime: 'an end time',
+    requiredSkills: 'at least one skill',
+    roles: 'how many volunteers you need',
+  };
+
+  const missing = FIELD_ORDER.filter(
+    (key) => WIZARD_FIELD_STEP[key] === step && errors[key]
+  ).map((key) => names[key] ?? key);
+
+  if (missing.length === 0) return null;
+  if (missing.length === 1) return `This step still needs ${missing[0]}.`;
+  const last = missing[missing.length - 1];
+  return `This step still needs ${missing.slice(0, -1).join(', ')} and ${last}.`;
 }
 
 /**
@@ -227,18 +363,18 @@ export function validateRoles(roles: readonly RoleDraft[]): string | null {
   // and that row needs a category. Without one there is nothing to attach the
   // floor to.
   if (roles.length === 1 && roles[0] && !roles[0].category && roles[0].minExperienceLevel) {
-    return 'Choose a profession for this role, or set its experience back to any level.';
+    return 'This role needs a profession.';
   }
 
   if (roles.length > 1 && roles.some((role) => !role.category)) {
-    return 'Once there is more than one role, each one needs a profession.';
+    return 'Each role needs a profession.';
   }
 
   const seen = new Set<string>();
   for (const role of roles) {
     const key = `${role.category ?? 'any'}|${role.minExperienceLevel ?? 'any'}`;
     if (seen.has(key)) {
-      return 'Two roles ask for the same profession at the same experience level. Combine them into one.';
+      return 'Two roles are identical — combine them.';
     }
     seen.add(key);
   }

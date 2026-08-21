@@ -123,7 +123,7 @@ describe('validateDays', () => {
   });
 
   it('refuses an unparsable date', () => {
-    expect(validateDays(['2099-13-45'], { requireFuture: true })).toMatch(/valid date/i);
+    expect(validateDays(['2099-13-45'], { requireFuture: true })).toMatch(/not valid/i);
   });
 
   it('refuses a past day when creating', () => {
@@ -137,7 +137,7 @@ describe('validateDays', () => {
   it('refuses a list longer than the cap', () => {
     const many = calendarRange('2099-01-01', '2099-04-30') ?? [];
     expect(many.length).toBeGreaterThan(MAX_OUTREACH_DAYS);
-    expect(validateDays(many, { requireFuture: true })).toMatch(/at most/i);
+    expect(validateDays(many, { requireFuture: true })).toMatch(/more than 60 days/i);
   });
 });
 

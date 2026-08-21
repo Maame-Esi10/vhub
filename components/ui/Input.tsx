@@ -5,6 +5,8 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 export interface InputProps extends TextInputProps {
   /** Label rendered above the field. */
   label?: string;
+  /** Renders a red asterisk beside the label. */
+  required?: boolean;
   /** Icon (or any node) rendered at the leading edge of the pill. */
   leadingIcon?: ReactNode;
   /** Icon/element rendered at the trailing edge of the pill (e.g. show/hide password toggle). */
@@ -19,12 +21,17 @@ export interface InputProps extends TextInputProps {
  * Minimal by design: a styled TextInput wrapper, not a form library.
  */
 export const Input = forwardRef<TextInput, InputProps>(function Input(
-  { label, leadingIcon, trailingElement, error, containerStyle, style, multiline, ...textInputProps },
+  { label, required, leadingIcon, trailingElement, error, containerStyle, style, multiline, ...textInputProps },
   ref
 ) {
   return (
     <View style={[styles.container, containerStyle]}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? (
+        <Text style={styles.label}>
+          {label}
+          {required ? <Text style={styles.requiredMark}> *</Text> : null}
+        </Text>
+      ) : null}
       <View
         style={[
           styles.field,
@@ -52,6 +59,12 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+  },
+  // The asterisk carries the "you must fill this in" signal, so the message
+  // below the field no longer has to explain that it is required and can be one
+  // short line about what is wrong.
+  requiredMark: {
+    color: colors.danger,
   },
   label: {
     fontFamily: fontFamily.medium,

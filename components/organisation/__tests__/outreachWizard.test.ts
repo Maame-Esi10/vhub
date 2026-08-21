@@ -7,7 +7,13 @@ import {
   toStoragePayload,
   validateRoles,
   validateOutreachEdit,
+  errorsForStep,
+  firstFieldWithError,
+  hasWizardErrors,
+  firstStepWithError,
+  summariseStepErrors,
   validateWizard,
+  WIZARD_FIELD_STEP,
   wizardStateFromOutreach,
 } from '../outreachWizard';
 import type { OutreachWizardState, RoleDraft } from '../outreachWizard';
@@ -341,7 +347,7 @@ describe('validateRoles', () => {
   });
 
   it('rejects two roles with the same profession and level', () => {
-    expect(validateRoles([nurse, { ...nurse, slotsTotal: 9 }])).toContain('same profession');
+    expect(validateRoles([nurse, { ...nurse, slotsTotal: 9 }])).toContain('identical');
   });
 
   it('allows the same profession at different levels', () => {
@@ -425,5 +431,93 @@ describe('wizardStateFromOutreach — days', () => {
     // read failed rather than that the event has no days. Hydrating an empty
     // list would let a save wipe the real ones.
     expect(wizardStateFromOutreach(row, [], []).days).toEqual(['2026-09-01']);
+  });
+});
+
+describe('every field a published outreach needs is guarded', () => {
+  // A COMPLETE state, so each test below can knock out exactly one field and
+  // prove that field alone blocks the wizard.
+  function complete(): OutreachWizardState {
+    return stateWith({
+      title: 'Screening day',
+      description: 'A community eye screening.',
+      region: 'Greater Accra',
+      district: 'Ayawaso West',
+      locationName: 'Korle Bu',
+      days: [FUTURE_DATE],
+      startTime: '09:00',
+      endTime: '15:00',
+      requiredSkills: ['Vital Signs'],
+    });
+  }
+
+  it('passes when everything is filled in', () => {
+    expect(hasWizardErrors(validateWizard(complete()))).toBe(false);
+  });
+
+  // Each of these was UNGUARDED before 2026-08-21: the wizard let an outreach
+  // be published without them.
+  it.each([
+    ['description', { description: '   ' }],
+    ['region', { region: null }],
+    ['district', { district: null }],
+    ['locationName', { locationName: '' }],
+    ['startTime', { startTime: '' }],
+    ['endTime', { endTime: '' }],
+  ])('blocks on a missing %s', (field, override) => {
+    const errors = validateWizard(stateWith({ ...complete(), ...override }));
+    expect(errors[field as keyof typeof errors]).toBeDefined();
+    expect(hasWizardErrors(errors)).toBe(true);
+  });
+
+  it('keeps every message to one short line', () => {
+    // The red asterisk on the field carries "this is required", so the message
+    // only has to say what is wrong. Long explanations were the complaint.
+    const errors = validateWizard(stateWith({ title: '', description: '', requiredSkills: [] }));
+    for (const message of Object.values(errors)) {
+      expect(message).not.toContain('\n');
+      expect(message.length).toBeLessThanOrEqual(64);
+    }
+  });
+});
+
+describe('a failed step points at the right place', () => {
+  it('puts every field on exactly one step', () => {
+    for (const step of Object.values(WIZARD_FIELD_STEP)) {
+      expect([1, 2, 3]).toContain(step);
+    }
+  });
+
+  it('reports only the errors belonging to the step being shown', () => {
+    const errors = validateWizard(stateWith({ title: '', requiredSkills: [] }));
+    expect(errorsForStep(errors, 1).title).toBeDefined();
+    expect(errorsForStep(errors, 1).requiredSkills).toBeUndefined();
+    expect(errorsForStep(errors, 3).requiredSkills).toBeDefined();
+  });
+
+  it('sends a failed publish back to the EARLIEST step with a problem', () => {
+    const errors = validateWizard(stateWith({ title: '', requiredSkills: [] }));
+    expect(firstStepWithError(errors)).toBe(1);
+  });
+
+  it('is null when nothing is wrong', () => {
+    expect(firstStepWithError({})).toBeNull();
+  });
+
+  it('scrolls to the first bad field in LAYOUT order, not object order', () => {
+    const errors = validateWizard(
+      stateWith({ region: null, district: null, locationName: '', startTime: '', endTime: '' })
+    );
+    expect(firstFieldWithError(errors, 2)).toBe('region');
+  });
+
+  it('names what is missing in one sentence', () => {
+    const errors = validateWizard(stateWith({ title: '', description: '' }));
+    const summary = summariseStepErrors(errors, 1);
+    expect(summary).toBe('This step still needs a title and a description.');
+  });
+
+  it('says nothing when the step is fine', () => {
+    expect(summariseStepErrors({}, 2)).toBeNull();
   });
 });
