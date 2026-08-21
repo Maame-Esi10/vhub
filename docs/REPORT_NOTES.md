@@ -2194,3 +2194,52 @@ shortfall can be DERIVED on demand (`slots_total` minus the count of live
 commitments on that day) with nothing new to maintain, because commitments are
 already rows. What cannot be derived is a per-day TARGET different from the
 event's, which is what "2 nurses on Saturday, 5 on Sunday" would need.
+
+
+## Create Outreach validation was largely decorative (2026-08-21)
+
+Reported from a device: a day was picked, the chip appeared, and "Pick at least
+one day" stayed on screen underneath it.
+
+**The cause was structural rather than local.** `errors` was a `useState`
+snapshot written only by `handleNext` and `handleSubmit`. Nothing recomputed it
+when a field changed, so every message survived until the next tap of Next —
+stale by construction, for **every field**, not only the day list. Errors are now
+DERIVED from the form state on each render, with a separate `attempted` set
+deciding whether a step's messages are shown. A message therefore appears when
+you try to leave a step that is not ready and disappears the moment you fix it.
+The editor had the identical bug and the identical fix.
+
+**Tapping Next with nothing chosen did nothing visible.** The step refused to
+advance and the message rendered below the fold, so the button read as dead. The
+screen now measures each field on layout, scrolls to the first one that is wrong,
+and names what is missing in one line above the button.
+
+**The audit found six unguarded fields**, all of which could reach a published
+outreach: description, region, district, venue, start time and end time. Only
+title, days, skills and staffing were checked. The database is no help here —
+only `title`, `date` and `slots_total` are NOT NULL on `outreaches` — so
+"required" is a product decision, and each of the six earns it: region is 20 of
+the 100 match points AND the feed pre-filter, so an outreach without one cannot
+appear in a ranked feed at all; district is the difference between a 1.0 and a
+0.5 location score; the times are 15 points and gate attendance; the description
+is what a volunteer reads to decide; the venue is where they have to go.
+
+**The messages are now one short line each**, with a red asterisk on the field
+carrying the "this is required" signal. The old skills message ran to two
+sentences of justification, which belongs in this document rather than under a
+form field.
+
+## The ladder now climbs per day (2026-08-21)
+
+Two silences fixed by the same change. The under-subscription job selected on
+`outreaches.date` — the FIRST day — so a campaign short on day five never
+escalated at all, because only its first day was ever three days out. And it
+judged the shortfall on `slots_filled`, which counts accepted PEOPLE, so once a
+volunteer could release a single day the event could read "5 of 5 filled" while
+a day of it had four.
+
+Each day is now its own rung, deduped on stage + day id so one day cannot
+silence the rest — the same lesson the check-in reminders learned. The target is
+still the event's own `slots_total`, deliberately: per-day targets are intent
+and cannot be derived.
