@@ -307,6 +307,130 @@ export function describeCommitment(committedDays: number, totalDays: number): st
 }
 
 /**
+ * Minutes past midnight for "HH:MM" or "HH:MM:SS", or null.
+ *
+ * Duplicated in miniature from components/ui/dateUtils rather than imported:
+ * this module is pure by contract — no React, no native modules — so that the
+ * serverless API can import it, and reaching into components/ would break that
+ * for the sake of six lines.
+ */
+function clockMinutes(time: string | null): number | null {
+  if (!time) return null;
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(time.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/** Milliseconds until a day starts, or null when the day cannot be parsed. */
+export function msUntilDay(day: string, startTime: string | null, now = Date.now()): number | null {
+  const parsed = parseCalendarDate(day);
+  if (!parsed) return null;
+  const minutes = clockMinutes(startTime) ?? 0;
+  const start = new Date(
+    parsed.year,
+    parsed.month - 1,
+    parsed.day,
+    Math.floor(minutes / 60),
+    minutes % 60
+  );
+  return start.getTime() - now;
+}
+
+/** A day is releasable while it has not started. Afterwards it is a no-show. */
+export function canReleaseDay(day: string, startTime: string | null, now = Date.now()): boolean {
+  const remaining = msUntilDay(day, startTime, now);
+  return remaining !== null && remaining > 0;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * True inside the late window: the day starts within 24 hours AND has not
+ * started yet.
+ *
+ * Two edges, deliberately — the same shape as `isLateCancellationWindow`, and
+ * for the same reason it had to be fixed there. A one-sided `remaining <= 24h`
+ * is trivially true for everything in the past, which would tell a volunteer
+ * that releasing a day three weeks gone was a late cancellation.
+ *
+ * The DATABASE is the authority on this; the trigger stamps `late_release`
+ * itself. This exists so the app can WARN before the tap rather than report
+ * after it — a penalty a volunteer only learns about afterwards teaches them
+ * nothing.
+ */
+export function isLateReleaseWindow(
+  day: string,
+  startTime: string | null,
+  now = Date.now()
+): boolean {
+  const remaining = msUntilDay(day, startTime, now);
+  if (remaining === null) return false;
+  return remaining > 0 && remaining <= DAY_MS;
+}
+
+/**
+ * How many late releases in the window before a deduction applies.
+ *
+ * The owner's rule (2026-08-21): a first late release costs nothing but warns,
+ * and repetition earns a deduction. Two free, deduction from the third, over a
+ * rolling window rather than for all time — somebody unreliable last year and
+ * dependable since is dependable, and a lifetime counter can never be worked
+ * off.
+ */
+export const LATE_RELEASE_FREE_COUNT = 2;
+export const LATE_RELEASE_WINDOW_DAYS = 90;
+
+export type LateReleaseStanding = 'first' | 'final_warning' | 'deducting';
+
+/** Where this volunteer stands, given how many late releases are already behind them. */
+export function lateReleaseStanding(recentLateReleases: number): LateReleaseStanding {
+  if (recentLateReleases <= 0) return 'first';
+  if (recentLateReleases < LATE_RELEASE_FREE_COUNT) return 'final_warning';
+  return 'deducting';
+}
+
+/**
+ * What to tell a volunteer BEFORE they release a day inside the late window.
+ *
+ * Written to inform rather than to threaten: it states what happens, in the
+ * order it happens, and never implies the release is disallowed — the whole
+ * point of building this was that the app used to punish people for a thing it
+ * gave them no way to avoid.
+ *
+ * NOTE: no score moves today. The deduction itself is a V-Score formula change
+ * and is gated pending the owner's approval; `late_release` is recorded and
+ * nothing reads it. The copy is written so it stays true either way.
+ */
+export function lateReleaseWarning(recentLateReleases: number): string {
+  switch (lateReleaseStanding(recentLateReleases)) {
+    case 'first':
+      return 'This day starts within 24 hours, so it counts as a late cancellation. It will be recorded on your record. Repeated late cancellations affect your V-Score.';
+    case 'final_warning':
+      return `That is your ${ordinal(recentLateReleases + 1)} late cancellation in ${LATE_RELEASE_WINDOW_DAYS} days. One more and they start to affect your V-Score.`;
+    case 'deducting':
+      return `That is your ${ordinal(recentLateReleases + 1)} late cancellation in ${LATE_RELEASE_WINDOW_DAYS} days. Late cancellations at this rate affect your V-Score.`;
+  }
+}
+
+function ordinal(value: number): string {
+  const tens = value % 100;
+  if (tens >= 11 && tens <= 13) return `${value}th`;
+  switch (value % 10) {
+    case 1:
+      return `${value}st`;
+    case 2:
+      return `${value}nd`;
+    case 3:
+      return `${value}rd`;
+    default:
+      return `${value}th`;
+  }
+}
+
+/**
  * The fraction of their OWN commitment a volunteer turned up for, or null when
  * they committed to nothing (which the database now prevents, but a read path
  * must not divide by it regardless).

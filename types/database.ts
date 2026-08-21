@@ -204,6 +204,22 @@ export interface ApplicationDay {
   application_id: string;
   outreach_day_id: string;
   created_at: string;
+  /**
+   * When the volunteer dropped this day, or null while they are still
+   * committed to it.
+   *
+   * A release is never a DELETE. The row stays and carries when it happened,
+   * because that is the evidence the accountability system reads — a deleted
+   * row cannot be told apart from a day that was never promised.
+   */
+  released_at: string | null;
+  /**
+   * True when the release landed within 24 hours of that day's own start.
+   *
+   * Server-derived and absent from the client's UPDATE grant list: a volunteer
+   * who could set this could declare their own lateness.
+   */
+  late_release: boolean;
 }
 
 export interface OutreachRole {

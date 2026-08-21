@@ -12,6 +12,8 @@ export { RolePicker } from './RolePicker';
 export type { RolePickerProps } from './RolePicker';
 export { DayCommitmentPicker } from './DayCommitmentPicker';
 export type { DayCommitmentPickerProps } from './DayCommitmentPicker';
+export { DayReleaseSheet } from './DayReleaseSheet';
+export type { DayReleaseSheetProps } from './DayReleaseSheet';
 export { WithdrawSheet } from './WithdrawSheet';
 export type { WithdrawSheetProps } from './WithdrawSheet';
 export { ReviewSummaryCard } from './ReviewSummaryCard';

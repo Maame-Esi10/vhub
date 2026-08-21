@@ -2149,3 +2149,48 @@ the public organisation profile, the volunteer's outreach detail, the feed card,
 the applications card and the schedule card. One genuine omission remains and is
 a design decision rather than a bug — the organisation's own **Profile tab**
 shows no logo at all, having no avatar element in it.
+
+
+## Per-day release, built (2026-08-21)
+
+The gap this closes, stated plainly: withdrawal was all-or-nothing and shut the
+moment an event began, so a volunteer on four scattered Saturdays who could not
+make the third had two options — abandon the whole campaign, or not turn up and
+take a −15 no-show. **The app punished people for a thing it gave them no way to
+avoid.**
+
+The design decisions worth recording:
+
+**A release is a state on the row, not a deletion.** `released_at` and
+`late_release` are added to `application_days`; nothing is removed. A deleted
+row cannot say whether somebody gave three weeks' notice or vanished overnight,
+and cannot be told apart from a day never promised. Building it this way also
+forced the discovery that `DELETE` on that table had never been revoked from
+`authenticated` — so the crude, evidence-destroying version of this feature was
+already reachable by a crafted call. That is now closed.
+
+**Lateness is judged against the day, not the event.** Dropping day 9 of a
+campaign is a decision about day 9. The window has two edges — within 24 hours
+AND before the start — the same shape as the whole-application rule, and for the
+same reason: a one-sided test is trivially true for everything in the past.
+
+**A day already started cannot be released.** That is a no-show, worth −15 under
+the attendance path, and permitting a release afterwards would let anyone
+convert a no-show into the lighter cancellation.
+
+**The warning comes before the tap.** A penalty a volunteer only learns about
+afterwards teaches nothing. The sheet states the consequence, names how many
+late cancellations are already behind them, and still lets them proceed.
+
+**No score moves.** `late_release` is recorded and counted; nothing reads it to
+change a V-Score. The deduction is a formula change and stays gated.
+
+## The day-shortfall question (2026-08-21)
+
+The owner asked whether the useful part of per-day slot counting can be had
+without building the full model. The answer is yes for detection, no for
+capacity — see the report of 2026-08-21 for the reasoning. In short: a day's
+shortfall can be DERIVED on demand (`slots_total` minus the count of live
+commitments on that day) with nothing new to maintain, because commitments are
+already rows. What cannot be derived is a per-day TARGET different from the
+event's, which is what "2 nurses on Saturday, 5 on Sunday" would need.

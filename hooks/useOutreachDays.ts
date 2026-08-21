@@ -122,6 +122,95 @@ export function useAddOutreachDays() {
   });
 }
 
+export interface ReleaseDayParams {
+  applicationId: string;
+  outreachDayId: string;
+  /** True releases the day; false takes it back on while it is still ahead. */
+  release: boolean;
+  /** Only used to refresh the right caches afterwards. */
+  outreachId: string;
+}
+
+/**
+ * Drops a day a volunteer had committed to, or takes it back on.
+ *
+ * A RELEASE IS AN UPDATE, NEVER A DELETE. The row stays and records when the
+ * release happened and whether it was late, because that is the evidence a
+ * V-Score is later derived from — a deleted row cannot be told apart from a day
+ * that was never promised.
+ *
+ * The client writes only `released_at`, and cannot even choose its value
+ * usefully: `trg_application_days_stamp_release` overwrites it with `now()` and
+ * derives `late_release` itself, against THAT DAY's start rather than the
+ * event's first day. `late_release` is absent from the client's grant list
+ * entirely, so a volunteer cannot declare their own lateness.
+ *
+ * Three refusals come back from that trigger as ordinary errors, and their
+ * messages are written to be shown as they are:
+ *   - releasing a day that has already started (that is a no-show, not a
+ *     cancellation, and belongs to attendance at -15);
+ *   - taking back a day that has already started;
+ *   - releasing the LAST day still ahead of them, which is withdrawing from the
+ *     outreach and has to go through the withdrawal path so the organisation is
+ *     told and the waitlist is offered the place.
+ */
+export function useReleaseCommittedDay() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: ReleaseDayParams): Promise<void> => {
+      const { error } = await supabase
+        .from('application_days')
+        .update({ released_at: params.release ? new Date().toISOString() : null })
+        .eq('application_id', params.applicationId)
+        .eq('outreach_day_id', params.outreachDayId);
+
+      if (error) {
+        throw new Error(
+          error.message ||
+            (params.release ? 'Could not release that day.' : 'Could not take that day back on.')
+        );
+      }
+    },
+    onSuccess: (_result, params) => {
+      queryClient.invalidateQueries({ queryKey: outreachDayKeys.all });
+      queryClient.invalidateQueries({ queryKey: outreachKeys.detail(params.outreachId) });
+      // The count behind the late-cancellation warning moves with this.
+      queryClient.invalidateQueries({ queryKey: [...outreachDayKeys.all, 'late-releases'] });
+    },
+  });
+}
+
+/**
+ * How many late cancellations this volunteer has made recently.
+ *
+ * Read through the `count_recent_late_releases` function rather than counted in
+ * the app, because the window is a rule rather than a display choice and both
+ * sides must agree on it. Rolling rather than lifetime: somebody unreliable
+ * last year and dependable since is dependable, and a lifetime counter can
+ * never be worked off.
+ *
+ * Feeds the WARNING only. No score moves on it — the deduction is a V-Score
+ * formula change and is gated.
+ */
+export function useMyLateReleaseCount(volunteerId: string | undefined) {
+  return useQuery({
+    queryKey: [...outreachDayKeys.all, 'late-releases', volunteerId ?? 'unknown'] as const,
+    enabled: !!volunteerId,
+    queryFn: async (): Promise<number> => {
+      const { data, error } = await supabase.rpc('count_recent_late_releases', {
+        p_volunteer_id: volunteerId!,
+      });
+      if (error) {
+        // Not fatal: a missing count means the warning is written for a first
+        // offence, which is the gentler of the two and never overstates.
+        return 0;
+      }
+      return typeof data === 'number' ? data : 0;
+    },
+  });
+}
+
 /** An `application_days` row with the day it points at, which is what every screen actually wants. */
 export interface CommittedDay {
   applicationId: string;
@@ -144,7 +233,11 @@ export function useApplicationDays(applicationId: string | undefined) {
       const { data, error } = await supabase
         .from('application_days')
         .select('outreach_day_id, day:outreach_days (*)')
-        .eq('application_id', applicationId!);
+        .eq('application_id', applicationId!)
+        // Released days are still rows, deliberately, but they are no longer a
+        // commitment: nothing that COUNTS days may see them. Only the audit
+        // reads a released row.
+        .is('released_at', null);
 
       if (error) {
         throw new Error(error.message || 'Could not load the days you committed to.');
@@ -179,7 +272,8 @@ export function useApplicationDaysForMany(applicationIds: readonly string[]) {
       const { data, error } = await supabase
         .from('application_days')
         .select('application_id, day:outreach_days (day)')
-        .in('application_id', applicationIds as string[]);
+        .in('application_id', applicationIds as string[])
+        .is('released_at', null);
 
       if (error) {
         throw new Error(error.message || 'Could not load the days you committed to.');
@@ -228,7 +322,11 @@ export function useOutreachCommitments(outreachId: string | undefined) {
       const { data, error } = await supabase
         .from('application_days')
         .select('application_id, outreach_day_id, outreach_days!inner (outreach_id)')
-        .eq('outreach_days.outreach_id', outreachId!);
+        .eq('outreach_days.outreach_id', outreachId!)
+        // The organiser's roster for a day must not list somebody who released
+        // it — offering to mark them absent for a day they formally dropped is
+        // the failure this filter prevents.
+        .is('released_at', null);
 
       if (error) {
         throw new Error(error.message || 'Could not load who committed to which days.');

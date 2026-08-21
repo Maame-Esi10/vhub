@@ -16,6 +16,7 @@ import {
 } from '@/components/ui';
 import {
   DayCommitmentPicker,
+  DayReleaseSheet,
   FullApplicationSheet,
   GalleryStrip,
   MatchScoreBadge,
@@ -25,14 +26,17 @@ import {
 import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
+  useApplicationDays,
   useCancelApplication,
   useCreateApplication,
   useMyApplicationForOutreach,
+  useMyLateReleaseCount,
   useOutreach,
   useOutreachDays,
   useOutreachImages,
   useOutreachRoles,
   usePublicOrganisationProfile,
+  useReleaseCommittedDay,
 } from '@/hooks';
 import { formatDaySpan } from '@/lib/outreachDays';
 import { useAuthStore } from '@/stores/authStore';
@@ -63,6 +67,7 @@ export default function OutreachDetail() {
 
   const [fullFormVisible, setFullFormVisible] = useState(false);
   const [withdrawVisible, setWithdrawVisible] = useState(false);
+  const [releaseVisible, setReleaseVisible] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
 
   /*
@@ -246,6 +251,28 @@ export default function OutreachDetail() {
       application.status === 'accepted' ||
       application.status === 'waitlisted') &&
     isUpcomingEvent(outreach.date, outreach.start_time);
+  /*
+    CHANGING WHICH DAYS YOU ARE ON, once you have already applied.
+
+    Only for an event that runs more than one day, and only while the
+    application is live. On a one-day event there is nothing to change that
+    withdrawing does not already cover.
+
+    Read separately from `committedDayIds` above, which is the pre-application
+    tick list. What has been PROMISED is a database fact; what is ticked on the
+    way in is form state, and conflating the two would let a stale form
+    overwrite a commitment.
+  */
+  const applicationActive =
+    application !== null &&
+    (application.status === 'pending' ||
+      application.status === 'accepted' ||
+      application.status === 'waitlisted');
+  const myCommittedDays = useApplicationDays(applicationActive ? application.id : undefined);
+  const lateReleaseCount = useMyLateReleaseCount(applicationActive ? volunteerId : undefined);
+  const releaseDay = useReleaseCommittedDay();
+  const canChangeDays = applicationActive && days.length > 1 && outreach.status !== 'cancelled';
+
   const organisation = outreach.organisation;
 
   return (
@@ -447,6 +474,32 @@ export default function OutreachDetail() {
               tone="neutral"
             />
             <Text style={styles.statusText}>{STATUS_MESSAGE[application.status]}</Text>
+
+            {/*
+              The way out that used to not exist. Withdrawal is all-or-nothing
+              and closes the moment the event begins, so a volunteer on four
+              scattered Saturdays who could not make the third had two options:
+              abandon the whole campaign, or not turn up and take a no-show.
+            */}
+            {canChangeDays ? (
+              <Pressable
+                onPress={() => setReleaseVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Change which days you are on"
+                style={styles.changeDaysAction}
+              >
+                <MaterialCommunityIcons
+                  name="calendar-edit"
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={styles.changeDaysText}>
+                  {myCommittedDays.data
+                    ? `You are on ${myCommittedDays.data.length} of ${days.length} days · change`
+                    : 'Change my days'}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 
@@ -583,6 +636,46 @@ export default function OutreachDetail() {
           </View>
         )}
       </View>
+
+      <DayReleaseSheet
+        visible={releaseVisible}
+        days={days}
+        outreach={outreach}
+        committedDayIds={(myCommittedDays.data ?? []).map((day) => day.id)}
+        recentLateReleases={lateReleaseCount.data ?? 0}
+        busyDayId={releaseDay.isPending ? (releaseDay.variables?.outreachDayId ?? null) : null}
+        errorMessage={
+          releaseDay.isError
+            ? releaseDay.error instanceof Error
+              ? releaseDay.error.message
+              : 'Could not change that day.'
+            : null
+        }
+        onRelease={(outreachDayId) =>
+          application &&
+          releaseDay.mutate({
+            applicationId: application.id,
+            outreachDayId,
+            release: true,
+            // outreach.id, not the route param: the param is string|undefined
+            // and this is only reachable once the outreach has loaded.
+            outreachId: outreach.id,
+          })
+        }
+        onRecommit={(outreachDayId) =>
+          application &&
+          releaseDay.mutate({
+            applicationId: application.id,
+            outreachDayId,
+            release: false,
+            outreachId: outreach.id,
+          })
+        }
+        onClose={() => {
+          setReleaseVisible(false);
+          releaseDay.reset();
+        }}
+      />
 
       <FullApplicationSheet
         visible={fullFormVisible}
@@ -866,6 +959,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     gap: spacing.sm,
     alignItems: 'flex-start',
+  },
+  // Given its own space inside the status panel rather than tucked under the
+  // status line: it is an action, and an action jammed against a sentence reads
+  // as part of the sentence.
+  changeDaysAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    marginTop: spacing.sm,
+  },
+  changeDaysText: {
+    flex: 1,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    color: colors.primary,
   },
   statusText: {
     fontFamily: fontFamily.medium,

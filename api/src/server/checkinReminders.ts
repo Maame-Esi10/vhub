@@ -102,15 +102,27 @@ export async function sendCheckinReminders(): Promise<CheckinReminderResult> {
     //
     // An application with no commitment rows falls back to "every day", which
     // is what every application made before commitments existed meant.
+    // `released_at` is selected rather than filtered in SQL, because the two
+    // questions below need different answers from the same rows.
+    //
+    // "Did they commit to TODAY" must ignore a released day -- chasing someone
+    // about a day they formally dropped is the same failure as chasing them
+    // about one they never promised.
+    //
+    // "Do they have ANY commitment" must NOT ignore it. That test exists to
+    // recognise applications made before commitments existed, which have no
+    // rows at all; an application whose every remaining day has been released
+    // still has rows, and must not fall through to "every day" -- which would
+    // remind them about precisely the days they dropped.
     const { data: commitments } = await admin
       .from("application_days")
-      .select("application_id, outreach_day_id")
+      .select("application_id, outreach_day_id, released_at")
       .in("application_id", acceptedIds);
     const committedToday = new Set<string>();
     const hasAnyCommitment = new Set<string>();
     for (const row of commitments ?? []) {
       hasAnyCommitment.add(row.application_id as string);
-      if (row.outreach_day_id === outreachDayId) {
+      if (row.outreach_day_id === outreachDayId && row.released_at === null) {
         committedToday.add(row.application_id as string);
       }
     }

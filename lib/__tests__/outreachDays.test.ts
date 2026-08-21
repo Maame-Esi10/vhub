@@ -9,8 +9,14 @@ import {
   dayStartTime,
   describeCommitment,
   formatDaySpan,
+  canReleaseDay,
   hasFirstDayArrived,
   isConsecutive,
+  isLateReleaseWindow,
+  LATE_RELEASE_FREE_COUNT,
+  lateReleaseStanding,
+  lateReleaseWarning,
+  msUntilDay,
   nextDayAfter,
   sortDayStrings,
   toIsoDate,
@@ -304,5 +310,87 @@ describe('lastDay and isAnyDayToday', () => {
     expect(isAnyDayToday(['2020-01-01', today, '2099-01-01'])).toBe(true);
     expect(isAnyDayToday(['2020-01-01', '2099-01-01'])).toBe(false);
     expect(isAnyDayToday([])).toBe(false);
+  });
+});
+
+describe('releasing a day', () => {
+  // A fixed clock, so none of this drifts into passing or failing by the hour.
+  const NOW = new Date(2026, 8, 10, 12, 0, 0).getTime(); // Thu 10 Sep 2026, midday
+
+  it('measures the wait to a day from its own start time', () => {
+    expect(msUntilDay('2026-09-10', '18:00', NOW)).toBe(6 * 60 * 60 * 1000);
+  });
+
+  it('treats a day with no start time as starting at midnight', () => {
+    expect(msUntilDay('2026-09-11', null, NOW)).toBe(12 * 60 * 60 * 1000);
+  });
+
+  it('accepts the HH:MM:SS Postgres actually returns', () => {
+    // Every time read back from the database arrives with seconds. A parser
+    // anchored to HH:MM exactly is the bug that broke every card in July.
+    expect(msUntilDay('2026-09-10', '18:00:00', NOW)).toBe(6 * 60 * 60 * 1000);
+  });
+
+  it('can be released while the day is still ahead', () => {
+    expect(canReleaseDay('2026-09-12', '09:00', NOW)).toBe(true);
+  });
+
+  it('cannot be released once the day has started', () => {
+    // Not a cancellation at that point -- a no-show, which attendance owns.
+    expect(canReleaseDay('2026-09-10', '09:00', NOW)).toBe(false);
+  });
+
+  it('cannot be released for a day that is long past', () => {
+    expect(canReleaseDay('2026-08-01', '09:00', NOW)).toBe(false);
+  });
+});
+
+describe('the late-release window has two edges', () => {
+  const NOW = new Date(2026, 8, 10, 12, 0, 0).getTime();
+
+  it('is late inside 24 hours of the start', () => {
+    expect(isLateReleaseWindow('2026-09-11', '09:00', NOW)).toBe(true);
+  });
+
+  it('is not late with more than 24 hours to go', () => {
+    expect(isLateReleaseWindow('2026-09-12', '09:00', NOW)).toBe(false);
+  });
+
+  it('is NOT late for a day already begun, which is the edge that matters', () => {
+    // One-sided "remaining <= 24h" is trivially true for everything in the
+    // past. That exact bug told a volunteer an event five days gone started
+    // within 24 hours.
+    expect(isLateReleaseWindow('2026-09-09', '09:00', NOW)).toBe(false);
+    expect(isLateReleaseWindow('2026-01-01', '09:00', NOW)).toBe(false);
+  });
+});
+
+describe('late-release standing escalates rather than punishing at once', () => {
+  it('treats the first as a warning, not a failure', () => {
+    expect(lateReleaseStanding(0)).toBe('first');
+  });
+
+  it('warns harder as the free allowance runs out', () => {
+    expect(lateReleaseStanding(LATE_RELEASE_FREE_COUNT - 1)).toBe('final_warning');
+  });
+
+  it('starts deducting once the allowance is spent', () => {
+    expect(lateReleaseStanding(LATE_RELEASE_FREE_COUNT)).toBe('deducting');
+    expect(lateReleaseStanding(LATE_RELEASE_FREE_COUNT + 5)).toBe('deducting');
+  });
+
+  it('never tells a volunteer the release is refused', () => {
+    // The point of building per-day release was that the app punished people
+    // for something it gave them no way to avoid. The copy must inform.
+    for (const count of [0, 1, 2, 7]) {
+      const warning = lateReleaseWarning(count);
+      expect(warning).not.toMatch(/cannot|not allowed|refused|blocked/i);
+      expect(warning.length).toBeGreaterThan(20);
+    }
+  });
+
+  it('counts the release being made, not the ones behind it', () => {
+    // Someone with one already behind them is about to make their second.
+    expect(lateReleaseWarning(1)).toContain('2nd');
   });
 });

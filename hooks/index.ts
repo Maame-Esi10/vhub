@@ -89,9 +89,11 @@ export {
   useAddOutreachDays,
   useApplicationDays,
   useApplicationDaysForMany,
+  useMyLateReleaseCount,
+  useReleaseCommittedDay,
   useOutreachCommitments,
 } from './useOutreachDays';
-export type { AddOutreachDaysParams, CommittedDay } from './useOutreachDays';
+export type { AddOutreachDaysParams, CommittedDay, ReleaseDayParams } from './useOutreachDays';
 export {
   applicationKeys,
   useOutreachApplications,
