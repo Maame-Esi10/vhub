@@ -175,10 +175,25 @@ export async function POST(req: Request): Promise<Response> {
       body.status
     );
 
-    // Email the applicant for an organisation-driven decision. A volunteer's
+    // Tell the applicant, for an organisation-driven decision. A volunteer's
     // own cancellation doesn't need one -- they already know.
+    //
+    // BOTH, NOT JUST THE EMAIL. This path called emailApplicant alone, so
+    // deciding an applicant one at a time -- the ordinary way an organisation
+    // accepts someone -- sent the email and neither pushed the volunteer nor
+    // recorded the in-app notification. The two other paths that decide an
+    // application (the batch "accept top N", and promoting someone off the
+    // waitlist) always did both, which is why this was invisible in testing
+    // until someone accepted a single applicant and watched the volunteer's
+    // phone stay silent. Reported from a device on 2026-08-20.
+    //
+    // Sequential rather than Promise.all: notifyUsers swallows its own
+    // failures, and an email that throws must not take the notification with
+    // it -- the volunteer should hear about the decision by whichever channel
+    // still works.
     if (isOwningOrg && (body.status === "accepted" || body.status === "rejected" || body.status === "waitlisted")) {
       await emailApplicant(admin, application.volunteer_id, outreach as OutreachRow, body.status);
+      await pushApplicant(admin, application.volunteer_id, outreach as OutreachRow, body.status);
     }
 
     return Response.json(result);
