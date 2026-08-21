@@ -2058,3 +2058,94 @@ and 8 warnings, none of them in code written that day, mostly one React rule
 and a handful of others. Owner's decision: **a separate clean-up pass later**,
 once everything currently untested has been verified on a device and committed.
 Nothing here affects whether the app runs.
+
+
+## Device round 2: what test 01 turned up (2026-08-21)
+
+Check-in itself passed — a real scan on a real phone returned "You're checked
+in" against the correct event and date, which closes the regression open since
+the 15 August migration. Five further problems came out of the same twenty
+minutes, and four of them were invisible to 379 passing tests because each one
+lives in the gap BETWEEN two things that are individually correct.
+
+**"Mark attendance" was missing from a live event.** Two gates on the same event
+disagreed about what "started" means. `/api/checkin` finds today's row in
+`outreach_days` and never looks at `start_time`, so a scan is accepted anywhere
+on the event's calendar day. The Manage event screen asked whether the stated
+start time had passed. Between midnight and an 06:00 start the scanner said yes
+and the organiser's screen said no — attendance existing that the organiser had
+no way to open. The day is now the unit on both sides, because the day is what
+attendance is keyed on.
+
+**Deciding an applicant emailed them and did nothing else.** The single-decision
+path in `/api/application-status` called `emailApplicant` alone. The two other
+paths that decide an application — the batch "accept top N" and waitlist
+promotion — always called `pushApplicant` too, which is why this survived
+review: the code looked covered from every angle except the one an organisation
+actually uses to accept one person.
+
+**Nothing flowed volunteer → organisation at all.** No notification existed when
+somebody applied, and more importantly the organisation side had no inbox: every
+push it received also wrote a `notifications` row that nothing in its app could
+read. Miss the push and the message was gone. Both halves are now built.
+
+**The applicant card offered every action regardless of state.** It disabled only
+the button matching the current status, so an accepted volunteer showed live
+"Waitlist" and "Reject" buttons identical to an undecided applicant's. Those
+actions are legitimate — an organisation must be able to take someone off a
+roster — but they are not the same act as deciding a pending application, since
+that person has been emailed, told they are confirmed, and has the event on
+their schedule.
+
+**A decision gave no confirmation at all.** Fixed with a toast that names the
+person and the decision. Staying on the vetting screen afterwards is deliberate
+and now documented in the code: vetting is a run of decisions down a list.
+
+## A scattered day span must not contain a dash (2026-08-21)
+
+Two days — 31 August and 3 September — rendered as
+"2 days · Mon, Aug 31 – Thu, Sep 3 2026" and read as a four-day event.
+
+Leading with the count was supposed to prevent exactly this and did not. The
+dash is a stronger signal than the number in front of it, and it means "through"
+everywhere else in the app: the consecutive form, and every time range. A
+scatter cannot borrow it.
+
+Scattered days are now NAMED — "2 days · Mon, Aug 31 + Thu, Sep 3 2026" — and
+past three days the remainder is counted rather than listed. The rejected
+alternative, "2 days between Aug 31 and Sep 3", is accurate and wrong the same
+way: "between X and Y" describes a window, and these days are not a window. The
+unit test now asserts the property rather than the strings — no scattered span
+contains a dash at any length.
+
+## Required skills are not optional (2026-08-21)
+
+An outreach could be published with none, because `validateWizard` never checked.
+
+That is not a relaxed outreach, it is one the matching engine cannot rank.
+Skills are 35 of the 100 match points, and `computeLayer1MatchScore` scores an
+empty requirement as 1.0 for every applicant — correct arithmetic, wrong
+outcome. Everyone collects the full 35, the largest component stops
+discriminating, and the ranking collapses onto category, location, availability
+and experience.
+
+The alternative — allow zero and REDISTRIBUTE the 35 points across the other
+components — is arguably more correct and was deliberately not taken: it changes
+the matching engine, which is gated, and it would move every score already
+stored on every application. The rule applies when editing too, so an outreach
+posted before it gets repaired on its first save.
+
+## The organisation logo, and why one screen differed (2026-08-21)
+
+The dashboard header was the only `<Avatar>` in the app never passed a `uri`.
+Sixteen call sites, fifteen of them correct. The owner's guess — that the screen
+reads the organisation's name from `organisation_profiles` and never fetches
+`profiles.avatar_url` — was close but not the cause: the screen already holds
+the full `profiles` row from the auth store, `avatar_url` included. The prop
+was simply never written.
+
+Audited at the same time, and all correct: organisation Settings, Edit Profile,
+the public organisation profile, the volunteer's outreach detail, the feed card,
+the applications card and the schedule card. One genuine omission remains and is
+a design decision rather than a bug — the organisation's own **Profile tab**
+shows no logo at all, having no avatar element in it.
