@@ -45,6 +45,8 @@ const SubmitBody = z.object({
   website: z.string().trim().max(300).optional(),
   registrations: z.array(RegistrationInput).min(1).max(10),
   documents: z.array(DocumentInput).min(1).max(10),
+  /** True when the organisation has just agreed to the consent text. */
+  consent: z.boolean().optional(),
 });
 
 const DecideBody = z.object({
@@ -81,7 +83,7 @@ export async function POST(req: Request): Promise<Response> {
 
       const { data: current } = await admin
         .from("organisation_profiles")
-        .select("verification_state")
+        .select("verification_state, document_consent_at")
         .eq("id", caller.userId)
         .maybeSingle();
 
@@ -103,6 +105,13 @@ export async function POST(req: Request): Promise<Response> {
         throw Errors.badRequest(
           "Your submission is already waiting on review. You will be notified when it is decided."
         );
+      }
+
+      // Consent is refused, not assumed — same rule and same reasoning as the
+      // volunteer credential upload.
+      const alreadyConsented = !!current.document_consent_at;
+      if (!alreadyConsented && body.consent !== true) {
+        throw Errors.badRequest("Agree to how your documents are used before submitting them.");
       }
 
       // Every document must sit in THIS organisation's own folder and must
@@ -133,6 +142,7 @@ export async function POST(req: Request): Promise<Response> {
           ...(body.website ? { website: body.website } : {}),
           verification_state: "documents_submitted",
           verification_submitted_at: new Date().toISOString(),
+          ...(alreadyConsented ? {} : { document_consent_at: new Date().toISOString() }),
           // The previous rejection reason is cleared on resubmission: leaving
           // it would show the organisation a stale "you were declined because"
           // beside a submission nobody has looked at yet.

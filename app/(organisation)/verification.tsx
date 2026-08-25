@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, ErrorState, Input, ListSkeleton, ScreenHeader, Toast } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { ORGANISATION_CONSENT_POINTS } from '@/constants/credential-guidelines';
 import { useMyVerificationSubmission, useSubmitVerification } from '@/hooks';
 import { useOrganisationDocumentUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
@@ -89,6 +90,7 @@ export default function OrganisationVerification() {
   const [documents, setDocuments] = useState<DocumentDraft[]>([]);
   const [attempted, setAttempted] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [consented, setConsented] = useState(false);
 
   const submission = submissionQuery.data;
   const state: OrgVerificationState = submission?.profile.verification_state ?? 'unverified';
@@ -113,6 +115,7 @@ export default function OrganisationVerification() {
   }, [submission]);
 
   const canEdit = state === 'unverified' || state === 'rejected';
+  const consentRecorded = !!submission?.profile.document_consent_at;
 
   /*
     ERRORS ARE DERIVED FROM STATE, NEVER SNAPSHOTTED. This is the same fix the
@@ -165,6 +168,7 @@ export default function OrganisationVerification() {
           .filter((row) => row.label.trim() && row.number.trim())
           .map((row) => ({ label: row.label.trim(), number: row.number.trim() })),
         documents: documents.map((doc) => ({ publicId: doc.publicId, label: doc.name })),
+        ...(consented ? { consent: true } : {}),
       },
       {
         onSuccess: () => {
@@ -362,6 +366,40 @@ export default function OrganisationVerification() {
               <Text style={styles.errorText}>{uploadDocument.error.message}</Text>
             ) : null}
 
+            {/*
+              CONSENT AT THE POINT OF UPLOAD, not buried in terms — and not a
+              decorative checkbox either: the API refuses the submission without
+              it and remembers the answer, so this block is what unblocks the
+              server. It disappears once recorded; asking again on every
+              resubmission would train people to tap past it.
+            */}
+            {!consentRecorded ? (
+              <View style={styles.consentCard}>
+                <Text style={styles.consentHeading}>Before you submit</Text>
+                {ORGANISATION_CONSENT_POINTS.map((point) => (
+                  <View key={point} style={styles.consentRow}>
+                    <MaterialCommunityIcons name="circle-small" size={20} color={colors.textSecondary} />
+                    <Text style={styles.consentText}>{point}</Text>
+                  </View>
+                ))}
+                <Pressable
+                  onPress={() => setConsented((prev) => !prev)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: consented }}
+                  style={styles.confirmRow}
+                >
+                  <View style={[styles.checkbox, consented && styles.checkboxChecked]}>
+                    {consented ? (
+                      <MaterialCommunityIcons name="check" size={14} color={colors.white} />
+                    ) : null}
+                  </View>
+                  <Text style={styles.consentAgree}>
+                    I understand this, and I agree to V-HUB storing these documents for verification.
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {submit.error ? <Text style={styles.errorText}>{submit.error.message}</Text> : null}
             {attempted && firstError ? (
               <Text style={styles.errorText}>Fix the marked fields above, then submit again.</Text>
@@ -371,7 +409,7 @@ export default function OrganisationVerification() {
               <Button
                 title={submit.isPending ? 'Submitting…' : 'Submit for verification'}
                 onPress={handleSubmit}
-                disabled={submit.isPending}
+                disabled={submit.isPending || (!consentRecorded && !consented)}
               />
             </View>
           </>
@@ -488,6 +526,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.danger,
     marginTop: spacing.xs,
+  },
+  consentCard: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  consentHeading: { fontFamily: fontFamily.semiBold, fontSize: 15, color: colors.textPrimary },
+  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
+  consentText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textSecondary,
+  },
+  confirmRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginTop: spacing.sm },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
+  consentAgree: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textPrimary,
   },
   submitBlock: { marginTop: spacing.xl },
   submittedCard: {

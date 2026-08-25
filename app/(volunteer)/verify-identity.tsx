@@ -3,6 +3,8 @@ import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, ConfirmDialog, ScreenHeader } from '@/components/ui';
+import { useRouter } from 'expo-router';
+import { CREDENTIAL_CONSENT_POINTS } from '@/constants/credential-guidelines';
 import { useDocumentUrl } from '@/hooks/useDocumentUrl';
 import { useSignDeclaration } from '@/hooks/useSignDeclaration';
 // Imported from its own module, never the hooks barrel: useMediaUpload pulls in
@@ -62,6 +64,7 @@ const STATUS_PRESENTATION = {
 };
 
 export default function VolunteerVerifyIdentity() {
+  const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const signDeclaration = useSignDeclaration();
@@ -69,6 +72,12 @@ export default function VolunteerVerifyIdentity() {
   const deleteCredential = useDeleteCredential();
   const [confirmed, setConfirmed] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [consented, setConsented] = useState(false);
+
+  // Consent is asked ONCE. Once the server has stamped it, the block goes away
+  // — asking again on every replacement would train people to tap past it,
+  // which is the opposite of informed.
+  const consentRecorded = !!volunteerProfile?.document_consent_at;
 
   const hasDocument = !!volunteerProfile?.credential_document_id;
   /*
@@ -180,6 +189,61 @@ export default function VolunteerVerifyIdentity() {
               <Text style={styles.gateNote}>Sign the declaration above first.</Text>
             ) : null}
 
+            <Pressable
+              onPress={() => router.push('/(volunteer)/credential-guidelines')}
+              accessibilityRole="button"
+              accessibilityLabel="Read what to send"
+              style={({ pressed }) => [styles.guidelinesRow, pressed && styles.documentPressed]}
+            >
+              <MaterialCommunityIcons name="help-circle-outline" size={20} color={colors.primary} />
+              <View style={styles.documentFileText}>
+                <Text style={styles.documentFileTitle}>What should I send?</Text>
+                <Text style={styles.documentFileHint}>
+                  What counts for your profession, and the four things that get a document sent back.
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textSecondary} />
+            </Pressable>
+
+            {/*
+              CONSENT AT THE POINT OF UPLOAD, not buried in terms. Somebody
+              handing over a photograph of their nursing licence is entitled to
+              be told what happens to it at the moment they do it.
+
+              It is not a decorative checkbox: the API refuses the upload
+              without it and remembers the answer, so this block is the thing
+              that unblocks the server, not just the button. It disappears once
+              consent has been recorded — asking again every time would train
+              people to tap past it.
+            */}
+            {!consentRecorded ? (
+              <View style={styles.consentCard}>
+                <Text style={styles.consentHeading}>Before you upload</Text>
+                {CREDENTIAL_CONSENT_POINTS.map((point) => (
+                  <View key={point} style={styles.consentRow}>
+                    <MaterialCommunityIcons name="circle-small" size={20} color={colors.textSecondary} />
+                    <Text style={styles.consentText}>{point}</Text>
+                  </View>
+                ))}
+
+                <Pressable
+                  onPress={() => setConsented((prev) => !prev)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: consented }}
+                  style={styles.confirmRow}
+                >
+                  <View style={[styles.checkbox, consented && styles.checkboxChecked]}>
+                    {consented ? (
+                      <MaterialCommunityIcons name="check" size={14} color={colors.white} />
+                    ) : null}
+                  </View>
+                  <Text style={styles.consentAgree}>
+                    I understand this, and I agree to V-HUB storing my document for verification.
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {credentialUpload.error ? (
               <Text style={styles.errorText}>{credentialUpload.error.message}</Text>
             ) : null}
@@ -187,8 +251,12 @@ export default function VolunteerVerifyIdentity() {
             <Button
               title={credentialUpload.isPending ? 'Uploading...' : 'Choose a document'}
               variant="solid"
-              disabled={!declarationSigned || credentialUpload.isPending}
-              onPress={() => user && credentialUpload.mutate(user.id)}
+              disabled={
+                !declarationSigned || credentialUpload.isPending || (!consentRecorded && !consented)
+              }
+              onPress={() =>
+                user && credentialUpload.mutate({ userId: user.id, consent: consented || undefined })
+              }
               style={styles.signButton}
             />
           </>
@@ -227,7 +295,7 @@ export default function VolunteerVerifyIdentity() {
                 canManage={status !== 'verified'}
                 isReplacing={credentialUpload.isPending}
                 isDeleting={deleteCredential.isPending}
-                onReplace={() => user && credentialUpload.mutate(user.id)}
+                onReplace={() => user && credentialUpload.mutate({ userId: user.id })}
                 onDelete={() => setConfirmingDelete(true)}
               />
             ) : null}
@@ -388,6 +456,39 @@ function DocumentPreview({
 }
 
 const styles = StyleSheet.create({
+  guidelinesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.base,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+    marginTop: spacing.base,
+    marginBottom: spacing.base,
+  },
+  consentCard: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  consentHeading: { fontFamily: fontFamily.semiBold, fontSize: 15, color: colors.textPrimary },
+  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
+  consentText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textSecondary,
+  },
+  consentAgree: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textPrimary,
+  },
   reasonCard: {
     padding: spacing.lg,
     borderRadius: radius.lg,

@@ -780,11 +780,17 @@ export function getUploadSignature(
  */
 export function recordVerificationDocument(
   publicId: string,
+  /**
+   * True when the volunteer has just agreed to the consent text. The server
+   * REFUSES the upload without it on a first submission and remembers it
+   * afterwards, so it is a real gate rather than a flag the client asserts.
+   */
+  consent?: boolean,
   options?: RequestOptions
 ): Promise<{ verificationStatus: 'documents_pending' }> {
   return apiPost<{ verificationStatus: 'documents_pending' }>(
     API_ROUTES.verificationDocument,
-    { action: 'record', publicId },
+    { action: 'record', publicId, ...(consent ? { consent: true } : {}) },
     options
   );
 }
@@ -846,6 +852,8 @@ export interface OrganisationVerificationSubmission {
   website?: string;
   registrations: { label: string; number: string }[];
   documents: { publicId: string; label?: string }[];
+  /** True when the organisation has just agreed to the consent text. */
+  consent?: boolean;
 }
 
 /**

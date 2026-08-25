@@ -305,6 +305,15 @@ alter table volunteer_profiles
   add column if not exists verification_decided_at timestamptz,
   add column if not exists verification_submitted_at timestamptz;
 
+-- When this volunteer agreed to the credential-upload consent text (admin
+-- phase package E). NULL means they have not, and /api/verification-document
+-- REFUSES a document in that case -- which is what makes the consent real
+-- rather than a checkbox that proves nothing once the form closes. Server-only:
+-- a client able to write it could record an agreement to something it was never
+-- shown.
+alter table volunteer_profiles
+  add column if not exists document_consent_at timestamptz;
+
 -- The Cloudinary URL of an outreach's flyer image. Unlike the column above
 -- this IS client-writable (see the grant lists at the foot of this file): an
 -- organisation sets it on its own outreach, and a bad value harms only that
@@ -382,6 +391,9 @@ create table if not exists organisation_profiles (
   verification_reason text,
   verification_decided_at timestamptz,
   verification_submitted_at timestamptz,
+  -- The same consent record as volunteer_profiles.document_consent_at, for an
+  -- organisation submitting its verification documents.
+  document_consent_at timestamptz,
   -- DERIVED, and therefore unwritable by anyone including the service role.
   -- A boolean that must agree with something else will eventually disagree
   -- with it unless the database computes it -- the same reasoning CLAUDE.md

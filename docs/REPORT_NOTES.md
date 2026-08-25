@@ -2559,3 +2559,52 @@ application with", and an admin shares an application with nobody. Without an
 `or is_admin()` clause the queue would have been empty for the only person meant
 to see it — while the endpoint's own service-role reads kept working, which is
 the kind of half-working state that costs a session to diagnose.
+
+## Admin phase, package E — consent, and what to send (2026-08-25)
+
+### Consent is a gate, not a checkbox
+
+Somebody handing over a photograph of their nursing licence is entitled to be
+told, at that moment and in plain language, what happens to it. The brief asks
+for this separately from general terms, and that is right: consent buried in a
+terms document nobody read is not consent.
+
+What makes it real rather than decorative is that it is REFUSED rather than
+assumed. `document_consent_at` is a server-only column, and both upload
+endpoints reject a document when it is null and the request does not carry a
+fresh agreement. A checkbox in a form proves nothing once the form closes; a
+timestamp is the only part that is evidence, and it is written in the same
+statement as the document it belongs to, so a consent record can never exist for
+an upload that did not happen.
+
+**Nobody was backfilled, deliberately.** Everyone currently holding a document
+uploaded it before this text existed, so writing down that they agreed to it
+would be recording something untrue. They are asked once, the next time they
+upload.
+
+**It is asked once and then not again.** Re-showing the block on every
+replacement would train people to tap past it, which is the opposite of
+informed.
+
+### One source for the copy
+
+`constants/credential-guidelines.ts` holds the per-category guidance, the
+general rules and both consent texts. The guidelines screen and the consent
+block on the upload screen read from it, so the two cannot drift into telling a
+volunteer different things about the same document.
+
+**No real or sample credential images, anywhere.** The brief says so and the
+reasoning is worth keeping: a sample licence is either somebody's real one, or a
+forgery template with our name on it. The illustrations are generic icons.
+
+**The named councils are examples, not a closed list.** Each entry carries "or
+the equivalent from wherever you are registered", because a Ghanaian-trained
+volunteer working abroad, or one registered before a council was reorganised,
+holds something that does not match the current name and is not thereby a fraud.
+
+### The guidelines screen leads with the reader's own category
+
+A volunteer opening it has one document to send, not seven. Making them find
+their profession in an alphabetical list is a small rudeness repeated on every
+visit. The other categories stay on the page because a category can be changed,
+and because somebody deciding what to claim needs to see what each one costs.

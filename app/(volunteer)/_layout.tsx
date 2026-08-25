@@ -79,6 +79,7 @@ export default function VolunteerTabsLayout() {
       <Tabs.Screen name="feedback" options={{ href: null }} />
       <Tabs.Screen name="account-security" options={{ href: null }} />
       <Tabs.Screen name="verify-identity" options={{ href: null }} />
+      <Tabs.Screen name="credential-guidelines" options={{ href: null }} />
     </Tabs>
   );
 }

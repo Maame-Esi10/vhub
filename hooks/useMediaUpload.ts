@@ -96,7 +96,19 @@ export function useCredentialUpload() {
   const setVolunteerProfile = useAuthStore((state) => state.setVolunteerProfile);
 
   return useMutation({
-    mutationFn: async (userId: string): Promise<VolunteerProfile | null> => {
+    mutationFn: async ({
+      userId,
+      consent,
+    }: {
+      userId: string;
+      /**
+       * True when the volunteer has just agreed to the consent text. The
+       * SERVER refuses the upload without it (and remembers it afterwards), so
+       * this is not a UI flag being trusted — it is the answer to a question
+       * the API is going to ask regardless.
+       */
+      consent?: boolean;
+    }): Promise<VolunteerProfile | null> => {
       const picked = await pickCredentialDocument();
       if (picked.cancelled) return null;
 
@@ -105,7 +117,7 @@ export function useCredentialUpload() {
       // asset now, so that URL would not work for anyone anyway — and a stored
       // URL was precisely the leak package B closed.
       const { publicId } = await uploadToCloudinary('credential', picked.file);
-      await recordVerificationDocument(publicId);
+      await recordVerificationDocument(publicId, consent);
 
       // Re-read rather than trusting the endpoint's echo: the server may have
       // written more than the status (it also stores the document id), and the

@@ -47,6 +47,12 @@ const RecordAction = z.object({
    * fetched without a signature this server issues.
    */
   publicId: z.string().min(1).max(300),
+  /**
+   * True when the volunteer has just agreed to the consent text on this
+   * upload. Stamped once and then remembered — see the check below for why
+   * this is refused rather than assumed.
+   */
+  consent: z.boolean().optional(),
 });
 
 const DeleteAction = z.object({
@@ -67,7 +73,7 @@ export async function POST(req: Request): Promise<Response> {
 
     const { data: volunteer } = await admin
       .from("volunteer_profiles")
-      .select("verification_status, declaration_signed, credential_document_id")
+      .select("verification_status, declaration_signed, credential_document_id, document_consent_at")
       .eq("id", caller.userId)
       .maybeSingle();
 
@@ -111,6 +117,18 @@ export async function POST(req: Request): Promise<Response> {
       throw Errors.badRequest("Sign the accuracy declaration before submitting a document.");
     }
 
+    // CONSENT IS REFUSED, NOT ASSUMED. A checkbox in a form proves nothing once
+    // the form closes, and nobody was backfilled — everyone holding a document
+    // from before this text existed uploaded it without being shown it, and
+    // recording that they agreed would be us writing down something untrue.
+    // They are asked once, here, the next time they upload.
+    const alreadyConsented = !!volunteer.document_consent_at;
+    if (!alreadyConsented && body.consent !== true) {
+      throw Errors.badRequest(
+        "Read and agree to how your document is used before uploading it."
+      );
+    }
+
     // The public id must sit inside THIS caller's credential folder. Without
     // this check a volunteer could pass the public id of someone else's
     // already-uploaded document -- which does exist, so the existence check
@@ -130,6 +148,14 @@ export async function POST(req: Request): Promise<Response> {
       .update({
         credential_document_id: body.publicId,
         verification_status: "documents_pending",
+        // Stamped WITH the document, in the same statement, so a consent
+        // timestamp can never exist for an upload that did not happen.
+        // `verification_submitted_at` is what the admin queue orders by; it
+        // moves on every resubmission, which is correct — a resubmitted
+        // document joins the back of the queue rather than keeping the place
+        // of the one it replaced.
+        verification_submitted_at: new Date().toISOString(),
+        ...(alreadyConsented ? {} : { document_consent_at: new Date().toISOString() }),
       })
       .eq("id", caller.userId);
 

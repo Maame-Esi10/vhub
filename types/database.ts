@@ -151,6 +151,14 @@ export interface VolunteerProfile {
   verification_reason: string | null;
   verification_decided_at: string | null;
   verification_submitted_at: string | null;
+  /**
+   * When this volunteer agreed to the credential-upload consent text. NULL
+   * means they have not, and the API refuses a document in that case — the
+   * consent is a gate rather than a checkbox. Nobody was backfilled: everyone
+   * holding a document from before the text existed uploaded it without being
+   * shown it, and recording agreement to that would be untrue.
+   */
+  document_consent_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -193,6 +201,8 @@ export interface OrganisationProfile {
   verification_reason: string | null;
   verification_decided_at: string | null;
   verification_submitted_at: string | null;
+  /** When this organisation agreed to the document consent text. See the volunteer twin. */
+  document_consent_at: string | null;
   /** DERIVED from verification_state by the database. Never writable. */
   verified: boolean;
   created_at: string;
