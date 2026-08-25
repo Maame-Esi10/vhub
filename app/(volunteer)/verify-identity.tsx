@@ -101,6 +101,25 @@ export default function VolunteerVerifyIdentity() {
           </View>
         </View>
 
+        {/*
+          THE REASON A DECISION WENT AGAINST THEM. There is deliberately no
+          'rejected' verification status — a volunteer whose document was
+          declined IS unverified, which is the state they are in and the thing
+          they can act on. What they need is this, and without it a rejection
+          is indistinguishable from never having uploaded anything.
+        */}
+        {status === 'unverified' &&
+        volunteerProfile?.verification_reason &&
+        volunteerProfile?.verification_decided_at ? (
+          <View style={styles.reasonCard}>
+            <Text style={styles.reasonHeading}>Your document was not approved</Text>
+            <Text style={styles.reasonBody}>{volunteerProfile.verification_reason}</Text>
+            <Text style={styles.reasonHint}>
+              Upload a different document below and it goes back into the queue.
+            </Text>
+          </View>
+        ) : null}
+
         <Text style={styles.sectionHeading}>What verification unlocks</Text>
         <Text style={styles.body}>
           Full Applications to clinical outreaches. Support-role events never require it, so an
@@ -369,6 +388,21 @@ function DocumentPreview({
 }
 
 const styles = StyleSheet.create({
+  reasonCard: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: '#FEF2F2',
+    gap: spacing.xs,
+    marginBottom: spacing.lg,
+  },
+  reasonHeading: { fontFamily: fontFamily.semiBold, fontSize: 14, color: colors.danger },
+  reasonBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textPrimary,
+  },
+  reasonHint: { fontFamily: fontFamily.regular, fontSize: 13, color: colors.textSecondary },
   container: {
     flex: 1,
     backgroundColor: colors.background,

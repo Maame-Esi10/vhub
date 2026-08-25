@@ -48,6 +48,13 @@ export default function AdminTabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="credentials"
+        options={{
+          title: 'Credentials',
+          tabBarIcon: tabBarIcon('card-account-details', 'card-account-details-outline'),
+        }}
+      />
+      <Tabs.Screen
         name="activity"
         options={{ title: 'Activity', tabBarIcon: tabBarIcon('history', 'history') }}
       />

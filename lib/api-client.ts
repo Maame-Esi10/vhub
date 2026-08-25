@@ -46,6 +46,7 @@ export const API_ROUTES = {
   outreachStatus: '/api/outreach-status',
   documentUrl: '/api/document-url',
   organisationVerification: '/api/organisation-verification',
+  credentialReview: '/api/credential-review',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -862,6 +863,27 @@ export function submitOrganisationVerification(
   return apiPost<{ verificationState: 'documents_submitted' }>(
     API_ROUTES.organisationVerification,
     { action: 'submit', ...submission },
+    options
+  );
+}
+
+/**
+ * Gate 1: an admin's decision on one volunteer's credential document.
+ *
+ * A basic check — real, legible, unexpired, plausibly matching the claimed
+ * category. NOT a judgement about clinical competence: that is Gate 2, the
+ * organisation's own call per application, which changes no platform status and
+ * therefore needs no endpoint.
+ */
+export function decideCredential(
+  volunteerId: string,
+  decision: 'approve' | 'reject',
+  reason: string,
+  options?: RequestOptions
+): Promise<{ verificationStatus: 'verified' | 'unverified' }> {
+  return apiPost<{ verificationStatus: 'verified' | 'unverified' }>(
+    API_ROUTES.credentialReview,
+    { volunteerId, decision, reason },
     options
   );
 }

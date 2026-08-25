@@ -5,12 +5,14 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   ConfirmDialog,
+  DocumentViewer,
   EmptyState,
   ErrorState,
   FilterChips,
   ListSkeleton,
   Toast,
 } from '@/components/ui';
+import { getDocumentUrl, type SignedDocument } from '@/lib/api-client';
 import type { FilterChipOption } from '@/components/ui';
 import { ApplicantCard, OutreachPicker, RosterSummaryCard } from '@/components/organisation';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -139,6 +141,38 @@ export default function Applicants() {
   const [confirmingRoleId, setConfirmingRoleId] = useState<string | null>(null);
   const [batchOutcome, setBatchOutcome] = useState<string | null>(null);
   const [decisionOutcome, setDecisionOutcome] = useState<string | null>(null);
+
+  /*
+    GATE 2's viewer. One document at a time, its link fetched on open and
+    dropped on close: the links expire, so fetching one per applicant up front
+    would waste every one of them.
+  */
+  const [viewingCredentialFor, setViewingCredentialFor] = useState<ApplicationWithVolunteer | null>(
+    null
+  );
+  const [credentialView, setCredentialView] = useState<{
+    loading: boolean;
+    error: string | null;
+    signed: SignedDocument | null;
+  }>({ loading: false, error: null, signed: null });
+
+  async function openCredential(application: ApplicationWithVolunteer) {
+    if (!application.volunteer) return;
+    setViewingCredentialFor(application);
+    setCredentialView({ loading: true, error: null, signed: null });
+    try {
+      const signed = await getDocumentUrl(application.volunteer.id);
+      setCredentialView({ loading: false, error: null, signed });
+    } catch (error) {
+      setCredentialView({
+        loading: false,
+        // The API refuses with a flat, identical message whatever the reason,
+        // so it is shown as-is rather than being interpreted here.
+        error: error instanceof Error ? error.message : 'This document could not be opened.',
+        signed: null,
+      });
+    }
+  }
 
   /*
     One projection of the applicant list into the shape lib/roster.ts ranks, so
@@ -565,6 +599,20 @@ export default function Applicants() {
                 }
                 waitlistPosition={positions.get(application.id)}
                 onDecide={(status) => handleDecide(application, status)}
+                /*
+                  GATE 2. Offered only for a volunteer who actually has a
+                  document — verified means an admin approved one, pending
+                  means one is waiting — because there is nothing to open
+                  otherwise. It is this organisation's own clinical judgement
+                  about this person for this role, and it changes no platform
+                  status: there is deliberately no approve or reject here.
+                */
+                onViewCredential={
+                  application.volunteer &&
+                  application.volunteer.verification_status !== 'unverified'
+                    ? () => void openCredential(application)
+                    : undefined
+                }
                 onViewProfile={
                   application.volunteer && selectedOutreachId
                     ? () =>
@@ -604,6 +652,24 @@ export default function Applicants() {
           }
         />
       )}
+
+      <DocumentViewer
+        visible={!!viewingCredentialFor}
+        onClose={() => {
+          setViewingCredentialFor(null);
+          setCredentialView({ loading: false, error: null, signed: null });
+        }}
+        title={
+          viewingCredentialFor?.volunteer?.profile?.full_name
+            ? `${viewingCredentialFor.volunteer.profile.full_name}'s credential`
+            : 'Credential'
+        }
+        url={credentialView.signed?.url ?? null}
+        isImage={credentialView.signed?.isImage ?? false}
+        loading={credentialView.loading}
+        error={credentialView.error}
+        onRetry={() => viewingCredentialFor && void openCredential(viewingCredentialFor)}
+      />
 
       <Toast message={decisionOutcome} onDismiss={() => setDecisionOutcome(null)} />
     </SafeAreaView>

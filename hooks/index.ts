@@ -35,6 +35,12 @@ export type {
   DecideVerificationParams,
 } from './useOrganisationVerification';
 export {
+  credentialReviewKeys,
+  useCredentialQueue,
+  useDecideCredential,
+} from './useCredentialReview';
+export type { CredentialQueueRow, DecideCredentialParams } from './useCredentialReview';
+export {
   notificationKeys,
   useNotifications,
   useMarkNotificationsRead,

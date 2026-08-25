@@ -2500,3 +2500,62 @@ from — which answers the question the brief is actually asking, using what is
 installed. On iOS the ScrollView's own pinch works as well, for free; Android
 has no equivalent, which is exactly why the tap steps exist rather than being an
 iOS-only nicety.
+
+## Admin phase, package D — the two credential gates (2026-08-25)
+
+This closes a gap that has existed since verification was built: a volunteer
+could reach `documents_pending` and stop there forever, because nothing in the
+app could advance them and approval was a manual UPDATE typed into the SQL
+editor.
+
+### Two gates, and they answer different questions
+
+**Gate 1 belongs to the admin and is platform-wide.** Is the document real,
+legible, unexpired, and does it plausibly match the claimed category? Approve
+moves the volunteer to `verified`, which unlocks full applications to clinical
+outreaches everywhere on the platform. It is explicitly not a judgement about
+clinical competence, and the endpoint is deliberately incapable of expressing
+one — there is no score and no note about skill, only approved or not, and why.
+
+**Gate 2 belongs to the organisation and is per application.** Should this
+person do this clinical role for us? It reads the same document through the
+signed-URL endpoint and changes no platform status at all, which is why it has
+no endpoint of its own and no approve or reject — it appears as one row on the
+applicant card, and what the organisation does with what it reads is the
+accept/reject decision it was already making.
+
+### There is deliberately no `rejected` status
+
+The obvious design is a fourth `verification_status`. It was rejected for two
+reasons that point the same way. It would need its own separate migration paste
+(a new enum value cannot be used in the transaction that adds it) plus a branch
+in every screen that reads the status. And it would not be more truthful: a
+volunteer whose document was declined IS unverified — that is exactly the state
+they are in and exactly what they can act on. `rejected` would be a status
+meaning "unverified, and also we are cross about it".
+
+What they actually need is the REASON, which is now a column and is shown on
+the verification screen above the upload control. Without it a rejection is
+indistinguishable from never having uploaded anything.
+
+### The document survives a rejection
+
+Destroying it would leave the volunteer unable to see what they had sent, and
+would erase the evidence behind a decision that was recorded in the audit trail
+seconds earlier. They can replace or withdraw it themselves, which they always
+could.
+
+### Two smaller decisions worth recording
+
+**The decision re-asserts `documents_pending` in its WHERE clause**, not only in
+the read before it. Between the read and the write a volunteer can withdraw
+their document; without the re-assertion the update would be a decision about
+something that is no longer there, and an already-verified volunteer could be
+silently un-verified by a stale screen.
+
+**The queue needed an RLS change, not just an endpoint.** `profiles` and
+`volunteer_profiles` are scoped to "my own row, or someone I share an
+application with", and an admin shares an application with nobody. Without an
+`or is_admin()` clause the queue would have been empty for the only person meant
+to see it — while the endpoint's own service-role reads kept working, which is
+the kind of half-working state that costs a session to diagnose.

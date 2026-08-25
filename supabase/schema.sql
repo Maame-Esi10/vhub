@@ -205,6 +205,9 @@ create policy "profiles_select_authenticated"
   using (
     auth.uid() = id
     or public.is_related_via_application(profiles.id)
+    -- A queue that cannot show a volunteer's NAME beside their document is not
+    -- usable. Admins read profiles for that and nothing else.
+    or is_admin()
   );
 
 -- `role <> 'admin'` is the second half of the role lock, and it guards the
@@ -288,6 +291,20 @@ alter table volunteer_profiles add column if not exists verification_status veri
 alter table volunteer_profiles add column if not exists credential_document_id text;
 alter table volunteer_profiles drop column if exists credential_document_url;
 
+-- The credential REVIEW (admin phase package D). All three are server-only:
+-- a volunteer able to clear their own rejection reason could hide a decision
+-- from the next reviewer.
+--
+-- There is deliberately NO 'rejected' verification_status. A volunteer whose
+-- document was declined IS unverified -- that is the state they are in and the
+-- thing they can act on. What they need is the REASON, which is this column;
+-- a fourth enum value would need its own migration paste and a branch in every
+-- screen, and would mean "unverified, and also we are cross about it".
+alter table volunteer_profiles
+  add column if not exists verification_reason text,
+  add column if not exists verification_decided_at timestamptz,
+  add column if not exists verification_submitted_at timestamptz;
+
 -- The Cloudinary URL of an outreach's flyer image. Unlike the column above
 -- this IS client-writable (see the grant lists at the foot of this file): an
 -- organisation sets it on its own outreach, and a bad value harms only that
@@ -310,12 +327,16 @@ alter table volunteer_profiles enable row level security;
 -- not an inline applications subquery -- that is what caused SQLSTATE 42P17.
 -- Do not revert it.
 drop policy if exists "volunteer_profiles_select_authenticated" on volunteer_profiles;
+-- `or is_admin()` is what makes the credential queue possible at all: an admin
+-- shares no application with anybody, so without it the only person who is
+-- supposed to read these rows would see none of them.
 create policy "volunteer_profiles_select_authenticated"
   on volunteer_profiles for select
   to authenticated
   using (
     auth.uid() = id
     or public.is_related_via_application(volunteer_profiles.id)
+    or is_admin()
   );
 
 drop policy if exists "volunteer_profiles_insert_own" on volunteer_profiles;

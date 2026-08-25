@@ -56,6 +56,19 @@ export interface ApplicantCardProps {
   /** Opens the applicant's public profile. Omitted when the volunteer row was RLS-filtered. */
   onViewProfile?: () => void;
   /**
+   * GATE 2 — this organisation's own look at the credential document, for a
+   * volunteer it is actually considering.
+   *
+   * It is a different question from Gate 1, which an admin has already
+   * answered: Gate 1 asks whether the document is real, legible and plausibly
+   * matches the claimed category, platform-wide. Gate 2 asks whether THIS
+   * person should do THIS clinical role for YOU — and it changes no platform
+   * status whatsoever, which is why there is no decision to record here.
+   *
+   * Omitted when the volunteer has no document to look at.
+   */
+  onViewCredential?: () => void;
+  /**
    * 1-based place in the waitlist queue, for waitlisted applicants only.
    * Derived from the live ranking (lib/roster.ts), never stored — the
    * promotion rule picks the highest-ranked waitlisted applicant, so any
@@ -72,6 +85,7 @@ export function ApplicantCard({
   requiredSkills,
   onDecide,
   onViewProfile,
+  onViewCredential,
   waitlistPosition,
   isPending,
   errorMessage,
@@ -151,6 +165,23 @@ export function ApplicantCard({
           <Text style={styles.motivationLabel}>Statement of intent</Text>
           <Text style={styles.motivationText}>{application.motivation}</Text>
         </View>
+      ) : null}
+
+      {onViewCredential ? (
+        <Pressable
+          onPress={onViewCredential}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${name}'s credential document`}
+          style={({ pressed }) => [styles.credentialRow, pressed && styles.credentialPressed]}
+        >
+          <MaterialCommunityIcons name="file-lock-outline" size={18} color={colors.primary} />
+          <Text style={styles.credentialText}>
+            {volunteer?.verification_status === 'verified'
+              ? 'View their credential'
+              : 'View their credential (not yet verified by V-HUB)'}
+          </Text>
+          <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textSecondary} />
+        </Pressable>
       ) : null}
 
       {onViewProfile ? (
@@ -260,6 +291,18 @@ export function ApplicantCard({
 }
 
 const styles = StyleSheet.create({
+  credentialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
+    marginTop: spacing.base,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
+  },
+  credentialPressed: { opacity: 0.7 },
+  credentialText: { flex: 1, fontFamily: fontFamily.medium, fontSize: 13, color: colors.textPrimary },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

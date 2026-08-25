@@ -142,6 +142,15 @@ export interface VolunteerProfile {
    * grant list.
    */
   credential_document_id: string | null;
+  /**
+   * Why the LAST credential decision went the way it did, shown to the
+   * volunteer so they can fix and resubmit. There is deliberately no
+   * `rejected` verification_status — a declined volunteer IS unverified, and
+   * what they need is this reason. Server-only, like the two below.
+   */
+  verification_reason: string | null;
+  verification_decided_at: string | null;
+  verification_submitted_at: string | null;
   created_at: string;
   updated_at: string;
 }
