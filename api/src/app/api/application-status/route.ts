@@ -4,12 +4,12 @@ import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import {
-  sendApplicationStatusEmail,
   sendApplicationStatusEmails,
   type ApplicationStatusEmailKind,
   type ApplicationStatusEmailParams,
 } from "../../../server/resend";
 import { notifyUsers, type UserNotification } from "../../../server/notify";
+import { emailApplicant, pushApplicant, promoteFromWaitlist } from "../../../server/waitlist";
 
 export const runtime = "nodejs";
 
@@ -379,15 +379,12 @@ async function notifyDecidedBatch(
 }
 
 /**
- * Waitlist policy (ASSUMPTION flagged for owner sign-off): promotion is
- * AUTOMATIC, not a manual org action -- the moment an accepted application
- * transitions to cancelled, the outreach's highest-match_score 'waitlisted'
- * application (ties broken by earliest application) is promoted to
- * 'accepted' and emailed + pushed immediately. This keeps a freed slot from
- * sitting empty waiting for an org admin to notice and matches the "M" in
- * V-HUB's matching engine (best-fit-first). An alternative (org manually
- * picks from the waitlist) was considered but rejected as slower and less
- * automated than the project's stated intelligence goals.
+ * The accepted -> cancelled transition, and nothing else, frees a place.
+ *
+ * The promotion itself lives in server/waitlist.ts because package F's
+ * moderation route needs exactly the same behaviour when a suspension releases
+ * somebody's accepted places. Two copies of a promotion rule would be free to
+ * drift, and the drift would be invisible because both would still "work".
  */
 async function maybePromoteWaitlist(
   admin: SupabaseClient,
@@ -400,74 +397,7 @@ async function maybePromoteWaitlist(
     return { application, promoted: null as ApplicationRow | null };
   }
 
-  const { data: waitlisted, error } = await admin
-    .from("applications")
-    .select("id, outreach_id, volunteer_id, status, match_score")
-    .eq("outreach_id", outreach.id)
-    .eq("status", "waitlisted")
-    .order("match_score", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error || !waitlisted) {
-    return { application, promoted: null as ApplicationRow | null };
-  }
-
-  const { data: promoted, error: promoteError } = await admin
-    .from("applications")
-    .update({ status: "accepted" })
-    .eq("id", waitlisted.id)
-    .select("id, outreach_id, volunteer_id, status, match_score")
-    .single();
-
-  if (promoteError || !promoted) {
-    return { application, promoted: null as ApplicationRow | null };
-  }
-
-  await emailApplicant(admin, promoted.volunteer_id, outreach, "accepted");
-  await pushApplicant(admin, promoted.volunteer_id, outreach, "accepted");
-
-  return { application, promoted: promoted as ApplicationRow };
+  const promoted = await promoteFromWaitlist(admin, outreach);
+  return { application, promoted: (promoted as ApplicationRow | null) ?? null };
 }
 
-async function emailApplicant(
-  admin: SupabaseClient,
-  volunteerId: string,
-  outreach: OutreachRow,
-  kind: ApplicationStatusEmailKind
-): Promise<void> {
-  const { data: profile } = await admin.from("profiles").select("full_name, email").eq("id", volunteerId).maybeSingle();
-  if (!profile?.email) return;
-  await sendApplicationStatusEmail({
-    to: profile.email,
-    volunteerName: profile.full_name ?? "there",
-    outreachTitle: outreach.title,
-    outreachDate: outreach.date,
-    locationName: outreach.location_name,
-    kind,
-  });
-}
-
-async function pushApplicant(
-  admin: SupabaseClient,
-  volunteerId: string,
-  outreach: OutreachRow,
-  kind: ApplicationStatusEmailKind
-): Promise<void> {
-  const { data: tokens } = await admin.from("push_tokens").select("expo_push_token").eq("user_id", volunteerId);
-  // NOT gated on having a token: notifyUsers records the in-app notification
-  // row regardless, so a volunteer who declined the OS permission prompt (or
-  // is between devices) still sees the decision on the Notifications screen.
-  await notifyUsers([
-    {
-      userId: volunteerId,
-      type: "application_status",
-      title: kind === "accepted" ? "You're confirmed!" : "Application update",
-      body: `${outreach.title}: your application is now ${kind}.`,
-      outreachId: outreach.id,
-      data: { outreachId: outreach.id, status: kind },
-      tokens: (tokens ?? []).map((t) => t.expo_push_token as string),
-    },
-  ]);
-}

@@ -11,6 +11,7 @@ import {
   FilterChips,
   ListSkeleton,
   MetricCard,
+  ModerationBanner,
 } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { OutreachCard } from '@/components/organisation';
@@ -135,6 +136,13 @@ export default function Dashboard() {
 
   const header = (
     <View>
+      {/*
+        A suspension the account cannot see is indistinguishable from the app
+        being broken: the database refuses the write, the screen shows a
+        constraint error, and the person tries again. Renders nothing at all
+        for an active account, which is nearly everybody.
+      */}
+      <ModerationBanner />
       <View style={styles.headerRow}>
         {/*
           `uri` was simply never passed here — the only <Avatar> in the app

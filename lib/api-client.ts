@@ -47,6 +47,7 @@ export const API_ROUTES = {
   documentUrl: '/api/document-url',
   organisationVerification: '/api/organisation-verification',
   credentialReview: '/api/credential-review',
+  moderation: '/api/moderation',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -894,6 +895,34 @@ export function decideCredential(
     { volunteerId, decision, reason },
     options
   );
+}
+
+/**
+ * Suspend, ban or reinstate an account.
+ *
+ * Suspension stops FUTURE activity and never rewrites the past: attendance
+ * stays recorded, reviews stay written, V-Scores keep meaning what they meant.
+ * The server also carries out the consequences — an organisation's live events
+ * are cancelled and everyone told, a volunteer's applications are withdrawn and
+ * each accepted place handed to the waitlist.
+ *
+ * Reinstatement restores future activity ONLY. It does not resurrect cancelled
+ * outreaches or withdrawn applications; the people affected were told those
+ * were off, and quietly un-telling them later is worse than leaving them off.
+ */
+export function moderateAccount(
+  targetUserId: string,
+  action: 'suspend' | 'ban' | 'reinstate',
+  reason: string,
+  options?: RequestOptions
+): Promise<{
+  moderationState: 'active' | 'suspended' | 'banned';
+  outreachesCancelled?: number;
+  volunteersNotified?: number;
+  applicationsWithdrawn?: number;
+  placesBackfilled?: number;
+}> {
+  return apiPost(API_ROUTES.moderation, { targetUserId, action, reason }, options);
 }
 
 /** An admin's decision on one organisation. Writes an audit row server-side. */

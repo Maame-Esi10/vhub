@@ -55,6 +55,13 @@ export default function AdminTabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="people"
+        options={{
+          title: 'People',
+          tabBarIcon: tabBarIcon('account-group', 'account-group-outline'),
+        }}
+      />
+      <Tabs.Screen
         name="activity"
         options={{ title: 'Activity', tabBarIcon: tabBarIcon('history', 'history') }}
       />

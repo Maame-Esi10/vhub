@@ -41,6 +41,13 @@ export {
 } from './useCredentialReview';
 export type { CredentialQueueRow, DecideCredentialParams } from './useCredentialReview';
 export {
+  moderationKeys,
+  useAccountSearch,
+  useModeratedAccounts,
+  useModerateAccount,
+} from './useModeration';
+export type { ModerationSearchRow, ModerateParams } from './useModeration';
+export {
   notificationKeys,
   useNotifications,
   useMarkNotificationsRead,

@@ -108,9 +108,8 @@ export default function AdminOverview() {
             each will appear here as its own tab:
           </Text>
           <View style={styles.list}>
-            <UpcomingRow icon="card-account-details-outline" label="Volunteer credential review" />
-            <UpcomingRow icon="account-cancel-outline" label="Suspensions and bans" />
             <UpcomingRow icon="scale-balance" label="Attendance and review disputes" />
+            <UpcomingRow icon="chart-box-outline" label="Platform statistics" />
           </View>
         </View>
 

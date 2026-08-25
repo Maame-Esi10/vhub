@@ -1,4 +1,5 @@
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import type { ReactNode } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
@@ -20,6 +21,16 @@ export interface ConfirmDialogProps {
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /**
+   * Extra content between the message and the buttons — a required reason
+   * field, most often.
+   *
+   * Added for moderation, where the confirmation and the reason are one act:
+   * splitting them across two screens would let an admin suspend somebody and
+   * then be asked, afterwards, why they had. The dialog stays a confirmation;
+   * this is the part of the confirmation the admin has to write.
+   */
+  children?: ReactNode;
 }
 
 /**
@@ -48,6 +59,7 @@ export function ConfirmDialog({
   busy = false,
   onConfirm,
   onCancel,
+  children,
 }: ConfirmDialogProps) {
   const destructive = tone === 'destructive';
   const accent = destructive ? colors.danger : colors.primary;
@@ -80,6 +92,7 @@ export function ConfirmDialog({
 
           <Text style={styles.title}>{title}</Text>
           {message ? <Text style={styles.message}>{message}</Text> : null}
+          {children ? <View style={styles.extra}>{children}</View> : null}
 
           <Pressable
             onPress={onConfirm}
@@ -123,6 +136,7 @@ function tintOf(accent: string) {
 }
 
 const styles = StyleSheet.create({
+  extra: { width: '100%', marginBottom: spacing.base },
   scrim: {
     flex: 1,
     backgroundColor: colors.overlay,

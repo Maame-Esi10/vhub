@@ -49,6 +49,15 @@ do $$ begin
   );
 exception when duplicate_object then null; end $$;
 
+-- Whether an account may do anything NEW (admin phase package F). Deliberately
+-- SEPARATE from org_verification_state: "we checked their documents" and "they
+-- are currently allowed to operate" are independent facts, and folding them
+-- together would make a suspension erase a verification that could not then be
+-- restored. On `profiles`, so one implementation covers both roles.
+do $$ begin
+  create type moderation_state as enum ('active', 'suspended', 'banned');
+exception when duplicate_object then null; end $$;
+
 do $$ begin
   create type volunteer_category as enum ('doctor', 'nurse', 'midwife', 'pharmacist', 'student', 'first_aider', 'other');
 exception when duplicate_object then null; end $$;
@@ -107,6 +116,14 @@ create table if not exists profiles (
   region text,
   district text,
   avatar_url text,
+  -- Moderation (package F). Server-only, like `role` and for the same reason:
+  -- a client that could clear its own suspension would make moderation
+  -- advisory. `moderation_reason` is the reason for the CURRENT state and is
+  -- cleared on reinstatement; the history of every decision lives in
+  -- admin_actions and is never overwritten.
+  moderation_state moderation_state not null default 'active',
+  moderation_reason text,
+  moderated_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -1451,7 +1468,18 @@ set search_path = public
 as $$
 declare
   v_state org_verification_state;
+  v_moderation moderation_state;
 begin
+  -- Moderation first, and it allows no draft exception: an organisation
+  -- awaiting verification is preparing to operate, while a suspended one has
+  -- been told to stop.
+  select moderation_state into v_moderation from profiles where id = new.organisation_id;
+  if v_moderation is distinct from 'active' then
+    raise exception
+      'This organisation is suspended and cannot create or publish outreaches.'
+      using errcode = 'check_violation';
+  end if;
+
   if tg_op = 'UPDATE' and new.status is not distinct from old.status then
     return new;
   end if;
@@ -1477,6 +1505,43 @@ drop trigger if exists trg_outreaches_require_verified_org on outreaches;
 create trigger trg_outreaches_require_verified_org
   before insert or update on outreaches
   for each row execute function refuse_outreach_from_unverified_org();
+
+-- ============================================================
+-- A suspended or banned VOLUNTEER cannot apply.
+--
+-- Their EXISTING applications are withdrawn by /api/moderation, which also
+-- hands the freed places to the waitlist. This trigger stops NEW ones, which
+-- an endpoint cannot do because it does not run when a volunteer applies.
+--
+-- Deliberately only on INSERT. An UPDATE by a suspended volunteer is them
+-- CANCELLING something, and a suspended person must always be able to withdraw
+-- -- refusing that would trap them in commitments they have been barred from
+-- honouring.
+-- ============================================================
+create or replace function refuse_application_from_suspended_volunteer()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_moderation moderation_state;
+begin
+  select moderation_state into v_moderation from profiles where id = new.volunteer_id;
+
+  if v_moderation is distinct from 'active' then
+    raise exception 'This account is suspended and cannot apply to outreaches.'
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_applications_refuse_suspended on applications;
+create trigger trg_applications_refuse_suspended
+  before insert on applications
+  for each row execute function refuse_application_from_suspended_volunteer();
 
 -- ============================================================
 -- Public discovery views.

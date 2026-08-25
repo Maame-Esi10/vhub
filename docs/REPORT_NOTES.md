@@ -2608,3 +2608,76 @@ A volunteer opening it has one document to send, not seven. Making them find
 their profession in an alphabetical list is a small rudeness repeated on every
 visit. The other categories stay on the page because a category can be changed,
 and because somebody deciding what to claim needs to see what each one costs.
+
+## Admin phase, package F — moderation (2026-08-25)
+
+The governing principle, from which everything else follows: **suspension stops
+future activity and never rewrites the past.** Attendance that happened
+happened. Reviews that were written stay written. A V-Score keeps meaning what
+it meant. What stops is what has not happened yet.
+
+### A departure from the plan, and the reason for it
+
+`docs/ADMIN_PHASE_PLAN.md` puts `suspended` and `banned` inside
+`org_verification_state`, and package C duly added them there. Package F does
+not use them, and this is a deliberate departure.
+
+Suspending a VERIFIED organisation would overwrite the column that records we
+checked their documents. Reinstating could then not restore it: the reinstating
+admin would have to guess whether this organisation had been verified before, or
+we would have to keep the previous value in a second column — which is exactly
+the "a value that must agree with something else will eventually disagree with
+it" problem the same plan warns about two sections earlier, and which the
+generated `verified` column was introduced to avoid.
+
+They are two independent facts. "We checked their registration" and "they are
+currently allowed to operate" can each be true or false without the other. So
+moderation is its own column on `profiles`, which also means one implementation
+covers volunteers and organisations rather than two.
+
+The unused enum values stay where they are. Postgres cannot remove an enum
+value, and an unused one costs nothing.
+
+### The consequences are asymmetric, because the roles hold different things
+
+An **organisation** holds other people's Saturdays. Suspending it cancels its
+open and closed outreaches and tells everyone accepted, waitlisted or pending —
+by push and by email, because a volunteer who turns up to a cancelled clinic has
+lost a day to our silence. Waitlisted volunteers are told too: they have kept
+the date free, and not telling them is the same failure as not telling an
+accepted volunteer, just cheaper for us. Drafts are left alone, because nobody
+was ever shown them.
+
+A **volunteer** holds a place somebody else could have had. Suspending them
+withdraws their live applications and hands each ACCEPTED place to the waitlist
+through the same promotion their own cancellation would have used. Only an
+accepted place frees a seat — promoting against a withdrawn pending or
+waitlisted application would accept somebody into a slot that is still
+legitimately full.
+
+### One promotion rule, extracted rather than copied
+
+`maybePromoteWaitlist` lived inside `/api/application-status`. Moderation needs
+exactly the same behaviour, so it moved to `server/waitlist.ts` unchanged and
+both routes call it. Two copies of a promotion rule would be free to drift, and
+the drift would be invisible because both would still appear to work.
+
+### Reinstatement restores the future only
+
+It does not resurrect cancelled outreaches or withdrawn applications. That is
+deliberate rather than lazy: the people affected were told those things were
+off, and quietly un-telling them days later is worse than leaving them off.
+
+### Two smaller decisions
+
+**The application trigger is INSERT-only.** An UPDATE by a suspended volunteer
+is them cancelling something, and a suspended person must always be able to
+withdraw — refusing that would trap them in commitments they have been barred
+from honouring.
+
+**Moderation is a search, never a directory.** It starts with a complaint about
+a specific person. A browsable roll of every account invites looking through
+people for its own sake, and would be the one screen where an admin's reach over
+ordinary users is casual rather than deliberate. Nothing appears until two
+characters are typed. The one list shown unprompted is everyone currently
+stopped, so a moderation can be found and undone without remembering a name.

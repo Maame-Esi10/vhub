@@ -10,7 +10,17 @@ function getResendClient(): Resend {
   return cachedClient;
 }
 
-export type ApplicationStatusEmailKind = "accepted" | "rejected" | "waitlisted";
+export type ApplicationStatusEmailKind =
+  | "accepted"
+  | "rejected"
+  | "waitlisted"
+  /**
+   * The EVENT is off, not the application. Added for moderation (package F):
+   * suspending an organisation cancels its live outreaches, and a volunteer
+   * who turns up to a cancelled clinic has lost a Saturday to our silence.
+   * This is the one status change where the volunteer did nothing at all.
+   */
+  | "cancelled";
 
 export interface ApplicationStatusEmailParams {
   to: string;
@@ -29,6 +39,8 @@ function subjectFor(kind: ApplicationStatusEmailKind, outreachTitle: string): st
       return `Update on your application to ${outreachTitle} - V-HUB`;
     case "waitlisted":
       return `You're on the waitlist for ${outreachTitle} - V-HUB`;
+    case "cancelled":
+      return `${outreachTitle} has been cancelled - V-HUB`;
   }
 }
 
@@ -60,6 +72,21 @@ function bodyFor(params: ApplicationStatusEmailParams): string {
         `Your application to volunteer at "${params.outreachTitle}"${where} on ${when} has been placed on the WAITLIST.\n\n` +
         `If a confirmed volunteer's slot opens up, the highest-matching waitlisted volunteer is automatically promoted ` +
         `and you will be notified immediately by email and push notification. No action is needed from you right now.\n\n` +
+        `-- The V-HUB Team`
+      );
+    case "cancelled":
+      return (
+        `Hi ${params.volunteerName},
+
+` +
+        `"${params.outreachTitle}"${where} on ${when} has been CANCELLED and will not take place. ` +
+        `You do not need to attend.
+
+` +
+        `Nothing about this affects your standing on V-HUB -- it was not your decision and it is not ` +
+        `counted against you. Please do keep applying to other outreaches.
+
+` +
         `-- The V-HUB Team`
       );
   }

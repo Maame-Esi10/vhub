@@ -26,6 +26,19 @@ export type ProfileRole = "volunteer" | "organisation" | "admin";
  */
 export type SignupRole = Exclude<ProfileRole, "admin">;
 
+/**
+ * Whether an account may do anything NEW.
+ *
+ * Deliberately SEPARATE from `OrgVerificationState`: "we checked their
+ * documents" and "they are currently allowed to operate" are independent facts.
+ * Folding them together would make a suspension erase a verification that could
+ * not then be restored — the reinstating admin would have to guess whether the
+ * organisation had been verified before.
+ *
+ * Suspension stops FUTURE activity and never rewrites the past.
+ */
+export type ModerationState = "active" | "suspended" | "banned";
+
 // Qualified professionals first, then students, then support roles — the same
 // order VOLUNTEER_CATEGORIES renders in (constants/categories.ts).
 // 'student' deliberately covers ALL health/medical disciplines (medicine,
@@ -110,6 +123,14 @@ export interface Profile {
   region: string | null;
   district: string | null;
   avatar_url: string | null;
+  moderation_state: ModerationState;
+  /**
+   * Why the account is in its CURRENT state. Cleared on reinstatement — a
+   * reinstated account must not be shown a note saying why it is suspended.
+   * The history of every decision lives in admin_actions.
+   */
+  moderation_reason: string | null;
+  moderated_at: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -3,7 +3,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar, EmptyState, ErrorState, FilterChips, ListSkeleton, SelectField } from '@/components/ui';
+import { Avatar, EmptyState, ErrorState, FilterChips, ListSkeleton, SelectField, ModerationBanner } from '@/components/ui';
 import type { FilterChipOption, SelectOption } from '@/components/ui';
 import { MatchBreakdownSheet, OutreachFeedCard } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
@@ -120,6 +120,13 @@ export default function Feed() {
 
   const header = (
     <View>
+      {/*
+        A suspension the account cannot see is indistinguishable from the app
+        being broken: the database refuses the write, the screen shows a
+        constraint error, and the person tries again. Renders nothing at all
+        for an active account, which is nearly everybody.
+      */}
+      <ModerationBanner />
       <View style={styles.headerRow}>
         <Avatar name={profile?.full_name ?? 'Volunteer'} uri={profile?.avatar_url} size={44} />
         <View style={styles.headerText}>
