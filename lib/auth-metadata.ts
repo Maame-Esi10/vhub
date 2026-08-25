@@ -1,5 +1,5 @@
 import type { OrgType } from '@/constants/org-types';
-import type { ProfileRole } from '@/types/database';
+import type { SignupRole } from '@/types/database';
 
 /**
  * Shape stored in Supabase auth.users.user_metadata (via signUp's
@@ -11,7 +11,13 @@ import type { ProfileRole } from '@/types/database';
  * session after they confirm their email and log in.
  */
 export interface AuthUserMetadata {
-  role: ProfileRole;
+  /**
+   * SignupRole, not ProfileRole: 'admin' must never travel this path. The
+   * database refuses a client-inserted admin profile outright, and typing the
+   * payload narrowly means a future edit that tries it fails to compile
+   * rather than failing at runtime against a policy.
+   */
+  role: SignupRole;
   full_name: string;
   org_type?: OrgType | null;
   description?: string | null;

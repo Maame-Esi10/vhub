@@ -2243,3 +2243,107 @@ Each day is now its own rung, deduped on stage + day id so one day cannot
 silence the rest — the same lesson the check-in reminders learned. The target is
 still the event's own `slots_total`, deliberately: per-day targets are intent
 and cannot be derived.
+
+## Admin phase, package A — the role, the shell and the audit trail (2026-08-25)
+
+Package A of `docs/ADMIN_PHASE_PLAN.md`. It builds no review queue: it builds
+the thing every queue needs first — an admin to be, somewhere for them to
+stand, and the record their decisions will be written into.
+
+### The enum value had to ship on its own
+
+`profile_role` is a Postgres enum, and a new enum value cannot be USED in the
+same transaction that adds it. The Supabase SQL editor wraps a pasted script in
+one transaction, so a single migration that added `'admin'` and then wrote a
+policy mentioning `'admin'` would fail outright. The migration is therefore two
+files run one after the other: `20260825a_admin_role_enum.sql` contains one
+statement and nothing else, `20260825b_admin_actions.sql` contains everything
+that references the new value. Every future admin migration adding an enum
+value follows the same rule.
+
+### Adding the value opened a hole, and the hole was in the INSERT
+
+The project has always described `profiles.role` as immutable after signup, and
+that was true of UPDATE: `role` is absent from the client's UPDATE grant list,
+so a PATCH is refused with 42501 before RLS is consulted.
+
+It was never true of INSERT. The profiles row is created BY THE CLIENT at
+signup — `useSignUp`, and `useAuthGuard`'s bootstrap-from-metadata fallback —
+and `profiles_insert_own` only ever checked `auth.uid() = id`. The role named
+in that insert has always been the client's to choose. While the enum held only
+`volunteer` and `organisation` that cost nothing: both are roles anyone can
+register as anyway. The moment `'admin'` became a legal value it was a working
+privilege escalation — register, ignore the app entirely, POST to
+`/rest/v1/profiles` with `role: 'admin'`.
+
+The plan said to test the role lock rather than assume it, and this is what the
+test found. `profiles_insert_own`'s with-check now carries
+`and role <> 'admin'`. Admins are created by an UPDATE run in the SQL editor,
+which runs as postgres and bypasses RLS — so "creation is database-only" is now
+enforced by the database rather than by convention. On the app side,
+`SignupRole = Exclude<ProfileRole, 'admin'>` types every registration path, so
+an attempt to sign someone up as an admin fails to compile.
+
+`20260825c_admin_lock_test.sql` proves all of it. It impersonates a real
+signed-in client (the `authenticated` role plus a JWT claim, exactly as
+PostgREST does) and tries the escalation moves, including a control case that
+checks the refusal came from the admin clause and not from something that would
+have refused any insert at all. Success is silence; any failure raises and names
+the lock.
+
+### The audit trail is built before the features it records
+
+`admin_actions` ships in package A, twelfth in the brief but first in the build,
+because an admin decision made before the row that records it is a decision with
+no evidence behind it, and history cannot be backfilled.
+
+Three deliberate choices:
+
+- **`actor_id` is nullable and `on delete set null`.** An audit row must outlive
+  the account that wrote it; cascading would let deleting an admin erase the
+  record of everything they decided. `actor_email` is a snapshot taken at write
+  time, so a row whose actor is gone still names a person.
+- **`target_type` is a CHECK constraint, not an enum.** Later packages add
+  target kinds, and widening a check constraint is a plain drop-and-add inside
+  one transaction — whereas a new enum value is the two-paste dance above.
+- **Append-only is a TRIGGER, not a grant.** RLS and column grants stop clients;
+  they do not stop the service role, which bypasses both and is precisely what
+  writes this table. A trigger applies to every role. A correction is a new row
+  saying what was corrected — which is what an audit trail is.
+
+### Two roles hid a routing assumption that three roles break
+
+The auth guard chose the home route with a ternary (`role === 'organisation' ?
+… : …`) and bounced wrong-role users with two hand-written `if` branches. Each
+tab layout separately redirected a wrong-role user to "the other group". All of
+that rests on "not volunteer" meaning organisation.
+
+With three roles it is a redirect loop: an admin who reached the volunteer group
+would be sent to the organisation group, whose own guard would send them
+straight back, and the two synchronous redirects can ping-pong before the auth
+guard's effect settles it. `lib/roleRoutes.ts` now holds role → home route and
+role → tab group, read by the guard and by all three layouts, and the bounce
+rule reads "you are inside a role group that is not yours" for every combination
+at once. Four unit tests hold the properties a fourth role would otherwise break
+silently.
+
+The same two-roles assumption was in `resolveProfile`: `role !== 'volunteer'`
+meant "organisation", so an admin would have been handed an
+`organisation_profiles` row, and then — falling through to the volunteer branch
+— a repaired `volunteer_profiles` row on every single load. With `category`
+null, the onboarding-incomplete rule would have parked them on the welcome
+screen permanently. An admin has no child profile row of either kind, and
+`resolveProfile` now returns early for them.
+
+### The shell, and what it deliberately does not show
+
+No admin design exists in `design-refs/` — the Figma work covered the volunteer
+and organisation sides only. The admin screens therefore reuse the existing
+visual language exactly rather than introducing a third look.
+
+Two tabs, because package A is the shell and the audit trail: **Home** and
+**Activity**, with Settings and Account & Security pushed from Home. There are
+no queue-count tiles, and that is a decision rather than an omission — a tile
+reading "0 pending" would imply a queue that does not exist yet. The Home screen
+lists what is coming in words instead, and the empty Activity log says that an
+empty log is the expected state until the first decision is made.

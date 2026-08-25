@@ -9,7 +9,22 @@ import type { LocationCheck } from "@/lib/attendance";
 
 export type { LocationCheck };
 
-export type ProfileRole = "volunteer" | "organisation";
+/**
+ * 'admin' is the platform moderator — organisation verification, credential
+ * Gate 1, moderation, disputes. It is NOT a role anyone can register as: the
+ * welcome screen never offers it, the database bars a client from inserting a
+ * profiles row carrying it (profiles_insert_own's with-check), and the only
+ * way to become one is an UPDATE run in the Supabase SQL editor.
+ */
+export type ProfileRole = "volunteer" | "organisation" | "admin";
+
+/**
+ * The roles a person can actually sign up as. Deliberately narrower than
+ * ProfileRole so "no admin signup" is a compile error rather than a rule
+ * someone has to remember — anything feeding registration (the signup form,
+ * the auth-metadata payload) is typed with this, not with ProfileRole.
+ */
+export type SignupRole = Exclude<ProfileRole, "admin">;
 
 // Qualified professionals first, then students, then support roles — the same
 // order VOLUNTEER_CATEGORIES renders in (constants/categories.ts).
@@ -446,5 +461,43 @@ export interface SkillMatchCache {
   skill_a: string;
   skill_b: string;
   is_match: boolean;
+  created_at: string;
+}
+
+/**
+ * What an admin action was performed ON. A CHECK constraint in the database,
+ * not an enum, so later admin packages can widen it in one transaction.
+ */
+export type AdminActionTargetType =
+  | "volunteer"
+  | "organisation"
+  | "outreach"
+  | "application"
+  | "event_review"
+  | "dispute"
+  | "document"
+  | "vetted_source"
+  | "policy";
+
+/**
+ * One admin decision: who, when, what they touched, what they did and why.
+ *
+ * Insert-only, and only by the serverless API on the service-role key — the
+ * client has no INSERT/UPDATE/DELETE privilege at all, and a database trigger
+ * refuses rewrites even from the API. A correction is a new row.
+ *
+ * `actor_id` is null when the admin's account has since been deleted; the row
+ * survives, which is the point of an audit trail, and `actor_email` is the
+ * snapshot that still names them.
+ */
+export interface AdminAction {
+  id: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  target_type: AdminActionTargetType;
+  target_id: string | null;
+  action: string;
+  reason: string | null;
+  payload: Record<string, unknown>;
   created_at: string;
 }

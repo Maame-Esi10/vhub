@@ -19,6 +19,7 @@ export type {
   PasswordStrength,
 } from './useAccountSecurity';
 export { useSignDeclaration } from './useSignDeclaration';
+export { adminActionKeys, useAdminActions, useAdminActionsForTarget } from './useAdminActions';
 export {
   notificationKeys,
   useNotifications,

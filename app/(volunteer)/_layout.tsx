@@ -1,4 +1,5 @@
 import { Redirect, Tabs } from 'expo-router';
+import { ROLE_HOME } from '@/lib/roleRoutes';
 import { useAuthStore } from '@/stores/authStore';
 import { useTabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
 
@@ -21,8 +22,12 @@ export default function VolunteerTabsLayout() {
     return <Redirect href="/(auth)/welcome" />;
   }
 
+  // Sent to THEIR OWN home, read from the role, rather than to the one
+  // other group that used to be the only alternative. With three roles
+  // "not volunteer" no longer identifies a destination, and guessing wrong
+  // lands the user in a group whose guard sends them straight back.
   if (profile && profile.role !== 'volunteer') {
-    return <Redirect href="/(organisation)/dashboard" />;
+    return <Redirect href={ROLE_HOME[profile.role]} />;
   }
 
   return (

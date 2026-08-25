@@ -11,8 +11,17 @@ create extension if not exists "pgcrypto";
 -- ============================================================
 -- Enums
 -- ============================================================
+-- 'admin' is the platform moderator: organisation verification, credential
+-- Gate 1, moderation and disputes. It is NOT a role anyone can register as —
+-- the welcome screen never offers it, profiles_insert_own bars a client from
+-- inserting it (see that policy), and the only way to become one is an UPDATE
+-- run in the SQL editor on the postgres role.
+-- NOTE: this create-type only runs on a FRESH install. An already-provisioned
+-- project gets the value from supabase/migrations/20260825a_admin_role_enum.sql,
+-- which must be pasted ON ITS OWN — a new enum value cannot be used in the
+-- same transaction that adds it.
 do $$ begin
-  create type profile_role as enum ('volunteer', 'organisation');
+  create type profile_role as enum ('volunteer', 'organisation', 'admin');
 exception when duplicate_object then null; end $$;
 
 -- Order: qualified professionals, then students, then support roles.
@@ -147,6 +156,32 @@ $$;
 revoke all on function public.is_related_via_application(uuid) from public;
 grant execute on function public.is_related_via_application(uuid) to authenticated;
 
+-- is_admin(): the role test, in one place, so no policy ever spells it out
+-- again. security definer for the same reason as the function above — a policy
+-- on `profiles` that has to read `profiles` is a recursion cycle (42P17), and
+-- Postgres never inlines a security definer body. The default argument is
+-- auth.uid(), so a policy just writes is_admin(); the explicit-uid form is for
+-- server-side callers asking about somebody else. search_path is pinned so a
+-- caller cannot shadow `profiles` with a table in pg_temp.
+create or replace function public.is_admin(uid uuid default auth.uid())
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = uid and p.role = 'admin'
+  );
+$$;
+
+-- Reviewed and accepted, as above: this is exposed as rpc/is_admin and returns
+-- a boolean about a role already visible on any profile row the caller can
+-- read. Not a new disclosure.
+revoke all on function public.is_admin(uuid) from public;
+grant execute on function public.is_admin(uuid) to authenticated;
+
 drop policy if exists "profiles_select_authenticated" on profiles;
 create policy "profiles_select_authenticated"
   on profiles for select
@@ -156,11 +191,20 @@ create policy "profiles_select_authenticated"
     or public.is_related_via_application(profiles.id)
   );
 
+-- `role <> 'admin'` is the second half of the role lock, and it guards the
+-- INSERT rather than the UPDATE. The profiles row is created BY THE CLIENT at
+-- signup (useSignUp, and useAuthGuard's bootstrap-from-metadata fallback), so
+-- the role named in that insert is the client's to choose. While the enum held
+-- only 'volunteer' and 'organisation' that was harmless — both are self-service
+-- roles anyone can register as. The moment 'admin' became a legal value it was
+-- a privilege escalation: register, ignore the app, POST /rest/v1/profiles with
+-- role='admin'. The UPDATE lock (role absent from the grant list, below) never
+-- covered this path, because an insert is not an update.
 drop policy if exists "profiles_insert_own" on profiles;
 create policy "profiles_insert_own"
   on profiles for insert
   to authenticated
-  with check (auth.uid() = id);
+  with check (auth.uid() = id and role <> 'admin');
 
 drop policy if exists "profiles_update_own" on profiles;
 create policy "profiles_update_own"
@@ -1145,6 +1189,105 @@ revoke update on notifications from authenticated;
 grant update (read_at) on notifications to authenticated;
 
 -- ============================================================
+-- admin_actions — the audit trail behind every admin decision.
+--
+-- Built with the admin role itself, not after the features it records: an
+-- admin write shipped before the row that records it is a decision with no
+-- evidence behind it, and history cannot be backfilled.
+--
+-- Written ONLY by the serverless API on the service-role key — the same
+-- posture as v_score and verification_status. Readable by admins.
+--
+-- actor_id is nullable and `on delete set null` on purpose: an audit row must
+-- outlive the account that wrote it, and cascading would let deleting an admin
+-- erase the record of everything they decided. actor_email is a snapshot taken
+-- at write time so a row whose actor is gone still names a person.
+--
+-- target_type is a CHECK rather than an enum, deliberately: later admin
+-- packages add target kinds, and extending a check constraint is a plain
+-- drop-and-add inside one transaction, whereas a new enum value cannot be used
+-- in the transaction that adds it (which is why the admin migration ships as
+-- two separate pastes). `action` is free text: every package adds verbs, they
+-- are read by humans rather than branched on, and a constraint listing them
+-- would need editing on every package for no protection. `reason` may be null
+-- (viewing a document is not a decision) but never blank -- a reason that is
+-- one space looks answered and is not.
+-- ============================================================
+create table if not exists admin_actions (
+  id uuid primary key default gen_random_uuid(),
+  actor_id uuid references profiles(id) on delete set null,
+  actor_email text,
+  target_type text not null check (target_type in (
+    'volunteer',
+    'organisation',
+    'outreach',
+    'application',
+    'event_review',
+    'dispute',
+    'document',
+    'vetted_source',
+    'policy'
+  )),
+  target_id uuid,
+  action text not null check (length(btrim(action)) > 0),
+  reason text check (reason is null or length(btrim(reason)) > 0),
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+-- The audit feed: newest first, whole table.
+create index if not exists idx_admin_actions_created
+  on admin_actions (created_at desc);
+
+-- "Everything ever done to this organisation / this volunteer" -- the history
+-- strip the verification, moderation and dispute screens all need.
+create index if not exists idx_admin_actions_target
+  on admin_actions (target_type, target_id, created_at desc);
+
+alter table admin_actions enable row level security;
+
+-- Readable by admins and nobody else. There is deliberately NO insert, update
+-- or delete policy: the service role bypasses RLS, so the only writer is the
+-- API, and a client write is refused twice over (no policy, and the revoke).
+drop policy if exists "admin_actions_select_admin" on admin_actions;
+create policy "admin_actions_select_admin"
+  on admin_actions for select
+  to authenticated
+  using (is_admin());
+
+revoke insert, update, delete on admin_actions from authenticated;
+revoke all on admin_actions from anon;
+
+-- Append-only, enforced against the API too. RLS and grants stop clients; they
+-- do not stop the service role, which bypasses both and is precisely what
+-- writes here. An audit trail the API can quietly rewrite is not evidence, so
+-- the refusal is a trigger, which applies to every role. A correction is a NEW
+-- row saying what was corrected.
+--
+-- postgres/supabase_admin are exempt for one honest reason: anyone holding
+-- that role can drop this trigger in a second statement anyway, so refusing
+-- them would buy no safety and would cost a drop-and-recreate every time test
+-- rows are cleared.
+create or replace function refuse_admin_actions_rewrite()
+returns trigger
+language plpgsql
+as $$
+begin
+  if current_user in ('postgres', 'supabase_admin') then
+    return case tg_op when 'DELETE' then old else new end;
+  end if;
+
+  raise exception 'admin_actions is append-only; % is not permitted. Record a correcting row instead.', tg_op
+    using errcode = 'insufficient_privilege';
+end;
+$$;
+
+drop trigger if exists trg_admin_actions_append_only on admin_actions;
+create trigger trg_admin_actions_append_only
+  before update or delete on admin_actions
+  for each row execute function refuse_admin_actions_rewrite();
+
+-- ============================================================
 -- Public discovery views.
 --
 -- This is the FOLLOW-UP promised on profiles_select_authenticated: the
@@ -1292,7 +1435,12 @@ grant select on volunteer_review_summary to authenticated;
 -- of this):
 --   profiles.role                       -- set once at signup, immutable after:
 --                                       -- it selects which branch of nearly
---                                       -- every policy in this file applies
+--                                       -- every policy in this file applies.
+--                                       -- NOTE: this grant list only governs
+--                                       -- UPDATE. The value chosen at INSERT
+--                                       -- is barred from being 'admin' by
+--                                       -- profiles_insert_own's with-check --
+--                                       -- both halves are needed.
 --   organisation_profiles.verified      -- trust badge; admin/service-role review only
 --   volunteer_profiles.v_score          -- recomputed only by /api/vscore
 --   volunteer_profiles.verification_status, events_attended

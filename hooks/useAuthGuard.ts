@@ -4,6 +4,7 @@ import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { isAuthUserMetadata, type AuthUserMetadata } from '@/lib/auth-metadata';
+import { ROLE_GROUP, ROLE_GROUPS, ROLE_HOME } from '@/lib/roleRoutes';
 import type { Profile, VolunteerProfile } from '@/types/database';
 
 /**
@@ -15,6 +16,14 @@ import type { Profile, VolunteerProfile } from '@/types/database';
  * onboardingIncomplete branch below returns first.)
  */
 const AUTH_ENTRY_SCREENS = new Set(['welcome', 'login', 'register']);
+
+/**
+ * The role -> home route and role -> tab group maps live in lib/roleRoutes.ts
+ * because the three tab layouts need exactly the same answer for their own
+ * defence-in-depth redirects. Before, each spelled it out separately: a
+ * ternary here and a hard-coded "send them to the other group" there, which
+ * only worked while "not volunteer" could mean nothing but organisation.
+ */
 
 /**
  * onAuthStateChange events that should trigger a profile (re)fetch.
@@ -52,7 +61,9 @@ async function bootstrapProfileFromMetadata(
     return { status: 'error' };
   }
 
-  if (metadata.role !== 'volunteer') {
+  // AuthUserMetadata.role is SignupRole, so this is exhaustive: 'admin' can
+  // never arrive here, because nobody signs up as one.
+  if (metadata.role === 'organisation') {
     const { error: organisationError } = await supabase.from('organisation_profiles').insert({
       id: user.id,
       org_name: metadata.full_name,
@@ -140,7 +151,12 @@ async function resolveProfile(user: User): Promise<ProfileFetchOutcome> {
 
   const typedProfile = profile as Profile;
 
-  if (typedProfile.role !== 'volunteer') {
+  // `=== 'organisation'`, NOT `!== 'volunteer'`. It was the second form while
+  // there were only two roles, and it would now hand an admin an
+  // organisation_profiles row (and a repair attempt on every single load,
+  // since the admin has no reason ever to have one). An admin has no child
+  // profile table: everything about them is on `profiles`.
+  if (typedProfile.role === 'organisation') {
     const { data: organisationProfile, error: organisationError } = await supabase
       .from('organisation_profiles')
       .select('id')
@@ -157,6 +173,16 @@ async function resolveProfile(user: User): Promise<ProfileFetchOutcome> {
       await repairMissingOrganisationProfile(user.id, typedProfile.full_name);
     }
 
+    return { status: 'found', profile: typedProfile, volunteerProfile: null };
+  }
+
+  // An admin has no child profile row of either kind, so there is nothing more
+  // to fetch and nothing to repair. Without this the volunteer fetch below
+  // would find no row and "repair" one on every load — an admin would quietly
+  // acquire a volunteer_profiles row, and with category null the
+  // onboarding-incomplete rule would then park them on the welcome screen
+  // forever.
+  if (typedProfile.role === 'admin') {
     return { status: 'found', profile: typedProfile, volunteerProfile: null };
   }
 
@@ -344,7 +370,7 @@ export function useAuthGuard() {
     }
 
     // Authenticated past this point.
-    const homeRoute = profile.role === 'organisation' ? '/(organisation)/dashboard' : '/(volunteer)/feed';
+    const homeRoute = ROLE_HOME[profile.role];
 
     // A volunteer whose onboarding wizard was abandoned partway (app closed
     // before reaching verify-identity.tsx) has category still null in the
@@ -383,12 +409,12 @@ export function useAuthGuard() {
       return;
     }
 
-    if (profile.role === 'volunteer' && groupSegment === '(organisation)') {
-      router.replace(homeRoute);
-      return;
-    }
-
-    if (profile.role === 'organisation' && groupSegment === '(volunteer)') {
+    // Inside a role group that is not yours -> back to your own home. Same
+    // behaviour the two hand-written branches had for volunteer and
+    // organisation; it now covers admin as well without a third and fourth
+    // branch. Non-role groups ((auth), offline) are untouched: they are not in
+    // ROLE_GROUPS, and both are handled above.
+    if (groupSegment && ROLE_GROUPS.has(groupSegment) && groupSegment !== ROLE_GROUP[profile.role]) {
       router.replace(homeRoute);
     }
   }, [user, profile, volunteerProfile, loading, profileLoading, segments, router]);

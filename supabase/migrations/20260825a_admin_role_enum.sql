@@ -1,0 +1,21 @@
+-- ============================================================
+-- Admin phase, package A — PASTE 1 OF 2. Run this ON ITS OWN.
+--
+-- This file contains ONE statement on purpose, and the reason is a Postgres
+-- rule rather than tidiness: a new enum value cannot be USED in the same
+-- transaction that adds it. The Supabase SQL editor wraps whatever you paste
+-- in a single transaction, so a script that adds 'admin' and then writes a
+-- policy mentioning 'admin' fails outright with
+--   "unsafe use of new value 'admin' of enum type profile_role".
+--
+-- So: paste this, run it, wait for it to say Success, and only then paste
+-- 20260825b_admin_actions.sql. Same constraint already met when
+-- 'not_selected' and 'cancelled' were added.
+--
+-- Adding the value creates NO admin. There is no admin account until someone
+-- runs the promotion statement at the bottom of paste 2, and there is no way
+-- to become one from inside the app — paste 2 closes the one path that would
+-- otherwise have opened here.
+-- ============================================================
+
+alter type profile_role add value if not exists 'admin';

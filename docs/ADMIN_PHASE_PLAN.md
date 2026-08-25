@@ -1,7 +1,8 @@
 # Admin Phase — Plan
 
-**Status: PLAN ONLY. Nothing here is built.** Written 2026-08-21 at the owner's
-request, so the next session can start work without rebuilding context.
+**Status: PACKAGE A IS BUILT (2026-08-25). B onwards is still plan only.**
+Written 2026-08-21 at the owner's request, so the next session could start work
+without rebuilding context.
 
 The source of truth for *what* is wanted is the owner's 12-section brief of
 2026-08-11. This document is the *how*: the order, the prerequisites, what each
@@ -83,7 +84,7 @@ disagreement with reasons. Two changes, both argued above and below:
 
 | # | Package | Why here |
 |---|---|---|
-| **A** | §1 admin role + `(admin)` group + §12 audit trail | Hard prerequisite. Nothing else can be built or tested without an admin to be. |
+| **A** ✅ | §1 admin role + `(admin)` group + §12 audit trail | **BUILT 2026-08-25.** Hard prerequisite. Nothing else can be built or tested without an admin to be. |
 | **B** | §6(a) private documents + signed URLs | Moved BEFORE the review queues, which are what bring real documents in. Nothing real has been exposed; the path is simply not private yet. |
 | **C** | §3 organisation verification | The blocking half of the trust chain. |
 | **D** | §4 volunteer credentials, Gate 1 | The other blocking half; closes the "verified without applying anywhere" gap. |
@@ -133,6 +134,42 @@ promotion, ever.
 app and has been the source of two previous traps (the wizard hijack, the
 back-out loop). Change it in one commit, with the existing behaviour for the two
 current roles untouched and re-tested.
+
+### What package A actually shipped, 2026-08-25
+
+Everything above, plus two things the plan did not anticipate and one it asked
+for and got an answer to.
+
+**The role-immutability check found a real hole, in the INSERT rather than the
+UPDATE.** The UPDATE lock holds — `role` is absent from the client's grant list.
+But the profiles row is INSERTED by the client at signup, and
+`profiles_insert_own` only checked `auth.uid() = id`, so the role in that insert
+was always the client's to choose. Harmless while the only options were the two
+roles anyone can register as; a working privilege escalation the moment `'admin'`
+became legal. The with-check now carries `and role <> 'admin'`, and
+`SignupRole = Exclude<ProfileRole, 'admin'>` types every registration path so the
+same mistake cannot be made in TypeScript either. **This is exactly why the plan
+said to test rather than assume.**
+
+**Two roles hid a routing assumption.** `role !== 'volunteer'` meant
+"organisation" in three places. In `resolveProfile` that would have given an
+admin an `organisation_profiles` row and then a repaired `volunteer_profiles` row
+on every load, stranding them on welcome forever (category null =
+onboarding incomplete). In the two tab layouts it meant a wrong-role user was
+redirected to "the other group", which with three roles is a guess — and two
+layouts guessing wrong redirect into each other. Role → home route and role →
+group now live in `lib/roleRoutes.ts`, read by the auth guard AND all three
+layouts, with four unit tests on the properties a fourth role would break.
+
+**Files:** `supabase/migrations/20260825a_admin_role_enum.sql` (paste 1),
+`20260825b_admin_actions.sql` (paste 2), `20260825c_admin_lock_test.sql` (a test,
+not a migration), `supabase/schema.sql`, `lib/roleRoutes.ts`,
+`hooks/useAdminActions.ts`, `app/(admin)/` (`_layout`, `overview`, `activity`,
+`settings`, `account-security`), `hooks/useAuthGuard.ts`, both existing tab
+layouts, `types/database.ts`, `lib/auth-metadata.ts`.
+
+**Deliberately not built:** queue-count tiles on the admin home. There is no
+queue yet, and "0 pending" implies one exists.
 
 ---
 
