@@ -2,24 +2,24 @@ import { z } from "zod";
 import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
-import {
-  assetExists,
-  destroyAsset,
-  publicIdFromUrl,
-  uploadTargetFor,
-} from "../../../server/cloudinary";
+import { assetExists, destroyAsset, uploadTargetFor } from "../../../server/cloudinary";
 
 export const runtime = "nodejs";
 
 /**
  * The credential document behind identity verification: record, replace, remove.
  *
- * This endpoint is the ONLY writer of volunteer_profiles.credential_document_url
+ * This endpoint is the ONLY writer of volunteer_profiles.credential_document_id
  * and verification_status, both of which are absent from that table's grant
  * lists. The two writes belong together: 'documents_pending' means "a document
- * is waiting for review", so it must not be reachable without one. If the URL
+ * is waiting for review", so it must not be reachable without one. If the id
  * column were client-writable this route would be decorative -- a volunteer
  * could set it to any string and claim the status.
+ *
+ * WHAT IS STORED IS A PUBLIC_ID, NEVER A URL (package B). The asset itself is
+ * an `authenticated` one, unfetchable without a signature, and /api/document-url
+ * mints a fifteen-minute link for a requester it has just authorised. A stored
+ * URL was the leak: it named a fetchable address, permanently, in a column.
  *
  * It does NOT grant 'verified'. That remains a human decision made after
  * someone reads the document; nothing in the app can reach it.
@@ -40,9 +40,13 @@ export const runtime = "nodejs";
 
 const RecordAction = z.object({
   action: z.literal("record").optional(),
-  /** Cloudinary public_id, used to confirm the asset genuinely exists. */
+  /**
+   * Cloudinary public_id — checked for existence, then STORED. `secureUrl` used
+   * to be sent alongside and is deliberately gone: the client no longer has a
+   * durable address to hand us, because the asset it just uploaded cannot be
+   * fetched without a signature this server issues.
+   */
   publicId: z.string().min(1).max(300),
-  secureUrl: z.string().url().max(1000),
 });
 
 const DeleteAction = z.object({
@@ -63,7 +67,7 @@ export async function POST(req: Request): Promise<Response> {
 
     const { data: volunteer } = await admin
       .from("volunteer_profiles")
-      .select("verification_status, declaration_signed, credential_document_url")
+      .select("verification_status, declaration_signed, credential_document_id")
       .eq("id", caller.userId)
       .maybeSingle();
 
@@ -76,18 +80,18 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    const existingUrl = volunteer.credential_document_url as string | null;
-    const { folder, resourceType } = uploadTargetFor("credential", caller.userId);
+    const existingId = volunteer.credential_document_id as string | null;
+    const { folder, resourceType, deliveryType } = uploadTargetFor("credential", caller.userId);
 
     if (body.action === "delete") {
-      if (!existingUrl) {
+      if (!existingId) {
         throw Errors.badRequest("There is no document to remove.");
       }
 
       const { error } = await admin
         .from("volunteer_profiles")
         .update({
-          credential_document_url: null,
+          credential_document_id: null,
           verification_status: "unverified",
         })
         .eq("id", caller.userId);
@@ -98,8 +102,7 @@ export async function POST(req: Request): Promise<Response> {
       // the part that must not fail. A Cloudinary outage leaves an orphaned
       // file rather than a row pointing at a document the volunteer believes
       // they withdrew.
-      const previousId = publicIdFromUrl(existingUrl, resourceType);
-      const storageCleared = previousId ? await destroyAsset(previousId, resourceType) : false;
+      const storageCleared = await destroyAsset(existingId, resourceType, deliveryType);
 
       return Response.json({ verificationStatus: "unverified", storageCleared });
     }
@@ -116,7 +119,7 @@ export async function POST(req: Request): Promise<Response> {
       throw Errors.forbidden("That document does not belong to your account.");
     }
 
-    if (!(await assetExists(body.publicId, resourceType))) {
+    if (!(await assetExists(body.publicId, resourceType, deliveryType))) {
       throw Errors.badRequest(
         "That document could not be found in storage. Please try the upload again."
       );
@@ -125,7 +128,7 @@ export async function POST(req: Request): Promise<Response> {
     const { error } = await admin
       .from("volunteer_profiles")
       .update({
-        credential_document_url: body.secureUrl,
+        credential_document_id: body.publicId,
         verification_status: "documents_pending",
       })
       .eq("id", caller.userId);
@@ -137,11 +140,8 @@ export async function POST(req: Request): Promise<Response> {
     // unreviewable, and still a copy of someone's identity document.
     // Best-effort for the same reason as delete, and guarded so a caller
     // re-recording the SAME url cannot destroy the file it just pointed at.
-    if (existingUrl && existingUrl !== body.secureUrl) {
-      const previousId = publicIdFromUrl(existingUrl, resourceType);
-      if (previousId && previousId !== body.publicId) {
-        await destroyAsset(previousId, resourceType);
-      }
+    if (existingId && existingId !== body.publicId) {
+      await destroyAsset(existingId, resourceType, deliveryType);
     }
 
     return Response.json({ verificationStatus: "documents_pending" });

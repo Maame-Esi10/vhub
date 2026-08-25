@@ -113,11 +113,16 @@ export interface VolunteerProfile {
   declaration_signed: boolean;
   verification_status: VerificationStatus;
   /**
-   * Cloudinary URL of the credential document. Written only by
-   * /api/verification-document on the service-role key, together with
-   * verification_status — neither is in the client's UPDATE grant list.
+   * Cloudinary PUBLIC_ID of the credential document — a name, never an
+   * address. The asset is stored privately and cannot be fetched without a
+   * signature, so there is no URL here to leak; a screen that needs to show
+   * the document asks /api/document-url for a link that expires.
+   *
+   * Written only by /api/verification-document on the service-role key,
+   * together with verification_status — neither is in the client's UPDATE
+   * grant list.
    */
-  credential_document_url: string | null;
+  credential_document_id: string | null;
   created_at: string;
   updated_at: string;
 }

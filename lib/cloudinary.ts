@@ -173,6 +173,13 @@ export async function uploadToCloudinary(
         timestamp: String(signature.timestamp),
         signature: signature.signature,
         folder: signature.folder,
+        // `type` is sent ONLY when the server signed one, which it does for
+        // credentials ('authenticated') and not for avatars, flyers or gallery
+        // images. Cloudinary's default is 'upload', so sending it as a
+        // redundant no-op would change the hash for those three and break
+        // uploads that work today — the server omits it from the signed set
+        // for exactly that reason, and this must stay in step.
+        ...(signature.deliveryType !== 'upload' ? { type: signature.deliveryType } : {}),
       },
     }
   );

@@ -3,6 +3,7 @@ import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, ConfirmDialog, ScreenHeader } from '@/components/ui';
+import { useDocumentUrl } from '@/hooks/useDocumentUrl';
 import { useSignDeclaration } from '@/hooks/useSignDeclaration';
 // Imported from its own module, never the hooks barrel: useMediaUpload pulls in
 // the native picker modules, and a barrel import would drag them into every
@@ -69,7 +70,15 @@ export default function VolunteerVerifyIdentity() {
   const [confirmed, setConfirmed] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  const documentUrl = volunteerProfile?.credential_document_url ?? null;
+  const hasDocument = !!volunteerProfile?.credential_document_id;
+  /*
+    THE DOCUMENT NO LONGER HAS A STORED ADDRESS, and that is the point of
+    package B. A credential is a private Cloudinary asset; the database keeps
+    only its name, and a link that actually fetches it exists for fifteen
+    minutes at a time, issued by the server to a requester it has authorised.
+    So the screen asks for one instead of reading a column.
+  */
+  const document = useDocumentUrl(user?.id, hasDocument);
   const status = volunteerProfile?.verification_status ?? 'unverified';
   const presentation = STATUS_PRESENTATION[status] ?? STATUS_PRESENTATION.unverified;
   const declarationSigned = volunteerProfile?.declaration_signed === true;
@@ -186,9 +195,13 @@ export default function VolunteerVerifyIdentity() {
               one matters most — this is an identity document, and being unable
               to withdraw your own is the wrong default.
             */}
-            {documentUrl ? (
+            {hasDocument ? (
               <DocumentPreview
-                url={documentUrl}
+                url={document.data?.url ?? null}
+                isImage={document.data?.isImage ?? false}
+                isLoadingUrl={document.isLoading}
+                loadError={document.isError}
+                onRetryUrl={() => void document.refetch()}
                 // A verified volunteer keeps the view and loses the controls:
                 // the document is the evidence behind an approval a human
                 // already made, so it cannot be swapped or withdrawn from here.
@@ -229,16 +242,18 @@ export default function VolunteerVerifyIdentity() {
   );
 }
 
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.gif'];
-
-/** True when the stored URL points at something React Native can render inline. */
-function isImageDocument(url: string): boolean {
-  const path = url.split('?')[0]?.toLowerCase() ?? '';
-  return IMAGE_EXTENSIONS.some((extension) => path.endsWith(extension));
-}
-
 interface DocumentPreviewProps {
-  url: string;
+  /** Null while the signed link is being fetched, or if fetching it failed. */
+  url: string | null;
+  /**
+   * Whether the document is a photo. Comes from the server, which reads it off
+   * the stored public_id — the signed link is a download endpoint and carries
+   * no file extension to guess from any more.
+   */
+  isImage: boolean;
+  isLoadingUrl: boolean;
+  loadError: boolean;
+  onRetryUrl: () => void;
   canManage: boolean;
   isReplacing: boolean;
   isDeleting: boolean;
@@ -257,18 +272,52 @@ interface DocumentPreviewProps {
  */
 function DocumentPreview({
   url,
+  isImage,
+  isLoadingUrl,
+  loadError,
+  onRetryUrl,
   canManage,
   isReplacing,
   isDeleting,
   onReplace,
   onDelete,
 }: DocumentPreviewProps) {
-  const isImage = isImageDocument(url);
   const busy = isReplacing || isDeleting;
 
   return (
     <View style={styles.documentCard}>
-      {isImage ? (
+      {/*
+        The link is fetched, not stored, so this screen has three states where
+        it used to have one. Saying which is which matters: "we are getting you
+        a link" and "your document is gone" look identical if both render as an
+        empty box, and only one of them is worth worrying about.
+      */}
+      {!url ? (
+        <Pressable
+          onPress={loadError ? onRetryUrl : undefined}
+          accessibilityRole={loadError ? 'button' : 'text'}
+          accessibilityLabel={loadError ? 'Try again to open your document' : 'Preparing your document'}
+          style={styles.documentFileRow}
+        >
+          <MaterialCommunityIcons
+            name={loadError ? 'alert-circle-outline' : 'file-lock-outline'}
+            size={24}
+            color={loadError ? colors.danger : colors.textSecondary}
+          />
+          <View style={styles.documentFileText}>
+            <Text style={styles.documentFileTitle}>
+              {loadError ? 'Could not open your document' : 'Preparing your document'}
+            </Text>
+            <Text style={styles.documentFileHint}>
+              {loadError
+                ? 'Tap to try again.'
+                : isLoadingUrl
+                  ? 'It is stored privately, so V-HUB is unlocking it for you.'
+                  : 'One moment.'}
+            </Text>
+          </View>
+        </Pressable>
+      ) : isImage ? (
         <Pressable
           onPress={() => void Linking.openURL(url)}
           accessibilityRole="imagebutton"

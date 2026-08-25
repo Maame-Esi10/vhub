@@ -100,12 +100,16 @@ export function useCredentialUpload() {
       const picked = await pickCredentialDocument();
       if (picked.cancelled) return null;
 
-      const { secureUrl, publicId } = await uploadToCloudinary('credential', picked.file);
-      await recordVerificationDocument(publicId, secureUrl);
+      // Only the public_id is kept. The upload's secure_url is deliberately
+      // discarded here and nowhere stored: a credential is a private Cloudinary
+      // asset now, so that URL would not work for anyone anyway — and a stored
+      // URL was precisely the leak package B closed.
+      const { publicId } = await uploadToCloudinary('credential', picked.file);
+      await recordVerificationDocument(publicId);
 
       // Re-read rather than trusting the endpoint's echo: the server may have
-      // written more than the status (it also stores the URL), and the store
-      // should hold the row as the database now actually has it.
+      // written more than the status (it also stores the document id), and the
+      // store should hold the row as the database now actually has it.
       const { data, error } = await supabase
         .from('volunteer_profiles')
         .select('*')

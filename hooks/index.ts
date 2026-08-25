@@ -20,6 +20,7 @@ export type {
 } from './useAccountSecurity';
 export { useSignDeclaration } from './useSignDeclaration';
 export { adminActionKeys, useAdminActions, useAdminActionsForTarget } from './useAdminActions';
+export { documentUrlKeys, useDocumentUrl } from './useDocumentUrl';
 export {
   notificationKeys,
   useNotifications,

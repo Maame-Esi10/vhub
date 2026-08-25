@@ -2347,3 +2347,66 @@ no queue-count tiles, and that is a decision rather than an omission — a tile
 reading "0 pending" would imply a queue that does not exist yet. The Home screen
 lists what is coming in words instead, and the empty Activity log says that an
 empty log is the expected state until the first decision is made.
+
+## Admin phase, package B — credential documents become private (2026-08-25)
+
+The single most important technical requirement in the owner's brief, and the
+current state did not meet it. `api/src/server/cloudinary.ts` signed the upload
+but set no delivery type, so a credential landed as an ordinary public asset;
+`volunteer_profiles.credential_document_url` stored its permanent delivery URL;
+and the verification screen opened that URL in the phone's browser. Anyone
+holding the string could fetch someone's identity document — no session, no
+authorisation check, and nothing that could be revoked short of deleting the
+file.
+
+Nothing real was ever exposed: every file in `vhub/credentials/` is a test PDF
+the owner uploaded while exercising the flow. That is why this is a gap closed
+before real documents arrive rather than a breach — and why it ships ahead of
+the two packages that cause documents to be uploaded and reviewed at volume.
+
+### Three things had to change together
+
+**The asset becomes private.** Cloudinary's `type` is a different axis from
+`resource_type`, and it is the one that decides whether an asset is publicly
+fetchable. Credentials are now `authenticated`, which cannot be delivered
+without a signature. Avatars, flyers and gallery images stay public
+deliberately: they are shown to other users on screens with no session of ours
+behind the image request, and signing each one would cost a round trip per image
+for content that is meant to be seen.
+
+`type` sits in the SIGNED upload parameter set, so a device cannot downgrade a
+credential to public delivery by dropping it — the hash would stop matching. It
+is omitted entirely when the value is `upload`, because that is Cloudinary's
+default and sending it as a no-op would change the hash for the three public
+kinds and break uploads that currently work.
+
+**The database stores a name, not an address.** `credential_document_url` is
+dropped and `credential_document_id` holds the `public_id`. Keeping the column
+unused was the alternative and it is weaker: as long as the column exists, some
+later code path can write a permanent URL into it and nothing in the schema
+would object.
+
+**Reading is a request, not a lookup.** `/api/document-url` authorises the
+caller and returns a link valid for fifteen minutes. The access rules live there
+and never in the UI: the volunteer themselves always; an admin, for the Gate 1
+review; an organisation only if that volunteer has applied to one of its
+outreaches; nobody else. A refusal is a flat 403 with identical wording whatever
+the reason, because distinguishing "no such document" from "not yours to see"
+would confirm to a stranger that a particular person has uploaded one.
+
+### Why the private-download endpoint rather than a signed delivery URL
+
+Cloudinary offers both. A signed delivery URL (`/s--abc123--/…`) authenticates
+but never expires: leak it once and it works forever, which is the exact problem
+being fixed. The private-download form carries `expires_at` inside the signed
+parameter set, so Cloudinary itself refuses the link afterwards — expiry is
+enforced by the service rather than by us remembering to revoke something. The
+signature is computed locally from the API secret, so minting a link costs no
+network call and cannot fail.
+
+### The screen gained two states it did not have
+
+A stored URL is either there or not. A fetched one is being fetched, or failed,
+or arrived — and saying which matters, because "we are unlocking your document"
+and "your document is gone" look identical if both render as an empty box. The
+preview now names all three, and the failure state is tappable to retry.

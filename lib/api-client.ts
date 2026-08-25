@@ -44,6 +44,7 @@ export const API_ROUTES = {
   cancelEmailChange: '/api/cancel-email-change',
   waitlistPosition: '/api/waitlist-position',
   outreachStatus: '/api/outreach-status',
+  documentUrl: '/api/document-url',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -742,6 +743,13 @@ export interface UploadSignature {
   signature: string;
   folder: string;
   resourceType: 'image' | 'raw';
+  /**
+   * `authenticated` for credentials, `upload` for everything else. It is part
+   * of the signed parameter set, so the device must post it back verbatim — it
+   * cannot quietly downgrade a credential to public delivery, because the hash
+   * would stop matching and Cloudinary would refuse the upload.
+   */
+  deliveryType: 'upload' | 'authenticated';
 }
 
 /**
@@ -764,12 +772,43 @@ export function getUploadSignature(
  */
 export function recordVerificationDocument(
   publicId: string,
-  secureUrl: string,
   options?: RequestOptions
 ): Promise<{ verificationStatus: 'documents_pending' }> {
   return apiPost<{ verificationStatus: 'documents_pending' }>(
     API_ROUTES.verificationDocument,
-    { action: 'record', publicId, secureUrl },
+    { action: 'record', publicId },
+    options
+  );
+}
+
+/** A signed, expiring link to one private document. */
+export interface SignedDocument {
+  url: string;
+  /** ISO timestamp. Used to decide when to ask for a fresh link, never displayed. */
+  expiresAt: string;
+  /** True for a photographed certificate, false for a PDF. */
+  isImage: boolean;
+}
+
+/**
+ * Asks for a short-lived link to a credential document.
+ *
+ * There is no stored URL to open any more, and that is the point: a credential
+ * is a private Cloudinary asset that cannot be fetched without a signature this
+ * server issues, and the link it issues stops working after fifteen minutes.
+ * The server decides whether the caller may see the document — the volunteer
+ * themselves, an admin, or an organisation this volunteer has actually applied
+ * to. A screen must never make that decision itself.
+ *
+ * `ownerId` omitted means "my own document".
+ */
+export function getDocumentUrl(
+  ownerId?: string,
+  options?: RequestOptions
+): Promise<SignedDocument> {
+  return apiPost<SignedDocument>(
+    API_ROUTES.documentUrl,
+    { kind: 'credential', ...(ownerId ? { ownerId } : {}) },
     options
   );
 }

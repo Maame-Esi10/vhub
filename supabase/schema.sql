@@ -256,12 +256,21 @@ alter table volunteer_profiles drop column if exists license_number;
 alter table volunteer_profiles drop column if exists license_verified;
 alter table volunteer_profiles add column if not exists verification_status verification_status not null default 'unverified';
 
--- The Cloudinary URL of the credential document backing verification.
+-- The Cloudinary PUBLIC_ID of the credential document backing verification --
+-- a name, never an address. The URL column this replaced was the leak itself:
+-- Cloudinary stored the asset with public delivery and the permanent URL sat
+-- in this table, so anyone holding that string could fetch someone's identity
+-- document with no session and no authorisation check. Credentials are now
+-- `authenticated` assets, unfetchable without a signature, and
+-- /api/document-url mints a short-lived signed link per request for a
+-- requester it has just authorised. NEVER store a delivery URL here again.
+--
 -- Absent from volunteer_profiles' UPDATE grant list on purpose, alongside
 -- verification_status itself: /api/verification-document writes BOTH together
 -- on the service-role key, which is what makes 'documents_pending' mean a
 -- document was really uploaded rather than a state a client simply asserted.
-alter table volunteer_profiles add column if not exists credential_document_url text;
+alter table volunteer_profiles add column if not exists credential_document_id text;
+alter table volunteer_profiles drop column if exists credential_document_url;
 
 -- The Cloudinary URL of an outreach's flyer image. Unlike the column above
 -- this IS client-writable (see the grant lists at the foot of this file): an
