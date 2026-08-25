@@ -22,6 +22,19 @@ export { useSignDeclaration } from './useSignDeclaration';
 export { adminActionKeys, useAdminActions, useAdminActionsForTarget } from './useAdminActions';
 export { documentUrlKeys, useDocumentUrl } from './useDocumentUrl';
 export {
+  orgVerificationKeys,
+  useMyVerificationSubmission,
+  useSubmitVerification,
+  useVerificationQueue,
+  useVerificationDetail,
+  useDecideVerification,
+} from './useOrganisationVerification';
+export type {
+  VerificationSubmission,
+  VerificationQueueRow,
+  DecideVerificationParams,
+} from './useOrganisationVerification';
+export {
   notificationKeys,
   useNotifications,
   useMarkNotificationsRead,

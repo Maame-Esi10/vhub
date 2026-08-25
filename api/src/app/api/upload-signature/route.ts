@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  */
 
 const UploadSignatureBody = z.object({
-  kind: z.enum(["avatar", "flyer", "credential", "gallery"]),
+  kind: z.enum(["avatar", "flyer", "credential", "gallery", "organisation_document"]),
 });
 
 export async function POST(req: Request): Promise<Response> {
@@ -34,7 +34,7 @@ export async function POST(req: Request): Promise<Response> {
     // because Cloudinary has no view of who we are -- once a signature is
     // issued, the upload succeeds regardless of what the database would have
     // allowed.
-    if (kind === "flyer" || kind === "gallery") {
+    if (kind === "flyer" || kind === "gallery" || kind === "organisation_document") {
       const admin = getSupabaseAdmin();
       const { data: profile } = await admin
         .from("profiles")
@@ -42,7 +42,11 @@ export async function POST(req: Request): Promise<Response> {
         .eq("id", caller.userId)
         .maybeSingle();
       if (profile?.role !== "organisation") {
-        throw Errors.forbidden("Only an organisation can upload outreach images.");
+        throw Errors.forbidden(
+          kind === "organisation_document"
+            ? "Only an organisation can upload verification documents."
+            : "Only an organisation can upload outreach images."
+        );
       }
     }
 

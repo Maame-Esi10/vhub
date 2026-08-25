@@ -16,7 +16,13 @@ import { env } from "./env";
  * cannot be pointed at a different folder without invalidating the hash.
  */
 
-export type UploadKind = "avatar" | "flyer" | "credential" | "gallery";
+export type UploadKind =
+  | "avatar"
+  | "flyer"
+  | "credential"
+  | "gallery"
+  /** An organisation's supporting evidence for verification. Private, like a credential. */
+  | "organisation_document";
 
 /**
  * Cloudinary's storage/delivery type, which is a different axis from
@@ -67,6 +73,16 @@ export function uploadTargetFor(kind: UploadKind, userId: string): UploadTarget 
       // way in is /api/document-url, which authorises the requester first.
       return {
         folder: `vhub/credentials/${userId}`,
+        resourceType: "raw",
+        deliveryType: "authenticated",
+      };
+    case "organisation_document":
+      // Its own folder, not the credential one: the two are read by different
+      // rules (an organisation's own document vs a volunteer's), and sharing a
+      // folder would make the "is this public id inside YOUR folder" check
+      // useless as a boundary between them.
+      return {
+        folder: `vhub/org-documents/${userId}`,
         resourceType: "raw",
         deliveryType: "authenticated",
       };

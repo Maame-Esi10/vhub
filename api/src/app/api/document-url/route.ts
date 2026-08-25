@@ -26,16 +26,32 @@ export const runtime = "nodejs";
  *    that has never met this volunteer has no business reading their licence.
  *  - Nobody else, by any path.
  *
+ * WHO MAY SEE AN ORGANISATION DOCUMENT:
+ *
+ *  - The organisation that submitted it. Always.
+ *  - An admin, for the verification review.
+ *  - Nobody else — not even a volunteer who has applied. An organisation's
+ *    registration certificate is evidence for a decision, not a public fact;
+ *    what volunteers get is the verified badge that decision produces.
+ *
  * A refusal is deliberately a flat 403 with the same wording whatever the
  * reason. Distinguishing "no such document" from "not yours to see" would
  * confirm to a stranger that a particular person has uploaded a credential.
  */
 
-const DocumentUrlBody = z.object({
+const CredentialBody = z.object({
   kind: z.literal("credential"),
   /** Whose document. Omit for your own. */
   ownerId: z.string().uuid().optional(),
 });
+
+const OrganisationDocumentBody = z.object({
+  kind: z.literal("organisation_document"),
+  /** The organisation_documents row. Its owner and public_id are read from it, never trusted from the request. */
+  documentRowId: z.string().uuid(),
+});
+
+const DocumentUrlBody = z.union([CredentialBody, OrganisationDocumentBody]);
 
 /** Is this organisation allowed to look at this volunteer's credential? */
 async function organisationMayView(caller: AuthedCaller, volunteerId: string): Promise<boolean> {
@@ -66,6 +82,34 @@ export async function POST(req: Request): Promise<Response> {
     const body = DocumentUrlBody.parse(json);
 
     const caller = await authenticate(req);
+    const admin = getSupabaseAdmin();
+
+    if (body.kind === "organisation_document") {
+      // The row is fetched FIRST and the owner read off it. Taking the
+      // organisation id from the request instead would let a caller name their
+      // own id beside somebody else's document and pass the ownership test.
+      const { data: row, error: rowError } = await admin
+        .from("organisation_documents")
+        .select("organisation_id, document_id")
+        .eq("id", body.documentRowId)
+        .maybeSingle();
+
+      if (rowError) throw Errors.internal("Could not load the document.");
+      if (!row) throw Errors.notFound("There is no document to view.");
+
+      const ownsIt = row.organisation_id === caller.userId;
+      if (!ownsIt && caller.role !== "admin") {
+        throw Errors.forbidden("You are not allowed to view this document.");
+      }
+
+      const orgTarget = uploadTargetFor("organisation_document", row.organisation_id as string);
+      const orgSigned = signedDownloadUrl(row.document_id as string, orgTarget.resourceType);
+      return Response.json({
+        ...orgSigned,
+        isImage: /\.(png|jpe?g|webp|heic|heif)$/i.test(row.document_id as string),
+      });
+    }
+
     const ownerId = body.ownerId ?? caller.userId;
 
     const isOwner = ownerId === caller.userId;
@@ -78,7 +122,6 @@ export async function POST(req: Request): Promise<Response> {
       throw Errors.forbidden("You are not allowed to view this document.");
     }
 
-    const admin = getSupabaseAdmin();
     const { data: volunteer, error } = await admin
       .from("volunteer_profiles")
       .select("credential_document_id")

@@ -11,10 +11,9 @@ import { useTabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOption
  * invents a new visual language: it reuses the same tab bar, the same tokens,
  * the same card and settings-row treatments as the other two groups.
  *
- * Two tabs, because package A builds the shell and the audit trail and
- * nothing else. The verification, credential, moderation and dispute queues
- * are packages C, D, F and G, and each adds its own tab when it is built
- * rather than shipping an empty one now.
+ * Each queue adds its own tab as it is built, rather than an empty one being
+ * shipped ahead of the feature. Home and Activity came with package A;
+ * Organisations came with package C.
  *
  * Defence-in-depth guard, identical in intent to the other two layouts:
  * useAuthGuard redirects on role mismatch too, but in a useEffect that fires
@@ -42,6 +41,13 @@ export default function AdminTabsLayout() {
         options={{ title: 'Home', tabBarIcon: tabBarIcon('shield-account', 'shield-account-outline') }}
       />
       <Tabs.Screen
+        name="organisations"
+        options={{
+          title: 'Orgs',
+          tabBarIcon: tabBarIcon('office-building', 'office-building-outline'),
+        }}
+      />
+      <Tabs.Screen
         name="activity"
         options={{ title: 'Activity', tabBarIcon: tabBarIcon('history', 'history') }}
       />
@@ -52,6 +58,7 @@ export default function AdminTabsLayout() {
       */}
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="account-security" options={{ href: null }} />
+      <Tabs.Screen name="organisation/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

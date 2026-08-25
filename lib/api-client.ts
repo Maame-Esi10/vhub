@@ -45,6 +45,7 @@ export const API_ROUTES = {
   waitlistPosition: '/api/waitlist-position',
   outreachStatus: '/api/outreach-status',
   documentUrl: '/api/document-url',
+  organisationVerification: '/api/organisation-verification',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -734,7 +735,13 @@ export function resolveAttendance(
 // /api/upload-signature + /api/verification-document
 // ---------------------------------------------------------------------------
 
-export type UploadKind = 'avatar' | 'flyer' | 'credential' | 'gallery';
+export type UploadKind =
+  | 'avatar'
+  | 'flyer'
+  | 'credential'
+  | 'gallery'
+  /** An organisation's verification evidence. Private, like a credential. */
+  | 'organisation_document';
 
 export interface UploadSignature {
   cloudName: string;
@@ -809,6 +816,66 @@ export function getDocumentUrl(
   return apiPost<SignedDocument>(
     API_ROUTES.documentUrl,
     { kind: 'credential', ...(ownerId ? { ownerId } : {}) },
+    options
+  );
+}
+
+/**
+ * The same, for one of an organisation's verification documents.
+ *
+ * Identified by its DATABASE ROW id, not by its Cloudinary name: the server
+ * reads the owner off the row rather than trusting the request, so a caller
+ * cannot name their own organisation beside somebody else's document.
+ */
+export function getOrganisationDocumentUrl(
+  documentRowId: string,
+  options?: RequestOptions
+): Promise<SignedDocument> {
+  return apiPost<SignedDocument>(
+    API_ROUTES.documentUrl,
+    { kind: 'organisation_document', documentRowId },
+    options
+  );
+}
+
+export interface OrganisationVerificationSubmission {
+  officialEmail: string;
+  physicalAddress: string;
+  contactPerson: string;
+  website?: string;
+  registrations: { label: string; number: string }[];
+  documents: { publicId: string; label?: string }[];
+}
+
+/**
+ * Submits an organisation for verification.
+ *
+ * `verification_state` is service-role-only for the same reason the volunteer's
+ * `verification_status` is: it decides whether this organisation can put an
+ * event in front of volunteers, so a client able to write it could self-verify.
+ * This is the only path to it.
+ */
+export function submitOrganisationVerification(
+  submission: OrganisationVerificationSubmission,
+  options?: RequestOptions
+): Promise<{ verificationState: 'documents_submitted' }> {
+  return apiPost<{ verificationState: 'documents_submitted' }>(
+    API_ROUTES.organisationVerification,
+    { action: 'submit', ...submission },
+    options
+  );
+}
+
+/** An admin's decision on one organisation. Writes an audit row server-side. */
+export function decideOrganisationVerification(
+  organisationId: string,
+  decision: 'approve' | 'reject',
+  reason: string,
+  options?: RequestOptions
+): Promise<{ verificationState: 'verified' | 'rejected' }> {
+  return apiPost<{ verificationState: 'verified' | 'rejected' }>(
+    API_ROUTES.organisationVerification,
+    { action: 'decide', organisationId, decision, reason },
     options
   );
 }

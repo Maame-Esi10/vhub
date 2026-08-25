@@ -33,6 +33,22 @@ exception when duplicate_object then null; end $$;
 -- add pharmacist) — the enum's physical value order there will differ, which
 -- is cosmetic only: display order comes from VOLUNTEER_CATEGORIES in TS, never
 -- from the enum. See docs/REPORT_NOTES.md.
+-- How far an organisation is through verification. A boolean could not express
+-- "we looked and said no", "we are waiting", or "this account is suspended",
+-- and all three are states an organisation can be in. `suspended` and `banned`
+-- are moderation states (package F) and are in the enum from the start so that
+-- adding them later does not need its own separate migration paste.
+do $$ begin
+  create type org_verification_state as enum (
+    'unverified',
+    'documents_submitted',
+    'verified',
+    'rejected',
+    'suspended',
+    'banned'
+  );
+exception when duplicate_object then null; end $$;
+
 do $$ begin
   create type volunteer_category as enum ('doctor', 'nurse', 'midwife', 'pharmacist', 'student', 'first_aider', 'other');
 exception when duplicate_object then null; end $$;
@@ -331,7 +347,27 @@ create table if not exists organisation_profiles (
   -- `using (true)` table without contradicting the PII rule above.
   contact_email text,
   contact_phone text,
-  verified boolean not null default false,
+  -- Verification evidence. `official_email` is asked for SEPARATELY from
+  -- contact_email above: the public enquiries address may legitimately be a
+  -- Gmail, while an address on the organisation's own domain is a weak but
+  -- real signal that the domain and the organisation are connected.
+  official_email text,
+  physical_address text,
+  contact_person text,
+  verification_state org_verification_state not null default 'unverified',
+  -- The reason for the LAST decision, which is what the organisation needs in
+  -- order to fix and resubmit. The full history of every decision lives in
+  -- admin_actions and is never overwritten.
+  verification_reason text,
+  verification_decided_at timestamptz,
+  verification_submitted_at timestamptz,
+  -- DERIVED, and therefore unwritable by anyone including the service role.
+  -- A boolean that must agree with something else will eventually disagree
+  -- with it unless the database computes it -- the same reasoning CLAUDE.md
+  -- gives for having no `is_multi_role` flag. Eight places read this boolean;
+  -- deriving it keeps every one of them working untouched while
+  -- verification_state becomes the truth.
+  verified boolean generated always as (verification_state = 'verified') stored,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -1295,6 +1331,119 @@ drop trigger if exists trg_admin_actions_append_only on admin_actions;
 create trigger trg_admin_actions_append_only
   before update or delete on admin_actions
   for each row execute function refuse_admin_actions_rewrite();
+
+-- ============================================================
+-- organisation_registrations — the numbers an organisation quotes.
+--
+-- MANY per organisation, not four columns: the brief names four example
+-- schemes and says the form must accept others, so fixed columns would mean a
+-- migration every time a new scheme appears. No uniqueness across
+-- organisations -- two branches of one NGO can legitimately quote the same
+-- parent registration, and rejecting the honest case to catch a dishonest one
+-- an admin will see anyway is the wrong trade.
+-- ============================================================
+create table if not exists organisation_registrations (
+  id uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisation_profiles(id) on delete cascade,
+  label text not null check (length(btrim(label)) > 0),
+  number text not null check (length(btrim(number)) > 0),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_organisation_registrations_org
+  on organisation_registrations (organisation_id);
+
+alter table organisation_registrations enable row level security;
+
+-- The organisation sees its own; an admin sees all; nobody else. A
+-- registration number is not a public fact -- volunteers judge legitimacy by
+-- the verified badge, not by reading numbers they cannot check.
+drop policy if exists "organisation_registrations_select" on organisation_registrations;
+create policy "organisation_registrations_select"
+  on organisation_registrations for select
+  to authenticated
+  using (organisation_id = auth.uid() or is_admin());
+
+revoke insert, update, delete on organisation_registrations from authenticated;
+revoke all on organisation_registrations from anon;
+
+-- ============================================================
+-- organisation_documents — private, exactly like credentials.
+--
+-- Stores the Cloudinary PUBLIC_ID and never a URL, for the reason package B
+-- established: a stored URL is a permanent fetchable address, and that is the
+-- thing that leaks. Read through /api/document-url.
+-- ============================================================
+create table if not exists organisation_documents (
+  id uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisation_profiles(id) on delete cascade,
+  document_id text not null check (length(btrim(document_id)) > 0),
+  label text,
+  created_at timestamptz not null default now(),
+  unique (organisation_id, document_id)
+);
+
+create index if not exists idx_organisation_documents_org
+  on organisation_documents (organisation_id, created_at);
+
+alter table organisation_documents enable row level security;
+
+drop policy if exists "organisation_documents_select" on organisation_documents;
+create policy "organisation_documents_select"
+  on organisation_documents for select
+  to authenticated
+  using (organisation_id = auth.uid() or is_admin());
+
+revoke insert, update, delete on organisation_documents from authenticated;
+revoke all on organisation_documents from anon;
+
+-- ============================================================
+-- Only a VERIFIED organisation may put an event in front of volunteers.
+--
+-- Enforced at the database, not with a disabled button -- the same standard
+-- the clinical gate is held to. A disabled button is a suggestion.
+--
+-- DRAFTS ARE STILL ALLOWED. Nothing about a draft is visible to anyone else,
+-- and refusing them outright would mean an organisation waiting on review
+-- cannot prepare anything, which serves nobody.
+--
+-- `suspended` and `banned` fall out of this for free, since neither equals
+-- 'verified'.
+-- ============================================================
+create or replace function refuse_outreach_from_unverified_org()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_state org_verification_state;
+begin
+  if tg_op = 'UPDATE' and new.status is not distinct from old.status then
+    return new;
+  end if;
+  if new.status = 'draft' then
+    return new;
+  end if;
+
+  select verification_state into v_state
+    from organisation_profiles
+   where id = new.organisation_id;
+
+  if v_state is distinct from 'verified' then
+    raise exception
+      'This organisation is not verified, so it cannot publish outreaches yet. Submit verification from Settings.'
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_outreaches_require_verified_org on outreaches;
+create trigger trg_outreaches_require_verified_org
+  before insert or update on outreaches
+  for each row execute function refuse_outreach_from_unverified_org();
 
 -- ============================================================
 -- Public discovery views.

@@ -18,6 +18,16 @@ import { useAuthStore } from '@/stores/authStore';
  * apply to an organisation. See the volunteer screen's note for which rows
  * in that PNG were deliberately not built and why.
  */
+/** What the Settings row says, per state. Short enough not to wrap on a narrow phone. */
+const VERIFICATION_ROW_VALUE: Record<string, string> = {
+  unverified: 'Not submitted',
+  documents_submitted: 'Waiting on review',
+  verified: 'Verified',
+  rejected: 'Not approved — tap to fix',
+  suspended: 'Suspended',
+  banned: 'Removed',
+};
+
 export default function OrganisationSettings() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
@@ -68,10 +78,17 @@ export default function OrganisationSettings() {
           set only by a service-role review. Shown here so the state is
           visible without implying it is self-settable.
         */}
+        {/*
+          No longer read-only. `verified` is still not settable from here — it
+          is a generated column now, derived from verification_state, and
+          Postgres refuses a write to it outright. What this row opens is the
+          SUBMISSION: the organisation sends its evidence, and an admin decides.
+        */}
         <SettingsRow
           icon="shield-check-outline"
           label="Organisation Verification"
-          value={org ? (org.verified ? 'Verified' : 'Awaiting review') : 'Not set'}
+          value={VERIFICATION_ROW_VALUE[org?.verification_state ?? 'unverified']}
+          onPress={() => router.push('/(organisation)/verification')}
         />
 
         <View style={styles.signOutBlock}>

@@ -2410,3 +2410,93 @@ A stored URL is either there or not. A fetched one is being fetched, or failed,
 or arrived — and saying which matters, because "we are unlocking your document"
 and "your document is gone" look identical if both render as an empty box. The
 preview now names all three, and the failure state is tappable to retry.
+
+## Admin phase, package C — organisation verification (2026-08-25)
+
+Volunteers judge whether an outreach is real by the organisation behind it.
+Until now `organisation_profiles.verified` was a boolean nobody could set from
+anywhere: service-role-only, with no service-role writer, so it was permanently
+false for every organisation on the platform. The badge existed and could never
+light up. This gives it a process, evidence and a human decision.
+
+### The boolean is now derived, and can never disagree again
+
+The owner's decision of 2026-08-21 was to keep `verified` and derive it, rather
+than replace it. Eight places read it — two organisation screens, the public
+profile, the discovery view, the match endpoint and two type files — and
+deriving keeps every one of them working untouched while `verification_state`
+becomes the truth. Replacing would have meant editing all eight at once and
+risking a miss.
+
+It is a STORED GENERATED COLUMN rather than a trigger, for the reason CLAUDE.md
+already gives about the multi-role flag: a boolean that must agree with
+something else will eventually disagree with it unless the database is the one
+computing it. The consequence designed around is that nothing may ever write
+`verified` again — Postgres rejects a write to a generated column outright — and
+that is a strict improvement, because approval becomes one write to one column
+with one meaning.
+
+Dropping and re-adding the column meant dropping and recreating
+`public_organisation_profiles` first: a column cannot be dropped while a view
+selects it.
+
+### A state, not a boolean, and it already carries moderation
+
+`org_verification_state` is `unverified → documents_submitted → verified`, plus
+`rejected`, `suspended` and `banned`. The last two are set by nothing until
+package F, and they are in the enum from the start deliberately: adding them
+later would need its own separate migration paste, for values whose meaning is
+already decided.
+
+### Registration numbers are a table, not four columns
+
+The brief names four example schemes and says the form must accept others. Four
+columns would mean a migration every time a new scheme appears, and would force
+every organisation into the same four shapes. There is no uniqueness across
+organisations: two branches of one NGO can legitimately quote the same parent
+registration, and rejecting the honest case to catch a dishonest one an admin
+will see anyway is the wrong trade.
+
+### The block is real
+
+"Only verified organisations may post outreaches" is a database trigger, not a
+disabled button — the same standard the clinical gate is held to. It fires on
+insert and on any status change that exposes an event, and `suspended`/`banned`
+fall out of it for free since neither equals `verified`.
+
+DRAFTS ARE STILL ALLOWED, and that is a deliberate exception. Nothing about a
+draft is visible to anyone else, and refusing them outright would mean an
+organisation waiting on review cannot prepare anything.
+
+**The known consequence, and it is immediate: every existing organisation loses
+the ability to publish the moment this migration runs.** That is the point of
+the package rather than a side effect, but it means the owner's test
+organisation must be approved through the admin queue before it can post again.
+
+### Decisions
+
+- **The reason is required for approvals too**, not only rejections. An
+  approval with a reason is what lets a later admin see why an organisation
+  passed when the evidence looked thin.
+- **A rejection's reason is sent verbatim to the organisation.** A rejection
+  that is not explained is a dead end — the organisation cannot tell what to fix.
+- **Resubmission replaces, it does not append.** A resubmission is a complete
+  restatement of the evidence; appending would leave a withdrawn registration
+  number sitting in the reviewer's list as though it were still claimed.
+- **A verified organisation cannot resubmit.** Re-deciding would mean
+  un-verifying first, which would quietly revoke a badge volunteers are relying
+  on right now, on the organisation's own say-so.
+- **Documents are prefilled on a rejection resubmit; files are not.**
+  Re-attaching the previous files silently would let a resubmission look like
+  new evidence when nothing changed.
+
+### Zoom without a new dependency
+
+The brief asks for full-screen pinch-to-zoom, so an admin can read a licence
+number off a photograph. Real pinch needs `react-native-gesture-handler`, and
+dependencies are a gated decision in this project. `DocumentViewer` therefore
+zooms in three steps on tap and pans with the scroll views it is already built
+from — which answers the question the brief is actually asking, using what is
+installed. On iOS the ScrollView's own pinch works as well, for free; Android
+has no equivalent, which is exactly why the tap steps exist rather than being an
+iOS-only nicety.

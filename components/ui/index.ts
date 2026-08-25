@@ -39,6 +39,8 @@ export type { AvailabilityGridProps } from './AvailabilityGrid';
 export { EditSectionCard } from './EditSectionCard';
 export type { EditSectionCardProps } from './EditSectionCard';
 
+export { DocumentViewer } from './DocumentViewer';
+export type { DocumentViewerProps } from './DocumentViewer';
 export { Badge } from './Badge';
 export type { BadgeProps, BadgeTone } from './Badge';
 export { Avatar } from './Avatar';

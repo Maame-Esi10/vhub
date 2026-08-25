@@ -211,3 +211,27 @@ export function useGalleryImageUpload() {
     },
   });
 }
+
+/**
+ * Uploads one organisation verification document and hands back its Cloudinary
+ * NAME for the form to hold until it submits.
+ *
+ * Nothing is written to the database here, the same shape as the flyer upload
+ * and for the same reason: the submission is a single act, and a document row
+ * written before the organisation presses Submit would put evidence in front of
+ * a reviewer for a submission that never happened.
+ *
+ * A public_id comes back rather than a URL, because the asset is private and a
+ * URL for it would not work for anybody. `null` means the picker was dismissed.
+ */
+export function useOrganisationDocumentUpload() {
+  return useMutation({
+    mutationFn: async (): Promise<{ publicId: string; name: string } | null> => {
+      const picked = await pickCredentialDocument();
+      if (picked.cancelled) return null;
+
+      const { publicId } = await uploadToCloudinary('organisation_document', picked.file);
+      return { publicId, name: picked.file.name };
+    },
+  });
+}

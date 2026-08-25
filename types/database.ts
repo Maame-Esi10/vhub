@@ -52,6 +52,25 @@ export type ExperienceLevel = "beginner" | "intermediate" | "experienced";
  */
 export type VerificationStatus = "unverified" | "documents_pending" | "verified";
 
+/**
+ * How far an organisation is through verification.
+ *
+ * A boolean could not say "we looked and declined", "we are waiting" or "this
+ * account is suspended". `organisation_profiles.verified` still exists and is
+ * still what every screen reads, but it is now DERIVED from this by the
+ * database and cannot be written by anybody — a boolean that must agree with
+ * something else will eventually disagree with it.
+ */
+export type OrgVerificationState =
+  | "unverified"
+  | "documents_submitted"
+  | "verified"
+  | "rejected"
+  /** Reversible moderation stop. Set only by an admin (package F). */
+  | "suspended"
+  /** Permanent. Set only by an admin (package F). */
+  | "banned";
+
 export type OutreachRoleType = "clinical" | "support";
 
 /**
@@ -149,9 +168,50 @@ export interface OrganisationProfile {
    * permanently empty for everyone who never found the switch.
    */
   show_gallery: boolean;
+  /**
+   * An address on the organisation's own domain, submitted as verification
+   * evidence. NOT the same as `contact_email`, which is the public enquiries
+   * address and may legitimately be a free webmail account.
+   */
+  official_email: string | null;
+  physical_address: string | null;
+  contact_person: string | null;
+  verification_state: OrgVerificationState;
+  /**
+   * The reason behind the LAST decision, so the organisation can fix and
+   * resubmit. The full history lives in admin_actions and is never overwritten.
+   */
+  verification_reason: string | null;
+  verification_decided_at: string | null;
+  verification_submitted_at: string | null;
+  /** DERIVED from verification_state by the database. Never writable. */
   verified: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/** One registration number an organisation quotes. Many per organisation. */
+export interface OrganisationRegistration {
+  id: string;
+  organisation_id: string;
+  /** The scheme, e.g. "Registrar-General" or "NGO Board". Free text: the list is not fixed. */
+  label: string;
+  number: string;
+  created_at: string;
+}
+
+/**
+ * One supporting document an organisation submitted.
+ *
+ * Holds the Cloudinary PUBLIC_ID, never a URL — the asset is private and a
+ * stored address is the thing that leaks. Read it through /api/document-url.
+ */
+export interface OrganisationDocument {
+  id: string;
+  organisation_id: string;
+  document_id: string;
+  label: string | null;
+  created_at: string;
 }
 
 /** Belongs to an OrganisationProfile. */
