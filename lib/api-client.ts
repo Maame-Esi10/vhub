@@ -49,6 +49,7 @@ export const API_ROUTES = {
   credentialReview: '/api/credential-review',
   moderation: '/api/moderation',
   disputeResolution: '/api/dispute-resolution',
+  vettedSource: '/api/vetted-source',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -944,6 +945,39 @@ export function resolveDispute(
   return apiPost<{ status: 'upheld' | 'rejected' }>(
     API_ROUTES.disputeResolution,
     { disputeId, decision, resolution },
+    options
+  );
+}
+
+export interface VettedSourceInput {
+  name: string;
+  url: string;
+  sourceType?: string;
+  rationale: string;
+}
+
+/**
+ * Adds a source to the vetted whitelist. SURFACE ONLY — nothing reads this
+ * list, and no listing is ever fetched from any of these sources. It records
+ * which sources WOULD be acceptable if the deferred ingestion feature is ever
+ * built, while the reasoning is still fresh.
+ */
+export function addVettedSource(
+  source: VettedSourceInput,
+  options?: RequestOptions
+): Promise<{ id: string }> {
+  return apiPost<{ id: string }>(API_ROUTES.vettedSource, { action: 'add', ...source }, options);
+}
+
+/** Removes one. The reason is required: an entry vanishing unexplained is worse than a wrong entry. */
+export function removeVettedSource(
+  id: string,
+  reason: string,
+  options?: RequestOptions
+): Promise<{ removed: boolean }> {
+  return apiPost<{ removed: boolean }>(
+    API_ROUTES.vettedSource,
+    { action: 'remove', id, reason },
     options
   );
 }

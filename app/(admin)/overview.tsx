@@ -15,11 +15,10 @@ import { useAuthStore } from '@/stores/authStore';
  * dashboard's language exactly — the same header row, the same metric tiles,
  * the same card treatment — rather than inventing a third look.
  *
- * What it deliberately does NOT do is show queue counts. The verification,
- * credential, moderation and dispute queues are later packages and do not
- * exist yet; a tile reading "0 pending" would be a lie of omission, since
- * there is no queue for anything to be pending in. The "Coming next" block
- * says so in words instead.
+ * The two tiles count DECISIONS RECORDED, not items waiting. Per-queue counts
+ * live on the Statistics screen, which is one tap away and can explain what
+ * each number means; repeating them here would put the same figure in two
+ * places with two different framings.
  */
 export default function AdminOverview() {
   const router = useRouter();
@@ -115,19 +114,22 @@ export default function AdminOverview() {
           </Text>
         </Pressable>
 
-        <View style={styles.card}>
+        <Pressable
+          onPress={() => router.push('/(admin)/sources')}
+          accessibilityRole="button"
+          accessibilityLabel="Open the vetted sources list"
+          style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+        >
           <View style={styles.cardHeader}>
-            <MaterialCommunityIcons name="progress-wrench" size={20} color={colors.primary} />
-            <Text style={styles.cardTitle}>Coming next</Text>
+            <MaterialCommunityIcons name="link-variant" size={20} color={colors.primary} />
+            <Text style={styles.cardTitle}>Vetted sources</Text>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
           </View>
           <Text style={styles.cardBody}>
-            This is the admin shell and its record-keeping. The review queues are built one at a time, and
-            each will appear here as its own tab:
+            Bodies whose public outreach listings V-HUB would be willing to trust, and why each was
+            accepted. A record only — nothing is fetched from any of them.
           </Text>
-          <View style={styles.list}>
-            <UpcomingRow icon="link-variant" label="Vetted listing sources" />
-          </View>
-        </View>
+        </Pressable>
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -142,21 +144,6 @@ export default function AdminOverview() {
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function UpcomingRow({
-  icon,
-  label,
-}: {
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-  label: string;
-}) {
-  return (
-    <View style={styles.listRow}>
-      <MaterialCommunityIcons name={icon} size={16} color={colors.textSecondary} />
-      <Text style={styles.listLabel}>{label}</Text>
-    </View>
   );
 }
 
@@ -199,7 +186,4 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   cardTitle: { flex: 1, fontFamily: fontFamily.semiBold, fontSize: 16, color: colors.textPrimary },
   cardBody: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 21, color: colors.textSecondary },
-  list: { gap: spacing.md, paddingTop: spacing.xs },
-  listRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  listLabel: { flex: 1, fontFamily: fontFamily.medium, fontSize: 14, color: colors.textPrimary },
 });

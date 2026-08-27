@@ -64,6 +64,13 @@ export type {
 export { platformStatsKeys, usePlatformStats } from './usePlatformStats';
 export type { PlatformStats, MonthlyNoShows } from './usePlatformStats';
 export {
+  vettedSourceKeys,
+  useVettedSources,
+  useAddVettedSource,
+  useRemoveVettedSource,
+} from './useVettedSources';
+export type { VettedSource } from './useVettedSources';
+export {
   notificationKeys,
   useNotifications,
   useMarkNotificationsRead,
