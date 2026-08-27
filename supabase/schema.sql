@@ -532,7 +532,11 @@ drop policy if exists "outreaches_select_open_or_own" on outreaches;
 create policy "outreaches_select_open_or_own"
   on outreaches for select
   to authenticated
-  using (status <> 'draft' or organisation_id = auth.uid());
+  -- `or is_admin()` exists for the statistics screen: every question it asks
+  -- is a count ACROSS the platform, and an admin owns nothing. Without it the
+  -- counts would come back quietly wrong rather than failing, which is worse --
+  -- nobody checks a number that looks plausible.
+  using (status <> 'draft' or organisation_id = auth.uid() or is_admin());
 
 drop policy if exists "outreaches_insert_own" on outreaches;
 create policy "outreaches_insert_own"
@@ -601,6 +605,8 @@ create policy "applications_select_own_or_org"
   to authenticated
   using (
     volunteer_id = auth.uid()
+    -- Same reason as outreaches above: platform-wide counts.
+    or is_admin()
     or exists (
       select 1 from outreaches o
       where o.id = applications.outreach_id

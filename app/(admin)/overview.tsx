@@ -98,6 +98,23 @@ export default function AdminOverview() {
           </Text>
         </Pressable>
 
+        <Pressable
+          onPress={() => router.push('/(admin)/stats')}
+          accessibilityRole="button"
+          accessibilityLabel="Open the platform statistics"
+          style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+        >
+          <View style={styles.cardHeader}>
+            <MaterialCommunityIcons name="chart-box-outline" size={20} color={colors.primary} />
+            <Text style={styles.cardTitle}>Statistics</Text>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+          </View>
+          <Text style={styles.cardBody}>
+            Whether the matching is filling places, whether no-shows are rising or falling, and who is
+            waiting on a decision from you.
+          </Text>
+        </Pressable>
+
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <MaterialCommunityIcons name="progress-wrench" size={20} color={colors.primary} />
@@ -108,8 +125,7 @@ export default function AdminOverview() {
             each will appear here as its own tab:
           </Text>
           <View style={styles.list}>
-            <UpcomingRow icon="scale-balance" label="Attendance and review disputes" />
-            <UpcomingRow icon="chart-box-outline" label="Platform statistics" />
+            <UpcomingRow icon="link-variant" label="Vetted listing sources" />
           </View>
         </View>
 

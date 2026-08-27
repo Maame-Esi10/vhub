@@ -61,6 +61,8 @@ export type {
   DisputeEvidence,
   ResolveDisputeParams,
 } from './useDisputes';
+export { platformStatsKeys, usePlatformStats } from './usePlatformStats';
+export type { PlatformStats, MonthlyNoShows } from './usePlatformStats';
 export {
   notificationKeys,
   useNotifications,
