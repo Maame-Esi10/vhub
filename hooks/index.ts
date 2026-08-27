@@ -48,6 +48,20 @@ export {
 } from './useModeration';
 export type { ModerationSearchRow, ModerateParams } from './useModeration';
 export {
+  disputeKeys,
+  useMyDisputes,
+  useRaiseDispute,
+  useDisputeQueue,
+  useDisputeEvidence,
+  useResolveDispute,
+} from './useDisputes';
+export type {
+  RaiseDisputeParams,
+  DisputeQueueRow,
+  DisputeEvidence,
+  ResolveDisputeParams,
+} from './useDisputes';
+export {
   notificationKeys,
   useNotifications,
   useMarkNotificationsRead,

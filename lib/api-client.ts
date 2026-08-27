@@ -48,6 +48,7 @@ export const API_ROUTES = {
   organisationVerification: '/api/organisation-verification',
   credentialReview: '/api/credential-review',
   moderation: '/api/moderation',
+  disputeResolution: '/api/dispute-resolution',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -923,6 +924,28 @@ export function moderateAccount(
   placesBackfilled?: number;
 }> {
   return apiPost(API_ROUTES.moderation, { targetUserId, action, reason }, options);
+}
+
+/**
+ * An admin's decision on one dispute.
+ *
+ * Upholding records that the volunteer was right and tells both parties in the
+ * same words. It does NOT recompute a V-Score and does not rewrite the
+ * attendance row or the review — that record is the evidence, and a correction
+ * sits beside it rather than on top of it. Recalculating a score from full
+ * history is a separate, gated change.
+ */
+export function resolveDispute(
+  disputeId: string,
+  decision: 'uphold' | 'reject',
+  resolution: string,
+  options?: RequestOptions
+): Promise<{ status: 'upheld' | 'rejected' }> {
+  return apiPost<{ status: 'upheld' | 'rejected' }>(
+    API_ROUTES.disputeResolution,
+    { disputeId, decision, resolution },
+    options
+  );
 }
 
 /** An admin's decision on one organisation. Writes an audit row server-side. */

@@ -1,17 +1,21 @@
-import { useMemo } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
+  ConfirmDialog,
   EmptyState,
   ErrorState,
+  Input,
   ListSkeleton,
   ScreenHeader,
+  Toast,
   VScoreBadge,
   formatEventDate,
 } from '@/components/ui';
 import { getRemarkLabel, getRemarkTone } from '@/constants/review-remarks';
-import { useMyReviews, useOutreachDaysForMany } from '@/hooks';
+import { useMyDisputes, useMyReviews, useOutreachDaysForMany, useRaiseDispute } from '@/hooks';
+import type { Dispute, DisputeType } from '@/types/database';
 import { formatDaySpan } from '@/lib/outreachDays';
 import type { MyEventReview } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
@@ -41,6 +45,55 @@ export default function VolunteerFeedback() {
   const reviewsQuery = useMyReviews(volunteerId);
 
   const reviews = useMemo(() => reviewsQuery.data ?? [], [reviewsQuery.data]);
+
+  /*
+    DISPUTES, keyed by outreach so a card can show its own state.
+
+    One query for all of them rather than one per card, the same batching the
+    day lookups use — a volunteer with thirty reviews must not become thirty
+    round trips.
+  */
+  const disputesQuery = useMyDisputes();
+  const raiseDispute = useRaiseDispute();
+  const disputesByOutreach = useMemo(() => {
+    const map = new Map<string, Dispute>();
+    for (const dispute of disputesQuery.data ?? []) {
+      // Newest first from the query, so the first one seen for an outreach is
+      // the one worth showing.
+      if (!map.has(dispute.outreach_id)) map.set(dispute.outreach_id, dispute);
+    }
+    return map;
+  }, [disputesQuery.data]);
+
+  const [disputing, setDisputing] = useState<{
+    outreachId: string;
+    title: string;
+    type: DisputeType;
+  } | null>(null);
+  const [statement, setStatement] = useState('');
+  const [attempted, setAttempted] = useState(false);
+  const [disputeToast, setDisputeToast] = useState<string | null>(null);
+
+  function submitDispute() {
+    setAttempted(true);
+    if (!disputing || statement.trim().length < 10) return;
+
+    raiseDispute.mutate(
+      {
+        outreachId: disputing.outreachId,
+        type: disputing.type,
+        statement: statement.trim(),
+      },
+      {
+        onSuccess: () => {
+          setDisputing(null);
+          setStatement('');
+          setAttempted(false);
+          setDisputeToast('Sent. V-HUB will look at it and tell you and the organiser the outcome.');
+        },
+      }
+    );
+  }
 
   /*
     The days each reviewed event ran on, batched. A review of a four-day
@@ -111,6 +164,13 @@ export default function VolunteerFeedback() {
             days={
               item.outreach ? reviewDays.data?.[item.outreach.id]?.map((day) => day.day) : undefined
             }
+            dispute={item.outreach ? disputesByOutreach.get(item.outreach.id) : undefined}
+            onDispute={(type) => {
+              if (!item.outreach) return;
+              setDisputing({ outreachId: item.outreach.id, title: item.outreach.title, type });
+              setStatement('');
+              setAttempted(false);
+            }}
           />
         )}
         ListEmptyComponent={
@@ -121,11 +181,68 @@ export default function VolunteerFeedback() {
           />
         }
       />
+      {/*
+        The statement and the act of disputing are one thing. Splitting them
+        would let a volunteer file a dispute and be asked afterwards what it was
+        about — and an admin cannot judge a complaint with no account of it.
+      */}
+      <ConfirmDialog
+        visible={!!disputing}
+        icon="scale-balance"
+        title={
+          disputing?.type === 'attendance' ? 'You were there?' : 'Why is this unfair?'
+        }
+        message={
+          disputing?.type === 'attendance'
+            ? `Tell V-HUB what happened at ${disputing.title}. Anything that helps — whether you scanned the code, who you worked with, when you arrived.`
+            : `Tell V-HUB why the review of ${disputing?.title ?? 'this event'} is not fair. Both you and the organiser will be told the outcome and the reason.`
+        }
+        confirmLabel="Send it"
+        cancelLabel="Not now"
+        busy={raiseDispute.isPending}
+        onConfirm={submitDispute}
+        onCancel={() => {
+          setDisputing(null);
+          setStatement('');
+          setAttempted(false);
+        }}
+      >
+        <Input
+          label="What happened"
+          required
+          value={statement}
+          onChangeText={setStatement}
+          placeholder="In your own words"
+          multiline
+          error={
+            attempted && statement.trim().length < 10
+              ? 'Give V-HUB something to go on — a sentence or two at least.'
+              : undefined
+          }
+        />
+        {raiseDispute.error ? (
+          <Text style={styles.disputeError}>{raiseDispute.error.message}</Text>
+        ) : null}
+      </ConfirmDialog>
+
+      <Toast message={disputeToast} onDismiss={() => setDisputeToast(null)} durationMs={5000} />
+
     </SafeAreaView>
   );
 }
 
-function ReviewCard({ review, days }: { review: MyEventReview; days?: readonly string[] }) {
+function ReviewCard({
+  review,
+  days,
+  dispute,
+  onDispute,
+}: {
+  review: MyEventReview;
+  days?: readonly string[];
+  /** An existing dispute about this event, if there is one. */
+  dispute?: Dispute;
+  onDispute: (type: DisputeType) => void;
+}) {
   // A no-show is shown plainly rather than hidden. It moved their V-Score, so
   // concealing it would leave the volunteer with a number they cannot explain.
   const noShow = review.attended === false;
@@ -179,6 +296,51 @@ function ReviewCard({ review, days }: { review: MyEventReview; days?: readonly s
           <Text style={styles.noteText}>{review.notes}</Text>
         </View>
       ) : null}
+
+      {/*
+        DISPUTING IS OFFERED HERE because this is the only screen where a
+        volunteer sees what was said about them, and a record you can read but
+        cannot answer is worse than one you never see.
+
+        Two different challenges, and which is offered depends on what the
+        review says: "I was there" only makes sense against a no-show, while
+        "this is unfair" only makes sense against ratings. Offering both
+        everywhere would ask the volunteer to work out which one applies.
+      */}
+      {dispute ? (
+        <View style={styles.disputeState}>
+          <MaterialCommunityIcons
+            name={
+              dispute.status === 'open'
+                ? 'clock-outline'
+                : dispute.status === 'upheld'
+                  ? 'check-circle-outline'
+                  : 'information-outline'
+            }
+            size={16}
+            color={dispute.status === 'upheld' ? colors.success : colors.textSecondary}
+          />
+          <Text style={styles.disputeStateText}>
+            {dispute.status === 'open'
+              ? 'You have disputed this. V-HUB is looking at it.'
+              : dispute.status === 'upheld'
+                ? `Upheld. ${dispute.resolution ?? ''}`
+                : `Not upheld. ${dispute.resolution ?? ''}`}
+          </Text>
+        </View>
+      ) : (
+        <Pressable
+          onPress={() => onDispute(noShow ? 'attendance' : 'review')}
+          accessibilityRole="button"
+          accessibilityLabel={noShow ? 'Say you were there' : 'Say this review is unfair'}
+          style={({ pressed }) => [styles.disputeRow, pressed && styles.disputePressed]}
+        >
+          <MaterialCommunityIcons name="scale-balance" size={16} color={colors.textSecondary} />
+          <Text style={styles.disputeLabel}>
+            {noShow ? 'I was there — dispute this' : 'I think this is unfair'}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -206,6 +368,32 @@ function ScorePill({ label, value }: { label: string; value: number | null }) {
 }
 
 const styles = StyleSheet.create({
+  disputeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.base,
+    paddingVertical: spacing.sm,
+  },
+  disputePressed: { opacity: 0.7 },
+  disputeLabel: { fontFamily: fontFamily.medium, fontSize: 13, color: colors.textSecondary },
+  disputeState: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.base,
+    padding: spacing.base,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+  },
+  disputeStateText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textPrimary,
+  },
+  disputeError: { fontFamily: fontFamily.regular, fontSize: 13, color: colors.danger },
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -84,6 +84,38 @@ export type OrgVerificationState =
   /** Permanent. Set only by an admin (package F). */
   | "banned";
 
+/**
+ * What a volunteer is challenging. Two things and only two, because they are
+ * the two that cost them something they cannot otherwise get back.
+ */
+export type DisputeType = "attendance" | "review";
+
+export type DisputeStatus = "open" | "upheld" | "rejected" | "withdrawn";
+
+/**
+ * A volunteer's challenge to a record about them.
+ *
+ * UPHOLDING RECORDS THE CORRECTION AND MOVES NO SCORE. Making the V-Score
+ * derivable and replayable is a separate change to something already built and
+ * tested, and is its own approval gate. Nothing here depends on how the score
+ * is stored, which is why disputes ship against the current model.
+ */
+export interface Dispute {
+  id: string;
+  volunteer_id: string;
+  outreach_id: string;
+  type: DisputeType;
+  /** Which day. Attendance is per day; null for a review dispute. */
+  outreach_day_id: string | null;
+  statement: string;
+  status: DisputeStatus;
+  /** The admin's written reason, shown verbatim to both parties. */
+  resolution: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
 export type OutreachRoleType = "clinical" | "support";
 
 /**

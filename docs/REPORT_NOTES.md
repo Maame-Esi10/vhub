@@ -2681,3 +2681,67 @@ people for its own sake, and would be the one screen where an admin's reach over
 ordinary users is casual rather than deliberate. Nothing appears until two
 characters are typed. The one list shown unprompted is everyone currently
 stopped, so a moderation can be found and undone without remembering a name.
+
+## Admin phase, package G — disputes (2026-08-26)
+
+A volunteer can challenge two things, and only two: being marked absent when
+they say they were there, and a review they believe is unfair. Both are records
+that cost them something they cannot otherwise get back.
+
+### What upholding does, and what it deliberately does not
+
+Upholding records that the volunteer was right, tells both parties in the same
+words, and leaves the record itself alone. It does not recompute a V-Score, and
+it does not flip the attendance row or rewrite the review.
+
+That is a limit rather than an unfinished edge, and there are two separate
+reasons for it.
+
+The first is process: making the V-Score derivable — replaying every event from
+70 rather than keeping a running total — is a change to something already built,
+working and tested, and it is its own approval gate. Nothing about the queue,
+the evidence view or the decision depends on how the score is stored, which is
+exactly why disputes could ship first and gain the recalculation later without
+any of this changing.
+
+The second is design, and it would hold even if the reversal were approved:
+overwriting the attendance row would destroy the record of what happened in
+favour of a conclusion about it. That row is service-role-only precisely so
+neither party can forge it, and an admin editing it would be the same forgery
+with better intentions. The dispute IS the correction, and it sits beside the
+record rather than on top of it.
+
+### Both sides, objectively
+
+The admin screen shows the volunteer's statement and, beside it, the record.
+For an attendance dispute that is whether a scan exists, what the silent
+location check returned, and what the organisation marked. For a review dispute
+it is the ratings and the note, plus the volunteer's aggregate history — because
+a volunteer with thirty events and one poor review is a different case from one
+with two events and two poor reviews, and a statement alone cannot show that.
+
+Reading any of that needed an RLS change: `attendance` and `event_reviews` are
+scoped to the volunteer and their organisation, and an admin is neither. Without
+`or is_admin()` the screen would have shown a statement with nothing to weigh
+it against.
+
+### Raising is an insert; resolving is an endpoint
+
+Nothing about raising a dispute needs a secret, and every column that decides
+anything — `status`, `resolution`, `resolved_by` — is withheld by the grant
+list, so the worst a crafted call can do is file a dispute the caller was always
+entitled to file. The resolution is the half that needs the service role.
+
+**The consequence, stated rather than left as a surprise: a volunteer cannot
+withdraw a dispute from the app.** Withdrawing needs `status` in the grant list,
+and a client that could write `status` could mark its own dispute upheld. They
+can edit their statement while it is open, and an admin can reject one that is
+no longer being pursued.
+
+### Where it is offered
+
+On the feedback screen, which is the only place a volunteer sees what was said
+about them — a record you can read but cannot answer is worse than one you never
+see. Which challenge is offered depends on what the review says: "I was there"
+only makes sense against a no-show, "this is unfair" only against ratings.
+Offering both everywhere would ask the volunteer to work out which applies.

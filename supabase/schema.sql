@@ -889,6 +889,9 @@ create policy "event_reviews_select_org_or_volunteer"
   to authenticated
   using (
     volunteer_id = auth.uid()
+    -- `or is_admin()`: a review dispute cannot be judged without reading the
+    -- review it is about.
+    or is_admin()
     or exists (
       select 1 from outreaches o
       where o.id = event_reviews.outreach_id
@@ -1110,6 +1113,10 @@ create policy "attendance_select_own_or_org"
   to authenticated
   using (
     volunteer_id = auth.uid()
+    -- `or is_admin()`: an attendance dispute is judged on this record -- did
+    -- they scan, and what did the silent location check return -- and an admin
+    -- is neither the volunteer nor the organisation.
+    or is_admin()
     or exists (
       select 1 from outreaches o
       where o.id = attendance.outreach_id
@@ -1542,6 +1549,96 @@ drop trigger if exists trg_applications_refuse_suspended on applications;
 create trigger trg_applications_refuse_suspended
   before insert on applications
   for each row execute function refuse_application_from_suspended_volunteer();
+
+-- ============================================================
+-- disputes -- a volunteer's challenge to a record about them.
+--
+-- TWO THINGS CAN BE DISPUTED, and only two, because they are the two that cost
+-- a volunteer something they cannot otherwise get back: being marked absent
+-- when they say they were there, and a review they believe is unfair.
+--
+-- THE V-SCORE IS NOT TOUCHED BY ANY OF THIS. Upholding a dispute records the
+-- correction and tells both parties; it does not recompute a score. Making the
+-- V-Score derivable and replayable is a separate change to something already
+-- built and tested, and it is its own approval gate.
+-- ============================================================
+do $$ begin
+  create type dispute_type as enum ('attendance', 'review');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type dispute_status as enum ('open', 'upheld', 'rejected', 'withdrawn');
+exception when duplicate_object then null; end $$;
+
+create table if not exists disputes (
+  id uuid primary key default gen_random_uuid(),
+  volunteer_id uuid not null references profiles(id) on delete cascade,
+  outreach_id uuid not null references outreaches(id) on delete cascade,
+  type dispute_type not null,
+  -- Attendance is per DAY, so "I was marked absent" has to name which one or
+  -- an admin cannot look up the evidence. Null for a review dispute.
+  outreach_day_id uuid references outreach_days(id) on delete set null,
+  statement text not null check (length(btrim(statement)) > 0),
+  status dispute_status not null default 'open',
+  resolution text,
+  -- Nullable on purpose: the dispute outlives the admin who decided it, the
+  -- same rule as admin_actions.
+  resolved_by uuid references profiles(id) on delete set null,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+-- One OPEN dispute of each kind per event. Attendance and the review of the
+-- same outreach are different complaints and may both be open; re-filing the
+-- same one is noise. A partial index rather than a constraint, so a resolved
+-- dispute never blocks a later, genuinely new one.
+create unique index if not exists disputes_one_open_per_kind
+  on disputes (volunteer_id, outreach_id, type)
+  where status = 'open';
+
+create index if not exists idx_disputes_open on disputes (status, created_at);
+
+alter table disputes enable row level security;
+
+drop policy if exists "disputes_select_parties" on disputes;
+create policy "disputes_select_parties"
+  on disputes for select
+  to authenticated
+  using (
+    volunteer_id = auth.uid()
+    or is_admin()
+    or exists (
+      select 1 from outreaches o
+      where o.id = disputes.outreach_id and o.organisation_id = auth.uid()
+    )
+  );
+
+drop policy if exists "disputes_insert_own" on disputes;
+create policy "disputes_insert_own"
+  on disputes for insert
+  to authenticated
+  with check (volunteer_id = auth.uid());
+
+drop policy if exists "disputes_update_own" on disputes;
+create policy "disputes_update_own"
+  on disputes for update
+  to authenticated
+  using (volunteer_id = auth.uid() and status = 'open')
+  with check (volunteer_id = auth.uid());
+
+revoke insert, update, delete on disputes from authenticated;
+grant insert (
+  volunteer_id,
+  outreach_id,
+  type,
+  outreach_day_id,
+  statement
+) on disputes to authenticated;
+-- ONLY the statement. `status` is absent: a client able to write it could mark
+-- its own dispute upheld. The consequence, stated rather than left as a
+-- surprise -- a volunteer cannot WITHDRAW a dispute from the app; they can
+-- edit the statement, and an admin can reject one they no longer want pursued.
+grant update (statement) on disputes to authenticated;
 
 -- ============================================================
 -- Public discovery views.

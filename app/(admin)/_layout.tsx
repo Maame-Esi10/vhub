@@ -62,14 +62,21 @@ export default function AdminTabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="activity"
-        options={{ title: 'Activity', tabBarIcon: tabBarIcon('history', 'history') }}
+        name="disputes"
+        options={{ title: 'Disputes', tabBarIcon: tabBarIcon('scale-balance', 'scale-balance') }}
       />
 
       {/*
         Pushed from the Home tab rather than selected from the bar — every
         route file in this group becomes a tab unless it opts out.
       */}
+      {/*
+        Activity is pushed from Home rather than holding a place on the bar.
+        Five is what the other two groups use and what fits without truncating,
+        and the four queues are what an admin opens the app to do — the log is
+        what they consult afterwards.
+      */}
+      <Tabs.Screen name="activity" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="account-security" options={{ href: null }} />
       <Tabs.Screen name="organisation/[id]" options={{ href: null }} />
