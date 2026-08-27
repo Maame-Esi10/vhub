@@ -2745,3 +2745,83 @@ about them — a record you can read but cannot answer is worse than one you nev
 see. Which challenge is offered depends on what the review says: "I was there"
 only makes sense against a no-show, "this is unfair" only against ratings.
 Offering both everywhere would ask the volunteer to work out which applies.
+
+## Admin phase, packages H, I and J (2026-08-26)
+
+### H — the policy, written to be read
+
+Plain language throughout, per the brief: the readers are nurses and students
+giving up Saturdays, not procurement lawyers. Every paragraph says one thing and
+says it in the second person.
+
+The location paragraph is the strongest privacy claim this project can make, and
+it is true of the code today: `/api/checkin` reads a position once at the scan,
+compares it with the venue, and keeps one word — at the venue, near it, or
+elsewhere. The coordinates are never stored, so there is no movement record to
+disclose, subpoena or leak.
+
+**The standing rule that goes with it: if a claim in the policy stops matching
+what the app does, the claim is the bug.** A privacy policy is the one document
+in a project that must be edited when the code changes, not the other way round.
+
+It lives at `app/policy.tsx`, outside every role group — the same placement as
+the offline screen — because all three roles reach it from three different
+Settings screens and from the credential consent block. The auth guard now
+treats it as always-open: somebody deciding whether to register has the most
+reason of anyone to read it, and bouncing them to welcome would be the app
+refusing to explain itself.
+
+### I — statistics, where each number answers a stated question
+
+The brief asks for mobile-appropriate statistics rather than a dashboard, and
+names the questions worth answering. Each card therefore carries its question in
+words above the figure, because a number with no question attached is
+decoration.
+
+The backlog leads deliberately. It is the only figure on the screen about the
+admin's own conduct rather than the platform's: everything else can wait,
+somebody waiting on a decision cannot.
+
+**Drafts and cancelled events are excluded from the fill rate.** A draft never
+recruited anybody, and a cancelled event's empty places are not a matching
+failure — including either would drag the rate down for reasons that have
+nothing to do with matching, which is the one thing the number exists to
+measure.
+
+**Every month in the no-show window is seeded, including empty ones.** A trend
+with quiet months missing reads as a line that jumped, when in fact nothing
+happened.
+
+The bars are plain Views. A charting library would be a new dependency — gated
+in this project — for six numbers, and six bars scaled to the largest is a chart
+already.
+
+This package also needed an RLS change rather than only a screen: `outreaches`
+and `applications` are both row-scoped, and an admin owns nothing and applies to
+nothing, so every count would have come back quietly wrong rather than failing.
+Quietly is the problem — nobody re-checks a number that looks plausible.
+
+### J — a whitelist, and deliberately nothing that reads it
+
+Surface only. Nothing reads `vetted_sources`, no listing is fetched, no outreach
+is created from one. The ingestion feature stays deferred; this records which
+sources would be acceptable while the reasoning is fresh rather than
+reconstructed later from memory.
+
+**There is no `last_fetched_at`, no `active` flag and no schedule.** Columns that
+exist for a feature that does not are how a schema starts lying: a
+`last_fetched_at` that is forever null reads as a broken fetcher rather than an
+absent one.
+
+`url` is not validated as a URL and `source_type` is free text — a district
+health directorate's noticeboard has no scheme, and the kinds of body are
+open-ended. `rationale` is required, because a whitelist without reasons is a
+list somebody has to take on trust, and whoever approved each entry will not
+always be there to ask.
+
+A removal reads the row before deleting it, so the audit entry can say what was
+removed. Once the row is gone, that entry is the only record it ever existed.
+
+And the screen says, in the first paragraph, that nothing is fetched. An admin
+who added three sources and saw nothing happen would reasonably conclude the app
+was broken and spend a while proving it.

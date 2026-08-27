@@ -1,8 +1,21 @@
 # Admin Phase — Plan
 
-**Status: PACKAGE A IS BUILT (2026-08-25). B onwards is still plan only.**
-Written 2026-08-21 at the owner's request, so the next session could start work
-without rebuilding context.
+**Status: THE WHOLE ADMIN PHASE IS BUILT (A through J, 2026-08-25 to
+2026-08-26).** Written 2026-08-21 at the owner's request; kept as the record of
+what was intended and why, alongside the notes below on where the build
+departed from it. The one item still gated and NOT built is the V-Score
+reversal, which was always its own approval gate.
+
+**Two deliberate departures, both argued in CLAUDE.md and
+`docs/REPORT_NOTES.md`:**
+
+1. **Moderation is its own column on `profiles`, not part of
+   `org_verification_state`** (package F). Folding suspension into the
+   verification state would make suspending a verified organisation erase the
+   record that its documents were checked, with nothing to restore it from.
+2. **There is no `rejected` volunteer verification status** (package D). A
+   declined volunteer is unverified; what they need is the reason, which is a
+   column, not a fourth enum value with a branch in every screen.
 
 The source of truth for *what* is wanted is the owner's 12-section brief of
 2026-08-11. This document is the *how*: the order, the prerequisites, what each
@@ -85,15 +98,15 @@ disagreement with reasons. Two changes, both argued above and below:
 | # | Package | Why here |
 |---|---|---|
 | **A** ✅ | §1 admin role + `(admin)` group + §12 audit trail | **BUILT 2026-08-25.** Hard prerequisite. Nothing else can be built or tested without an admin to be. |
-| **B** | §6(a) private documents + signed URLs | Moved BEFORE the review queues, which are what bring real documents in. Nothing real has been exposed; the path is simply not private yet. |
-| **C** | §3 organisation verification | The blocking half of the trust chain. |
-| **D** | §4 volunteer credentials, Gate 1 | The other blocking half; closes the "verified without applying anywhere" gap. |
-| **E** | §6(b)(c) access control + consent, §5 guidelines | Finishes the document story around the queues that now exist. |
-| **F** | §9 moderation | Needs verification states to exist first. |
-| **G** | §8 disputes, WITHOUT V-Score reversal | Ships against the current V-Score model. See below. |
-| **H** | §7 privacy policy + terms | Content, once the behaviour it describes is real. |
-| **I** | §11 stats | Reads everything above. |
-| **J** | §10 vetted sources, surface only | Genuinely last; the feature behind it stays deferred. |
+| **B** ✅ | §6(a) private documents + signed URLs | Moved BEFORE the review queues, which are what bring real documents in. Nothing real has been exposed; the path is simply not private yet. |
+| **C** ✅ | §3 organisation verification | The blocking half of the trust chain. |
+| **D** ✅ | §4 volunteer credentials, Gate 1 | The other blocking half; closes the "verified without applying anywhere" gap. |
+| **E** ✅ | §6(b)(c) access control + consent, §5 guidelines | Finishes the document story around the queues that now exist. |
+| **F** ✅ | §9 moderation | Needs verification states to exist first. |
+| **G** ✅ | §8 disputes, WITHOUT V-Score reversal | Ships against the current V-Score model. See below. |
+| **H** ✅ | §7 privacy policy + terms | Content, once the behaviour it describes is real. |
+| **I** ✅ | §11 stats | Reads everything above. |
+| **J** ✅ | §10 vetted sources, surface only | Genuinely last; the feature behind it stays deferred. |
 
 **Why §12 is not last.** Security and the audit trail are listed twelfth in the
 brief but cannot be built after the actions they record — an admin write shipped
