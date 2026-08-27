@@ -352,7 +352,13 @@ export function useAuthGuard() {
     // including the auth screens. Treated like (auth) by every rule below --
     // otherwise a signed-out user tapping it is thrown straight back to
     // welcome, and a half-onboarded volunteer can never see it at all.
-    const atOffline = groupSegment === 'offline';
+    // Root-level routes that belong to nobody and are open to everybody,
+    // signed in or not. `offline` is reachable from the banner on any screen
+    // including the auth ones; `policy` is the privacy policy and terms, which
+    // a person deciding whether to register has the most reason of anyone to
+    // read. Bouncing either to welcome would be the app refusing to explain
+    // itself.
+    const atOffline = groupSegment === 'offline' || groupSegment === 'policy';
 
     if (!user) {
       if (!inAuthGroup && !atOffline) {

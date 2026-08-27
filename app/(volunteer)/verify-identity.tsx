@@ -241,6 +241,15 @@ export default function VolunteerVerifyIdentity() {
                     I understand this, and I agree to V-HUB storing my document for verification.
                   </Text>
                 </Pressable>
+
+                <Pressable
+                  onPress={() => router.push('/policy')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Read the privacy policy"
+                  hitSlop={8}
+                >
+                  <Text style={styles.consentLink}>Read the full privacy policy</Text>
+                </Pressable>
               </View>
             ) : null}
 
@@ -481,6 +490,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     color: colors.textSecondary,
+  },
+  consentLink: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.primary,
+    marginTop: spacing.sm,
   },
   consentAgree: {
     flex: 1,

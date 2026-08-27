@@ -61,6 +61,20 @@ export default function AdminSettings() {
           </Text>
         </View>
 
+        <SettingsGroupLabel>ABOUT</SettingsGroupLabel>
+        <SettingsRow
+          icon="shield-lock-outline"
+          label="Privacy Policy"
+          value="What V-HUB knows, and what it never keeps"
+          onPress={() => router.push('/policy')}
+        />
+        <SettingsRow
+          icon="file-document-outline"
+          label="Terms of Use"
+          value="What you and organisations each promise"
+          onPress={() => router.push('/policy?tab=terms')}
+        />
+
         <View style={styles.signOutBlock}>
           <SignOutButton />
         </View>
