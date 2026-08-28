@@ -32,6 +32,14 @@
 -- than reconstructed.
 --
 -- Small, written once, and safe to drop by hand in a year.
+--
+-- CORRECTED 2026-08-27 by 20260905_lock_vscore_backup.sql. This table was
+-- created here with NO row-level security, no policy and no revoke, unlike
+-- every other table in the project -- so Supabase's default grants left it
+-- readable by any signed-in user, and it holds people's scores. It was
+-- reasoned about as migration scaffolding rather than as a place data lives.
+-- Run 20260905 if you have not. The lesson: whether a table needs RLS is
+-- decided by WHAT IS IN IT, never by what it is for.
 -- ============================================================
 
 create table if not exists v_score_recompute_backup (
