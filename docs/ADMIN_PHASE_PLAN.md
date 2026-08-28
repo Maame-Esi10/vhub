@@ -1,10 +1,10 @@
 # Admin Phase — Plan
 
 **Status: THE WHOLE ADMIN PHASE IS BUILT (A through J, 2026-08-25 to
-2026-08-26).** Written 2026-08-21 at the owner's request; kept as the record of
-what was intended and why, alongside the notes below on where the build
-departed from it. The one item still gated and NOT built is the V-Score
-reversal, which was always its own approval gate.
+2026-08-26), and so is the V-Score reversal (approved 2026-08-26, package K).**
+Written 2026-08-21 at the owner's request; kept as the record of what was
+intended and why, alongside the notes below on where the build departed from it.
+Nothing in the brief is now gated.
 
 **Two deliberate departures, both argued in CLAUDE.md and
 `docs/REPORT_NOTES.md`:**
@@ -107,6 +107,7 @@ disagreement with reasons. Two changes, both argued above and below:
 | **H** ✅ | §7 privacy policy + terms | Content, once the behaviour it describes is real. |
 | **I** ✅ | §11 stats | Reads everything above. |
 | **J** ✅ | §10 vetted sources, surface only | Genuinely last; the feature behind it stays deferred. |
+| **K** ✅ | §8 V-Score reversal | **Approved 2026-08-26**, after G shipped without it. Its own gate, opened separately. |
 
 **Why §12 is not last.** Security and the audit trail are listed twelfth in the
 brief but cannot be built after the actions they record — an admin write shipped
@@ -327,10 +328,17 @@ dispute records the correction and notifies both parties; what it does to the
 score is the separate question below. Nothing about the queue, the evidence view
 or the decision depends on how the score is stored.
 
-### The V-Score reversal — its own approval gate, not part of this package
+*That prediction held.* The reversal was approved on 2026-08-26 and built as
+package K, and package G's queue, evidence view and decision screen needed no
+change at all — the only edit to `/api/dispute-resolution` was a recompute call
+and the two numbers it now reports.
+
+### The V-Score reversal — APPROVED 2026-08-26 and BUILT as package K
 
 This is the only item in the whole brief that changes something already built,
-working and tested, so it is planned separately and built only on an explicit yes.
+working and tested, so it was planned separately and built only on an explicit
+yes. That yes was given on 2026-08-26. What follows is the proposal as it was
+put, with a note at the end recording what the build actually did.
 
 **The proposal:** on an upheld dispute, mark the event's outcome corrected and
 **recompute the V-Score from full event history — start at 70 and replay every
@@ -356,6 +364,32 @@ wrong review is permanent.
 standing decision of 2026-08-21 holds: penalties stay uncalled until everything
 is device-tested, because a bug that has already written to reputation data is an
 audit-and-repair job rather than a code fix.
+
+#### What the build did, 2026-08-26
+
+Every bullet above was honoured. Two things are worth recording because they were
+not foreseen when this was written.
+
+**The order of the replay is FILING order (`event_reviews.created_at`, then
+`id`), not event date.** "Chronologically" above is ambiguous and the difference
+is not cosmetic: the blend is order-dependent, so replaying by event date would
+re-insert a January event that was reviewed in June *ahead* of events already
+counted, moving a score for a reason unconnected to any error. Filing order also
+buys the property the migration rests on — for a volunteer with no upheld dispute
+the replay must reproduce the stored score *exactly*, which makes the dry run
+self-checking rather than a leap of faith.
+
+**The paragraph above about the penalty path turned out to be the crux, and it
+resolved the other way.** Making the score derived means there can be exactly one
+writer of it: the replay. A flat penalty applied by arithmetic on the stored
+number sits in no history, so the next replay erases it silently — after a screen
+has already shown it. `/api/vscore`'s `penalty` action therefore now REFUSES with
+a 409 rather than staying dormant. Nothing is lost for the no-show, which already
+had a home in the history (a review filed with `attended: false` floors that
+event's outcome to 0, and CLAUDE.md already required one writer so that a no-show
+could not be punished twice). The two *cancellation* penalties genuinely have no
+home, because a cancellation produces no review row; giving them one needs a
+table of score events, which is a schema change and stays gated.
 
 ---
 

@@ -2697,6 +2697,11 @@ it does not flip the attendance row or rewrite the review.
 That is a limit rather than an unfinished edge, and there are two separate
 reasons for it.
 
+**Written before the reversal was approved.** It was approved on 2026-08-26 and
+built as package K, so the first sentence of this section is now only half true:
+upholding DOES recompute the V-Score. Everything else in it still holds, and the
+second reason below is why. See "Package K" at the end of this document.
+
 The first is process: making the V-Score derivable — replaying every event from
 70 rather than keeping a running total — is a change to something already built,
 working and tested, and it is its own approval gate. Nothing about the queue,
@@ -2825,3 +2830,135 @@ removed. Once the row is gone, that entry is the only record it ever existed.
 And the screen says, in the first paragraph, that nothing is fetched. An admin
 who added three sources and saw nothing happen would reasonably conclude the app
 was broken and spend a while proving it.
+
+
+## Admin phase, package K — the V-Score becomes a derived value (2026-08-26)
+
+This was the one item in the twelve-section brief that changes something already
+built, working and tested, so it sat behind its own approval gate for the whole
+admin phase and was built only after an explicit yes.
+
+### What actually changed, and what did not
+
+**The formula did not change.** A score still starts at 70, and each reviewed
+event still moves it by `0.7 × old + 0.3 × event_outcome`, with the outcome
+still derived from attendance and the two ratings. Every band boundary, the
+reliability multiplier and the ranking are untouched, and the unit tests that
+cover them all still pass unchanged.
+
+**What changed is where the number lives.** `volunteer_profiles.v_score` used to
+be the truth: each review was blended into whatever was stored, and the previous
+value was gone. It is now a **cache** of a value derived by replaying the
+volunteer's entire review history from 70. The truth is `event_reviews` plus any
+upheld `disputes`.
+
+In plain terms: instead of adding today's review to yesterday's number, the
+system now recalculates the whole thing from the beginning every time. For
+somebody with a clean history that produces exactly the same answer — and it has
+to, which is the safety property the migration was built around.
+
+### Why it was worth doing, beyond the dispute case
+
+The dispute case is the obvious one. A running total has no way back. An upheld
+dispute could record on paper that the volunteer was right while changing nothing
+about the number the mistake produced, which is a poor kind of vindication.
+
+The less obvious one is that the running total was **already quietly wrong**.
+`event_reviews` is upserted on `(outreach_id, volunteer_id)` — meaning a second
+review of the same volunteer for the same event overwrites the first rather than
+adding a row. But the score arithmetic did not know that. An organisation that
+filed a review and then corrected it blended a second time into a score the first
+version had already moved, and incremented `events_attended` a second time too.
+Nobody had reported this, and nobody would have: the resulting number is
+plausible. Replaying makes an edited review produce the score the edited history
+implies, and the attendance count to match, with nobody having to notice.
+
+### Filing order, not event date — and why the distinction is not pedantry
+
+The plan said "replay every event chronologically", which is ambiguous. The
+replay uses the order the reviews were **filed** (`event_reviews.created_at`,
+with `id` breaking ties), not the order the events happened.
+
+The blend is order-dependent: the most recent event is weighted most heavily,
+so the same set of reviews in a different order produces a different score. If
+the replay used event dates, a January event that an organisation got round to
+reviewing in June would be re-inserted *before* events that had already been
+counted — moving somebody's score for a reason that has nothing to do with any
+error. There is a test asserting that order changes the result, so this is
+recorded as a property of the design rather than left as a surprise.
+
+Filing order also buys the property the whole migration rests on: for a volunteer
+with no upheld dispute, the replay must reproduce the stored score **exactly**.
+That turns the migration's dry run from a leap of faith into a check — any
+unexplained movement is a bug in the replay, not a correction, and the report
+says which is which.
+
+### Upholding voids the event; it does not invent a better one
+
+An upheld dispute makes that event stop counting. It is not replaced with a
+better rating, and this is deliberate. Upholding says "this record should not
+have counted against you"; it does not say what the ratings should have been, and
+nobody knows. Substituting a number would be exactly the fabrication that the
+removed midpoint default was — the 3-out-of-5 that quietly cost good volunteers
+points because 60 sits below the 70 everyone starts at.
+
+An upheld **attendance** dispute additionally restores the attendance count,
+because being counted as present is the thing they were disputing.
+
+### The one real casualty: the flat penalty endpoint
+
+Making the score derived means there can be exactly one writer of it — the
+replay. That forced a decision about `/api/vscore`'s `penalty` action, which
+applied a flat deduction (no-show −15, late cancellation −8, on-time −2) by
+arithmetic straight onto the stored number.
+
+Under the new model that action is actively dangerous. A penalty written that way
+sits in no history, so the next review — or the next upheld dispute, or a re-run
+of the recompute — replays from 70 and the deduction vanishes. Silently, after a
+screen has already shown it. A deduction that disappears with nobody noticing is
+worse than one that was never applied.
+
+The action therefore now **refuses with a 409** and says why. Three things make
+this cost less than it sounds:
+
+- **Nothing in the app has ever called it.** The typed client wrapper exists in
+  `lib/api-client.ts` and no screen uses it, so no behaviour changed for anyone.
+- **The no-show loses nothing.** A review filed with `attended: false` already
+  floors that event's outcome to 0, which is the same punishment by the one route
+  that survives a replay. CLAUDE.md already required exactly one writer of the
+  score so that a single no-show could not be punished twice — this action was a
+  second route to the same punishment even before the score became derived.
+- **Only the two cancellation penalties are genuinely homeless**, because a
+  cancellation produces no review row for the replay to read. Giving them a home
+  means a table of score events, which is a schema change and therefore stays
+  gated. The client wrapper is marked deprecated rather than deleted, so the
+  contract is still visible if that table is ever approved.
+
+### The migration ships as two files, on purpose
+
+`20260903a` adds one nullable column, creates the replay as two SQL functions,
+and ends with a **dry-run report** listing every volunteer whose score or
+attendance count would move, largest movement first, with a `why` column
+classifying each row as `correction` (an upheld dispute — expected),
+`review edit` (the double-counting bug above — expected, and fixed by this) or
+`INVESTIGATE`. It writes no score and can be run repeatedly.
+
+`20260903b` is the write, and is separate for exactly that reason: the first file
+can be pasted freely, the second should be pasted once, on purpose, after the
+report has been read. It keeps a permanent backup table of the previous numbers —
+the only record of what the running total said — and ends with four verification
+figures that should all read zero or match.
+
+`INVESTIGATE` should be empty on this platform. There is precisely one known way
+it can be non-empty: a flat penalty applied through the endpoint described above,
+which left no record of itself anywhere. That is why the endpoint now refuses,
+and why the migration comment names it.
+
+### The SQL is a second implementation of one rule, taken deliberately
+
+`vscore_event_outcome()` in the migration mirrors `computeEventOutcome()` in
+TypeScript line for line. Two implementations of one rule is a genuine risk, and
+it was accepted for one reason: the report showing how far every score would move
+had to be producible in the Supabase SQL editor before any code was deployed.
+The TypeScript is the version that runs in production, and the migration says so
+— if they ever disagree, the TypeScript is right and the SQL is the bug.

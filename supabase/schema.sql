@@ -331,6 +331,16 @@ alter table volunteer_profiles
 alter table volunteer_profiles
   add column if not exists document_consent_at timestamptz;
 
+-- When v_score was last DERIVED by replaying the volunteer's whole review
+-- history (V-Score reversal, owner-approved 2026-08-26 --
+-- supabase/migrations/20260903a/b). v_score stopped being a running total that
+-- each review blends into and became a CACHE of that replay; the truth is
+-- event_reviews plus any upheld disputes. A derived value nothing records the
+-- age of is indistinguishable from a stale one, which is what this column is
+-- for. Server-only, like v_score itself: absent from every grant list.
+alter table volunteer_profiles
+  add column if not exists v_score_recomputed_at timestamptz;
+
 -- The Cloudinary URL of an outreach's flyer image. Unlike the column above
 -- this IS client-writable (see the grant lists at the foot of this file): an
 -- organisation sets it on its own outreach, and a bad value harms only that

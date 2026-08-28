@@ -4,30 +4,31 @@ import { errorResponse, Errors } from "../../../server/httpErrors";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { assertAdmin, recordAdminAction } from "../../../server/adminAudit";
 import { notifyUsers } from "../../../server/notify";
+import { replayAndStoreVScore } from "../../../server/vscoreReplay";
 
 export const runtime = "nodejs";
 
 /**
  * An admin's decision on one dispute.
  *
- * WHAT UPHOLDING DOES, AND DOES NOT DO. It records that the volunteer was
- * right, tells both parties in the same words, and leaves the record itself
- * alone. It does NOT recompute a V-Score, and it does not flip an attendance
- * row or rewrite a review.
+ * WHAT UPHOLDING DOES. It records that the volunteer was right, tells both
+ * parties in the same words, and RECOMPUTES their V-Score from full history
+ * (owner-approved 2026-08-26) — the disputed event stops counting, and every
+ * event after it is replayed on top of that.
  *
- * That is a deliberate limit, not an unfinished edge. Making the V-Score
- * derivable — replaying every event from 70 rather than keeping a running
- * total — is a change to something already built, working and tested, and it
- * is its own approval gate (docs/ADMIN_PHASE_PLAN.md). Nothing about the queue,
- * the evidence or the decision depends on how the score is stored, which is
- * exactly why disputes can ship against the current model and gain the
- * recalculation later without any of this changing.
+ * WHAT IT STILL DOES NOT DO: flip the attendance row or rewrite the review.
+ * That was considered and rejected for the same reason those rows are
+ * service-role-only in the first place — they are the evidence a score is
+ * derived from, and an admin overwriting one would destroy the record of what
+ * actually happened in favour of a conclusion about it. The dispute sits
+ * BESIDE the record; the replay reads both and lets the dispute win.
  *
- * Editing the attendance row directly was considered and rejected for the same
- * reason it is service-role-only in the first place: that row is the evidence a
- * score is derived from, and an admin overwriting it would destroy the record
- * of what actually happened in favour of a conclusion about it. The dispute IS
- * the correction, and it sits beside the record rather than on top of it.
+ * The recompute is a REPLAY, not an adjustment, and it has to be: a correction
+ * to a March event cannot be expressed as a number added to today's score,
+ * because the blend has compounded March through every event since.
+ *
+ * THE SCORE MOVES ONLY WHEN A DISPUTE IS UPHELD. A rejected dispute changes
+ * nothing, which is right — nothing about the history was found to be wrong.
  */
 
 const Body = z.object({
@@ -77,6 +78,18 @@ export async function POST(req: Request): Promise<Response> {
 
     if (error) throw Errors.internal("Could not record the decision.");
 
+    /*
+      THE RECOMPUTE, and only on an uphold. It runs BEFORE the audit row so the
+      audit can state what actually happened to the score rather than what was
+      expected to; if the replay were to fail, the decision is already written
+      and the failure surfaces to the admin rather than being buried.
+    */
+    let scoreMove: { from: number; to: number } | null = null;
+    if (body.decision === "uphold") {
+      const replay = await replayAndStoreVScore(admin, dispute.volunteer_id as string);
+      scoreMove = { from: replay.previousScore, to: replay.score };
+    }
+
     await recordAdminAction(caller, {
       targetType: "dispute",
       targetId: body.disputeId,
@@ -86,9 +99,12 @@ export async function POST(req: Request): Promise<Response> {
         disputeType: dispute.type,
         outreachId: dispute.outreach_id,
         volunteerId: dispute.volunteer_id,
-        // Recorded explicitly so a later reader of the audit trail is not left
-        // wondering whether a score moved. It did not.
-        vScoreRecalculated: false,
+        // Recorded explicitly, both ways round, so a later reader of the audit
+        // trail never has to wonder whether a score moved — and, if it did, can
+        // see the two numbers without recomputing anything.
+        vScoreRecalculated: body.decision === "uphold",
+        vScoreFrom: scoreMove?.from ?? null,
+        vScoreTo: scoreMove?.to ?? null,
       },
     });
 
@@ -125,16 +141,25 @@ export async function POST(req: Request): Promise<Response> {
         userId,
         type: "application_status" as const,
         title,
-        body: `${outreach?.title ?? "An outreach"}: the ${subject} dispute was ${
-          body.decision === "uphold" ? "upheld" : "not upheld"
-        }. ${body.resolution}`,
+        body:
+          `${outreach?.title ?? "An outreach"}: the ${subject} dispute was ` +
+          `${body.decision === "uphold" ? "upheld" : "not upheld"}. ${body.resolution}` +
+          // The score change is the redress, so it is said out loud rather than
+          // left for the volunteer to spot on their profile later.
+          (scoreMove && Math.abs(scoreMove.to - scoreMove.from) >= 0.01
+            ? ` V-Score updated from ${Math.round(scoreMove.from)} to ${Math.round(scoreMove.to)}.`
+            : ""),
         outreachId: dispute.outreach_id as string,
         data: { kind: "dispute", disputeId: body.disputeId, decision: nextStatus },
         tokens: tokensByUser.get(userId) ?? [],
       }))
     );
 
-    return Response.json({ status: nextStatus });
+    return Response.json({
+      status: nextStatus,
+      vScoreFrom: scoreMove?.from ?? null,
+      vScoreTo: scoreMove?.to ?? null,
+    });
   } catch (err) {
     return errorResponse(err);
   }

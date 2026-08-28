@@ -4,6 +4,7 @@ import {
   LATE_RELEASE_MAX_PENALTY,
   LATE_RELEASE_MIN_PENALTY,
   NEW_VOLUNTEER_V_SCORE,
+  replayVScore,
   RELIABILITY_MULTIPLIERS,
   V_SCORE_PENALTIES,
   applyVScorePenalties,
@@ -440,5 +441,93 @@ describe('the late per-day release penalty', () => {
     expect(
       applyLateReleasePenalty(1, { priorLateReleases: 2, daysCommitted: 4, daysReleased: 4 })
     ).toBe(0);
+  });
+});
+
+describe('replayVScore — the score as a derived value', () => {
+  it('returns the starting score for a volunteer with no history', () => {
+    expect(replayVScore([])).toEqual({ score: NEW_VOLUNTEER_V_SCORE, eventsAttended: 0 });
+  });
+
+  /*
+    THE PROPERTY THE WHOLE MIGRATION RESTS ON. Replaying a history with no
+    corrections must produce exactly what applying the same reviews one at a
+    time produced. If this ever fails, the recompute would silently move every
+    score on the platform for no reason.
+  */
+  it('reproduces the running total exactly when nothing is corrected', () => {
+    const reviews = [
+      { attended: true, reliability_score: 5, clinical_score: 5 },
+      { attended: true, reliability_score: 3, clinical_score: null },
+      { attended: false, reliability_score: null, clinical_score: null },
+      { attended: true, reliability_score: 4, clinical_score: 4 },
+    ];
+
+    let running = NEW_VOLUNTEER_V_SCORE;
+    for (const review of reviews) running = recomputeVScoreAfterReview(running, review);
+
+    expect(replayVScore(reviews).score).toBeCloseTo(running, 10);
+  });
+
+  it('counts only attended events', () => {
+    const result = replayVScore([
+      { attended: true, reliability_score: 4, clinical_score: null },
+      { attended: false, reliability_score: null, clinical_score: null },
+      { attended: true, reliability_score: 5, clinical_score: null },
+    ]);
+    expect(result.eventsAttended).toBe(2);
+  });
+
+  it('an upheld dispute stops that event moving the score at all', () => {
+    const history = [
+      { attended: true, reliability_score: 5, clinical_score: 5 },
+      { attended: false, reliability_score: null, clinical_score: null },
+    ];
+
+    const uncorrected = replayVScore(history);
+    const corrected = replayVScore([
+      history[0]!,
+      { ...history[1]!, outcomeVoided: true, attendanceCorrected: true },
+    ]);
+
+    // The no-show floored the outcome at 0 and dragged the score down; voiding
+    // it leaves the score where the good event left it.
+    expect(corrected.score).toBeGreaterThan(uncorrected.score);
+    expect(corrected.score).toBeCloseTo(replayVScore([history[0]!]).score, 10);
+  });
+
+  it('an upheld attendance dispute also restores the attendance count', () => {
+    const result = replayVScore([
+      { attended: false, reliability_score: null, clinical_score: null, attendanceCorrected: true, outcomeVoided: true },
+    ]);
+    expect(result.eventsAttended).toBe(1);
+    // Nothing to score, so the score does not move — the same rule an unrated
+    // review has always followed.
+    expect(result.score).toBe(NEW_VOLUNTEER_V_SCORE);
+  });
+
+  it('order changes the result, which is why filing order is fixed', () => {
+    const good = { attended: true, reliability_score: 5, clinical_score: 5 };
+    const bad = { attended: true, reliability_score: 1, clinical_score: 1 };
+
+    // Not an accident to be tolerated but the reason the ordering rule exists:
+    // the blend weights the most recent event most heavily.
+    expect(replayVScore([good, bad]).score).not.toBeCloseTo(replayVScore([bad, good]).score, 5);
+  });
+
+  it('stays inside 0-100 however extreme the history', () => {
+    const allBad = Array.from({ length: 50 }, () => ({
+      attended: false,
+      reliability_score: null,
+      clinical_score: null,
+    }));
+    const allGood = Array.from({ length: 50 }, () => ({
+      attended: true,
+      reliability_score: 5,
+      clinical_score: 5,
+    }));
+
+    expect(replayVScore(allBad).score).toBeGreaterThanOrEqual(0);
+    expect(replayVScore(allGood).score).toBeLessThanOrEqual(100);
   });
 });

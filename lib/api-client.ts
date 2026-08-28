@@ -425,9 +425,20 @@ export interface ApplyVScorePenaltyInput {
 }
 
 /**
- * Applies a no-show / cancellation penalty. The owning organisation may apply
- * any type; a volunteer may only confirm their own cancellation penalty, and
- * only when it matches what the database already stamped.
+ * @deprecated The endpoint REFUSES this with a 409 and has done since the
+ * V-Score became a derived value (owner-approved 2026-08-26). Do not wire it
+ * to a screen.
+ *
+ * `volunteer_profiles.v_score` is now a cache of a replay of the volunteer's
+ * event history, so a flat penalty written by arithmetic on the stored number
+ * sits in no history and is erased by the next replay -- silently, after a
+ * screen had already shown it. A no-show is recorded instead by filing the
+ * event review with `attended: false`, which floors that event's outcome; the
+ * two cancellation penalties have no home in the history yet and are awaiting
+ * a decision on a score-events table (docs/REPORT_NOTES.md).
+ *
+ * Kept, rather than deleted, so the contract stays visible if that table is
+ * ever approved.
  */
 export function applyVScorePenalty(
   input: ApplyVScorePenaltyInput,

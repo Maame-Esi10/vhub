@@ -181,6 +181,14 @@ export interface VolunteerProfile {
   availability_slots: string[] | null;
   bio: string | null;
   v_score: number;
+  /**
+   * When v_score was last derived by replaying this volunteer's full review
+   * history. v_score is a CACHE of that replay, not the truth -- the truth is
+   * event_reviews plus any upheld disputes. Null means it has never been
+   * recomputed, which is only possible for a profile untouched since the
+   * 20260903b migration. Server-only, like v_score.
+   */
+  v_score_recomputed_at: string | null;
   events_attended: number;
   declaration_signed: boolean;
   verification_status: VerificationStatus;

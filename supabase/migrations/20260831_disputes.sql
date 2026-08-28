@@ -10,6 +10,15 @@
 --   1. Being marked absent when they say they were there.
 --   2. A review they believe is unfair.
 --
+-- SUPERSEDED 2026-08-26 — the paragraph below described the position when this
+-- file was written, and the gate it names has since been opened. The V-Score
+-- reversal was approved and built: an upheld dispute now DOES move the score,
+-- by replaying the volunteer's history with the disputed event voided. See
+-- supabase/migrations/20260903a/b. Nothing in THIS file changes as a result —
+-- the table, the policies and the grants are all still correct — which is the
+-- point the paragraph was making. It is left here rather than rewritten
+-- because it is the record of a decision, not a description of today.
+--
 -- THE V-SCORE IS NOT TOUCHED BY ANY OF THIS. Upholding a dispute records the
 -- correction and tells both parties; it does not recompute a score. Making the
 -- V-Score derivable and replayable is a separate change to something already

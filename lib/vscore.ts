@@ -356,3 +356,94 @@ export function applyVScorePenalties(
 ): number {
   return penalties.reduce((acc, penalty) => applyVScorePenalty(acc, penalty), score);
 }
+
+// ---------------------------------------------------------------------------
+// THE V-SCORE AS A DERIVED VALUE (owner-approved 2026-08-26).
+//
+// Until now the score was a RUNNING TOTAL: each review blended into whatever
+// number was already stored, and the previous value was gone. That has two
+// consequences, and the second is the one that forced this change.
+//
+//   1. There was no way back. One wrong review was permanent, and an upheld
+//      dispute could record that the volunteer was right while changing
+//      nothing about the number the mistake had produced.
+//   2. It was already subtly wrong. `event_reviews` is UPSERTED on
+//      (outreach_id, volunteer_id), so an organisation EDITING a review it had
+//      already filed blended a second time into a score the first version had
+//      already moved -- and incremented events_attended again. Replaying from
+//      history fixes that without anyone having to notice it.
+//
+// WHAT COUNTS AS AN EVENT: one `event_reviews` row. That is, today, the only
+// thing that moves a score at all -- the flat penalties are built, tested and
+// called by nothing (owner's standing decision).
+//
+// IN WHAT ORDER: by `event_reviews.created_at`, tie-broken by id. NOT by the
+// outreach's date, and the difference matters. The blend is order-dependent,
+// so replaying by event date would rewrite the trajectory of any volunteer
+// whose review arrived late -- a January event reviewed in June would be
+// re-inserted before events already counted, changing a score for a reason
+// unconnected to any error.
+//
+// Filing order also gives the migration a property worth having: for a
+// volunteer with no upheld dispute, the replay MUST reproduce the stored
+// score exactly. Any difference is a bug in this function rather than a
+// correction, which makes the recompute self-checking instead of a leap.
+// ---------------------------------------------------------------------------
+
+/** One reviewed event, as the replay sees it. */
+export interface ReplayEvent extends EventOutcomeInput {
+  /**
+   * An upheld ATTENDANCE dispute: the volunteer was there after all. Counts
+   * towards events_attended even though it moves no score, because a review
+   * with no ratings is unscorable either way.
+   */
+  attendanceCorrected?: boolean;
+  /**
+   * An upheld dispute of EITHER kind. The event stops moving the score.
+   *
+   * Voiding rather than substituting is the whole design. Upholding says "this
+   * record should not have counted against you" -- it does not say what the
+   * ratings should have been, and nobody knows. Inventing a replacement number
+   * would be the same fabrication the removed DEFAULT_MISSING_SUBSCORE was.
+   *
+   * It can in principle remove a boost as well as a penalty, if somebody
+   * disputed a review that flattered them. Nobody does, and the admin reads
+   * the review before deciding.
+   */
+  outcomeVoided?: boolean;
+}
+
+export interface ReplayResult {
+  /** The score, derived from the whole history. */
+  score: number;
+  /** How many of those events the volunteer actually attended. Also derived. */
+  eventsAttended: number;
+}
+
+/**
+ * Replays a volunteer's whole history: start at 70, apply every event in
+ * order, return where it lands.
+ *
+ * Pure and total. An empty history returns exactly the starting score, which
+ * is the correct answer for somebody who has never been reviewed rather than a
+ * special case.
+ */
+export function replayVScore(events: readonly ReplayEvent[]): ReplayResult {
+  let score = NEW_VOLUNTEER_V_SCORE;
+  let eventsAttended = 0;
+
+  for (const event of events) {
+    const attended = event.attendanceCorrected === true ? true : event.attended;
+    if (attended === true) eventsAttended += 1;
+
+    if (event.outcomeVoided === true) continue;
+
+    score = recomputeVScoreAfterReview(score, {
+      attended,
+      reliability_score: event.reliability_score,
+      clinical_score: event.clinical_score,
+    });
+  }
+
+  return { score: clampScore(score), eventsAttended };
+}
