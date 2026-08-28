@@ -421,27 +421,94 @@ export interface ReplayResult {
 }
 
 /**
- * Replays a volunteer's whole history: start at 70, apply every event in
+ * A PENALTY in the replay stream: a cancellation or a late per-day release.
+ *
+ * It carries the number, not the inputs that produced it, and that is the one
+ * real asymmetry with a review — worth stating plainly because it looks like an
+ * inconsistency until you see why.
+ *
+ * A review stores its RATINGS and the outcome is computed at replay time, so
+ * the review is evidence and the score is a conclusion drawn from it. A
+ * penalty is the other way round: the deduction IS the decision. Two things
+ * follow, and both argue for storing the number.
+ *
+ *   1. Recomputing a penalty at replay time would let a later change to the
+ *      amounts silently re-punish cancellations that were settled months ago,
+ *      at a figure nobody was ever told.
+ *   2. The late-release amount cannot honestly be recomputed at all. It depends
+ *      on how many late releases were already in the rolling 90-day window AT
+ *      THE MOMENT OF THE RELEASE, and that window has moved since. Deriving it
+ *      later would produce a different, equally confident, wrong answer.
+ *
+ * So a penalty, once applied, means what it meant.
+ */
+export interface ReplayPenalty {
+  /**
+   * Discriminates a penalty from a review in the merged stream. A review entry
+   * never carries this key, which is what `'penalty' in entry` narrows on.
+   */
+  penalty: true;
+  /** The deduction, negative, exactly as it was decided at the time. */
+  points: number;
+  /**
+   * An admin reversed it. The row survives — a penalty is a record, and
+   * deleting one would erase the evidence behind a score exactly the way
+   * editing an attendance row would. Voided, it stops counting; that is the
+   * same treatment an upheld dispute gives a review.
+   */
+  voided?: boolean;
+}
+
+/**
+ * One entry in the replay: either a reviewed event or a penalty.
+ *
+ * They are ONE stream rather than two, because the score is order-dependent
+ * and two streams cannot express "the cancellation came before the review".
+ */
+export type ReplayEntry = ReplayEvent | ReplayPenalty;
+
+function isPenalty(entry: ReplayEntry): entry is ReplayPenalty {
+  return 'penalty' in entry;
+}
+
+/**
+ * Replays a volunteer's whole history: start at 70, apply every entry in
  * order, return where it lands.
  *
  * Pure and total. An empty history returns exactly the starting score, which
  * is the correct answer for somebody who has never been reviewed rather than a
  * special case.
+ *
+ * A PENALTY IS A FLAT SUBTRACTION AT ITS POINT IN THE SEQUENCE, clamped to
+ * [0, 100] — precisely what `applyVScorePenalty` always did. Later reviews then
+ * blend it away at 0.7x per event, which is also precisely what happened when
+ * the score was a running total. **Nothing about the formula changes here**;
+ * the penalties simply now sit somewhere a recompute can find them, instead of
+ * being written onto a stored number that the next replay overwrote.
  */
-export function replayVScore(events: readonly ReplayEvent[]): ReplayResult {
+export function replayVScore(entries: readonly ReplayEntry[]): ReplayResult {
   let score = NEW_VOLUNTEER_V_SCORE;
   let eventsAttended = 0;
 
-  for (const event of events) {
-    const attended = event.attendanceCorrected === true ? true : event.attended;
+  for (const entry of entries) {
+    if (isPenalty(entry)) {
+      // A voided penalty is skipped, not reversed by adding the points back:
+      // adding them back would re-apply the clamp in the wrong direction and
+      // could hand somebody points a clamp had already swallowed.
+      if (entry.voided === true) continue;
+      score = clampScore(score + entry.points);
+      continue;
+    }
+
+    const attended = entry.attendanceCorrected === true ? true : entry.attended;
     if (attended === true) eventsAttended += 1;
 
-    if (event.outcomeVoided === true) continue;
+    if (entry.outcomeVoided === true) continue;
 
     score = recomputeVScoreAfterReview(score, {
       attended,
-      reliability_score: event.reliability_score,
-      clinical_score: event.clinical_score,
+      reliability_score: entry.reliability_score,
+      clinical_score: entry.clinical_score,
     });
   }
 

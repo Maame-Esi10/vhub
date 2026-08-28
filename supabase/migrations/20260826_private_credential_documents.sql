@@ -66,17 +66,45 @@ comment on column volunteer_profiles.credential_document_id is
 -- review that can never happen.
 -- ============================================================
 
-update volunteer_profiles
-   set credential_document_url = null,
-       verification_status = 'unverified'
- where credential_document_url is not null
-   and verification_status <> 'verified';
+-- RE-RUNNABLE, and it has to be built this way rather than guarded with a
+-- plain `if`. Section 3 below DROPS credential_document_url, so on a second
+-- run of this file the column is already gone -- and a statement naming a
+-- column that does not exist fails when the statement is PARSED, before any
+-- guard around it could run. (That is exactly what happened on 2026-08-27:
+-- `ERROR: 42703: column "credential_document_url" does not exist`.) Dynamic
+-- SQL inside `execute` is parsed only when it is executed, so wrapping the
+-- guard around `execute` is what actually makes the check reachable.
+--
+-- The whole paste runs inside the editor's single transaction, so the failed
+-- run rolled back and changed nothing. This block means there is nothing to
+-- roll back next time.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'volunteer_profiles'
+       and column_name = 'credential_document_url'
+  ) then
+    execute $sql$
+      update volunteer_profiles
+         set credential_document_url = null,
+             verification_status = 'unverified'
+       where credential_document_url is not null
+         and verification_status <> 'verified'
+    $sql$;
 
--- A verified volunteer is a decision a human already made; their status stays,
--- and only the dead URL is cleared.
-update volunteer_profiles
-   set credential_document_url = null
- where credential_document_url is not null;
+    -- A verified volunteer is a decision a human already made; their status
+    -- stays, and only the dead URL is cleared.
+    execute $sql$
+      update volunteer_profiles
+         set credential_document_url = null
+       where credential_document_url is not null
+    $sql$;
+  else
+    raise notice 'credential_document_url is already gone; nothing to clear.';
+  end if;
+end $$;
 
 
 -- ============================================================
@@ -100,17 +128,23 @@ alter table volunteer_profiles
 -- 4. Verification — run this after, and read the numbers
 --
 -- Expected:
---   id_column_present    1   (credential_document_id exists)
---   url_column_gone      0   (credential_document_url is gone)
---   client_can_write_id  0   (not in any grant list)
---   stale_pending        0   (nobody is queued for a review with no document)
+-- EVERY FIGURE IS A COUNT, and every one of them should read 0 except the
+-- first. `url_columns_remaining` was called `url_column_gone` until
+-- 2026-08-27, which was a genuinely bad name: it counts the columns still
+-- there, so 0 means the drop WORKED -- but the name reads like a flag, and
+-- "gone = 0" reads like "not gone". Renamed so the number cannot be misread.
+--
+--   id_column_present     1   credential_document_id exists
+--   url_columns_remaining 0   credential_document_url is gone
+--   client_can_write_id   0   not in any grant list
+--   stale_pending         0   nobody is queued for a review with no document
 -- ============================================================
 
 select
   (select count(*) from information_schema.columns
     where table_name = 'volunteer_profiles' and column_name = 'credential_document_id') as id_column_present,
   (select count(*) from information_schema.columns
-    where table_name = 'volunteer_profiles' and column_name = 'credential_document_url') as url_column_gone,
+    where table_name = 'volunteer_profiles' and column_name = 'credential_document_url') as url_columns_remaining,
   (select count(*) from information_schema.column_privileges
     where table_name = 'volunteer_profiles' and grantee = 'authenticated'
       and privilege_type in ('INSERT', 'UPDATE') and column_name = 'credential_document_id') as client_can_write_id,

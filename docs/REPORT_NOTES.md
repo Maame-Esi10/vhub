@@ -2962,3 +2962,145 @@ it was accepted for one reason: the report showing how far every score would mov
 had to be producible in the Supabase SQL editor before any code was deployed.
 The TypeScript is the version that runs in production, and the migration says so
 — if they ever disagree, the TypeScript is right and the SQL is the bug.
+
+
+## Admin phase, package L — a home for the flat penalties (2026-08-27)
+
+Package K made the V-Score derived, and in doing so left three deductions with
+nowhere to live. This is where they live. The owner's instruction is also the
+argument for it: *something does not have to break before we build the fix, and
+leaving a designed rule permanently unappliable is worse than the schema change.*
+
+### What was homeless, and why
+
+A derived score has exactly one writer: the replay. That is what makes it
+correctable, and it is why an upheld dispute can now reach back to a March event
+and undo it. But it also means a deduction written by arithmetic onto the stored
+number sits in no history — so the next review replays from 70, and the
+deduction vanishes silently, after a screen has already shown it.
+
+Three penalties produce no `event_reviews` row and so had no other route:
+
+- **late cancellation, −8** — cancelling an accepted place inside the window.
+- **on-time cancellation, −2** — cancelling an accepted place in good time.
+- **the late per-day release**, approved 2026-08-21 — dropping a committed day
+  inside 24 hours of it. Two free in a rolling 90 days, then
+  −8 × days released ÷ days committed, floored at −2 and capped at −8. This one
+  had never had anywhere to live at all; it was computed by a tested function
+  that nothing called.
+
+### The no-show is deliberately not among them
+
+This is the single most important line in the migration. An absence already
+moves the score through the review path: a review filed with `attended: false`
+floors that event's outcome to 0. Adding `no_show` to the new table would create
+a second route to the same punishment, and CLAUDE.md has required since
+2026-08-07 that one writer owns every score change *precisely* so that a single
+no-show cannot be punished twice.
+
+It is enforced rather than documented. `no_show` is not a value of
+`score_event_kind`, and `/api/vscore` leaves it out of the action's schema — so
+sending one is a validation error naming the two legal values, not a branch
+buried in a handler that a later edit could remove.
+
+### The one asymmetry: a penalty stores its number
+
+An `event_reviews` row stores the *ratings* and the outcome is computed at
+replay time. A `score_events` row stores the *points*. That looks inconsistent
+until you see what each thing is.
+
+A review is **evidence**, and the score is a conclusion drawn from it — so the
+evidence is what gets kept and the conclusion is recomputed. A penalty is the
+other way round: the deduction **is** the decision. Two consequences follow, and
+both argue for keeping the number:
+
+1. Recomputing at replay time would let a later change to the amounts silently
+   re-punish cancellations settled months ago, at a figure nobody was ever told.
+2. The late-release amount could not be recomputed honestly even in principle.
+   It depends on how many late releases were already inside the rolling 90-day
+   window **at the moment of the release**, and that window has moved since.
+   Deriving it later would produce a different, equally confident, wrong answer.
+
+So a penalty, once applied, means what it meant.
+
+### Where a penalty sits in the replay order
+
+Reviews replay in filing order. Penalties join the same stream on the same rule
+— `created_at` — because the score is order-dependent and two separate passes
+could not express "the cancellation came before the review". That ordering is
+not a detail: it decides how much of the deduction later events blend away.
+
+Ties are broken by a fixed `source_rank` (a review sorts before a penalty at the
+same timestamp) and then by `id`. The choice of which sorts first is arbitrary;
+that it is *fixed* is not. Without it, two entries written in the same
+microsecond would replay in whatever order the rows happened to come back in,
+and the score would not be reproducible. The rank exists identically in
+`api/src/server/vscoreReplay.ts` and in `vscore_replay()`, and the two have to
+move together or the API and the migration would compute different scores from
+the same history.
+
+### Retry safety, which is not a nicety here
+
+`dedupe_key`, unique per volunteer, is what makes every write idempotent. A
+dropped connection, a double tap or a cron that fires twice would otherwise
+charge somebody twice for one act — and unlike most double-writes, this one is
+invisible: the second deduction looks exactly like a legitimate one.
+
+A cancellation keys on the application, because an application is cancelled once
+and stays cancelled. The kind is deliberately *not* part of that key: if the
+timing were somehow reported both ways, the second must be refused rather than
+charged on top of the first. A late release keys on the released day **and the
+timestamp it was released at**, because a day can be taken back on and dropped
+late again, and that second drop is a genuinely new act rather than a repeat.
+
+### Reversal is voiding, not deleting
+
+An admin who applies a penalty wrongly voids it. The row stays. It is the same
+argument as everywhere else in this project: the row is the evidence a score is
+derived from, and deleting it would leave a score nobody can account for.
+A voided row stops counting in the replay — the same treatment an upheld dispute
+gives a review.
+
+There is deliberately **no** DELETE-refusing trigger, unlike `admin_actions`.
+One would break account deletion: `volunteer_id` cascades from `profiles`, and a
+trigger cannot tell a cascade apart from a bad delete. The clients cannot delete
+because the privilege is revoked; the service role must not, and the table
+comment says so.
+
+### Nothing is client-writable, and reads are narrower than you might expect
+
+No INSERT, UPDATE or DELETE grant exists for `authenticated` at all. A client
+that could insert could penalise anybody by name; one that could update could
+void its own penalties.
+
+Reads are the volunteer themselves and admins — **not** the organisation. That
+is a deliberate line: an organisation already sees the V-Score the record
+produced, and seeing the reasons behind somebody's number is a different thing
+from seeing their number.
+
+### The endpoint works again, and still nothing calls it
+
+`/api/vscore` regained its `penalty` action and gained a `late_release` one.
+Both write a row and then replay; neither does arithmetic on the stored score.
+
+The late-release action takes the *facts* of the release and computes the amount
+on the server, never accepting a figure from the client — a client that could
+name the number could choose it. It also re-reads `application_days.late_release`
+rather than trusting the request, because that column is absent from the
+client's grant list precisely so nobody can declare their own lateness.
+
+**Nothing in the app calls either one.** The owner's standing hold of 2026-08-21
+— penalties stay uncalled until the app has been device-tested, because a bug
+that has already written to reputation data is an audit-and-repair job rather
+than a code fix — is separate from whether the machinery exists. It now does,
+and wiring it is a decision rather than a build.
+
+### No score moved
+
+The table is created empty, so the replay gains a term that is empty for
+everybody. The migration re-runs the recompute anyway and reports how many
+scores it changed, which should read zero — because "the cache agrees with the
+function" ought to be something that was checked rather than reasoned about.
+There is a unit test asserting the same property from the other side: a history
+with no penalties replays to exactly what it replayed to before penalties
+existed.

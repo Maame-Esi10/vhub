@@ -646,3 +646,44 @@ export interface AdminAction {
   payload: Record<string, unknown>;
   created_at: string;
 }
+
+/**
+ * A flat V-Score deduction that produces no event review: a cancellation, or a
+ * late per-day release.
+ *
+ * Part of the replayable history `volunteer_profiles.v_score` is derived from.
+ * Written ONLY by /api/vscore on the service-role key — the client has no
+ * insert, update or delete privilege at all, because one that did could
+ * penalise anybody by name or void its own penalties.
+ *
+ * There is no `no_show` kind on purpose: an absence is expressed by an event
+ * review with `attended: false`, and a second route to the same deduction
+ * would punish one no-show twice.
+ */
+export interface ScoreEvent {
+  id: string;
+  volunteer_id: string;
+  kind: ScoreEventKind;
+  /**
+   * The deduction, always negative. STORED rather than recomputed at replay
+   * time, because a penalty's number is the decision itself — and the
+   * late-release figure depends on a rolling 90-day count as it stood at the
+   * moment of the release, which cannot honestly be reconstructed later.
+   */
+  points: number;
+  outreach_id: string | null;
+  application_id: string | null;
+  outreach_day_id: string | null;
+  /** Why it was applied, in words. Never blank. */
+  reason: string;
+  /**
+   * An admin reversed it. The row stays — a penalty is a record, and deleting
+   * one would erase the evidence behind a score. A voided row stops counting
+   * in the replay, the same treatment an upheld dispute gives a review.
+   */
+  voided_at: string | null;
+  voided_reason: string | null;
+  created_at: string;
+}
+
+export type ScoreEventKind = 'late_cancellation' | 'on_time_cancellation' | 'late_release';

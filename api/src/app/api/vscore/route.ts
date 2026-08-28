@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { computeEventOutcome, getVScoreBand } from "@/lib/vscore";
+import {
+  computeEventOutcome,
+  getVScoreBand,
+  lateReleasePenalty,
+  V_SCORE_PENALTIES,
+} from "@/lib/vscore";
 import { replayAndStoreVScore } from "../../../server/vscoreReplay";
 import { REVIEW_REMARKS } from "@/constants/review-remarks";
 import { authenticate } from "../../../server/auth";
@@ -12,23 +17,32 @@ export const runtime = "nodejs";
 const VALID_REMARK_SLUGS = new Set(REVIEW_REMARKS.map((remark) => remark.slug));
 
 // ---------------------------------------------------------------------------
-// Request contract. Two actions, and only one of them still writes.
+// Request contract. Three actions, one endpoint, and exactly ONE writer of the
+// score behind all of them.
 //
 //   action "review": the reviewing organisation files or updates its
 //   post-event review of a volunteer (attended, reliability_score,
-//   clinical_score). The review is upserted, and the volunteer's v_score and
-//   events_attended are then REBUILT by replaying their whole review history
-//   from 70 -- not by blending this one review into the stored number. Auth:
-//   the caller must be the organisation that owns the outreach being reviewed
-//   (mirroring event_reviews_insert_org's RLS check).
+//   clinical_score). Auth: the caller must be the organisation that owns the
+//   outreach being reviewed (mirroring event_reviews_insert_org's RLS check).
 //
-//   action "penalty": REFUSED with a 409 since the V-Score became a derived
-//   value (owner-approved 2026-08-26). A flat penalty written by arithmetic on
-//   the stored score is in no history, so the next replay erases it. The long
-//   note above handlePenalty gives the full reasoning, including what is
-//   genuinely lost (the two cancellation penalties) and what is not (the
-//   no-show, which a review filed with attended:false already expresses).
-//   Nothing in the app has ever called it.
+//   action "penalty": records a CANCELLATION deduction (-8 late, -2 on time)
+//   as a `score_events` row. Auth: the owning organisation, or the volunteer
+//   for their own cancellation and only at the timing the database itself
+//   stamped.
+//
+//   action "late_release": records the approved late per-day release deduction
+//   as a `score_events` row. Auth: the owning organisation, or the volunteer
+//   for their own application.
+//
+// `no_show` IS REFUSED, and that is not an oversight. A no-show already moves
+// the score through the review path -- a review filed with attended:false
+// floors that event's outcome to 0 -- and CLAUDE.md requires one writer per
+// change so that a single no-show cannot be punished twice.
+//
+// EVERY ACTION ENDS THE SAME WAY: write the fact, then REPLAY the volunteer's
+// whole history and store the result. Nothing here ever does arithmetic on the
+// stored score. That is what makes a penalty survive the next review, and what
+// makes an upheld dispute able to reach backwards.
 // ---------------------------------------------------------------------------
 
 const ReviewAction = z.object({
@@ -60,15 +74,43 @@ const ReviewAction = z.object({
   notes: z.string().max(2000).optional(),
 });
 
+/**
+ * `no_show` is absent from this enum on purpose, so the refusal is a
+ * validation error naming the two legal values rather than a branch buried in
+ * the handler. See the contract note above.
+ */
 const PenaltyAction = z.object({
   action: z.literal("penalty"),
   outreachId: z.string().uuid(),
   volunteerId: z.string().uuid(),
   applicationId: z.string().uuid(),
-  penaltyType: z.enum(["no_show", "late_cancellation", "on_time_cancellation"]),
+  penaltyType: z.enum(["late_cancellation", "on_time_cancellation"]),
 });
 
-const VScoreRequestBody = z.discriminatedUnion("action", [ReviewAction, PenaltyAction]);
+/**
+ * The late per-day release deduction, approved 2026-08-21 and homeless until
+ * `score_events` existed.
+ *
+ * The caller sends the FACTS of the release; the amount is computed here from
+ * `lateReleasePenalty` and the volunteer's own rolling 90-day count, never sent
+ * by the client. A client that could name the figure could choose it.
+ */
+const LateReleaseAction = z.object({
+  action: z.literal("late_release"),
+  outreachId: z.string().uuid(),
+  volunteerId: z.string().uuid(),
+  applicationId: z.string().uuid(),
+  /** Which day was dropped. It is what makes the deduction deduplicable. */
+  outreachDayId: z.string().uuid(),
+  daysReleased: z.number().int().min(1),
+  daysCommitted: z.number().int().min(1),
+});
+
+const VScoreRequestBody = z.discriminatedUnion("action", [
+  ReviewAction,
+  PenaltyAction,
+  LateReleaseAction,
+]);
 
 export async function POST(req: Request): Promise<Response> {
   try {
@@ -80,6 +122,9 @@ export async function POST(req: Request): Promise<Response> {
 
     if (body.action === "review") {
       return Response.json(await handleReview(caller, body));
+    }
+    if (body.action === "late_release") {
+      return Response.json(await handleLateRelease(caller, body));
     }
     return Response.json(await handlePenalty(caller, body));
   } catch (err) {
@@ -172,44 +217,212 @@ async function handleReview(
 }
 
 // ---------------------------------------------------------------------------
-// action: penalty -- REFUSED, and deliberately so.
+// action: penalty  and  action: late_release
 //
-// The three flat penalties (no-show -15, late cancellation -8, on-time
-// cancellation -2) are still defined and still unit-tested in lib/vscore.ts.
-// This ENDPOINT can no longer apply one, because as of the V-Score reversal
-// (owner-approved 2026-08-26) it would be a SECOND writer of a value that is
-// now derived, and the second writer always loses:
+// Both write a `score_events` row and then replay. The row is the penalty's
+// home in the replayable history; before it existed, a deduction was arithmetic
+// on the stored score and the next replay erased it silently, which is why the
+// action was disabled between 2026-08-26 and 2026-08-27.
 //
-//   `volunteer_profiles.v_score` is a CACHE of replayVScore(event history).
-//   A penalty written by arithmetic on the stored number is in no history, so
-//   the very next review -- or the next upheld dispute, or a re-run of the
-//   recompute migration -- replays from 70 and the penalty silently vanishes.
-//   A deduction that disappears without anybody noticing is worse than one
-//   that was never applied, because a screen showed it.
-//
-// It also restores the rule CLAUDE.md already states: one writer owns every
-// score change, so a single no-show cannot be punished twice. The no-show
-// deduction ALREADY has a home in the replayable history -- a review filed
-// with attended:false floors that event's outcome at 0 -- so this action was
-// a second route to the same punishment even before the score became derived.
-//
-// WHAT IS GENUINELY LOST: the two CANCELLATION penalties, which have no home
-// in the history because a cancellation produces no `event_reviews` row.
-// Giving them one needs a table of score events, which is a schema change and
-// therefore gated. Nothing in the app has ever called this action, so nothing
-// stops working today -- see docs/REPORT_NOTES.md.
-//
-// It returns a considered 409 rather than being deleted from the request
-// contract: a caller that reaches it deserves to be told why, not handed a
-// validation error about an unrecognised action.
+// `dedupe_key` is what makes a retry safe. A dropped connection, a double tap,
+// a cron that runs twice — any of them would otherwise charge somebody twice
+// for one act. `ignoreDuplicates` turns the second write into a no-op, and the
+// replay that follows is idempotent, so a retry converges on the same score
+// rather than a lower one.
 // ---------------------------------------------------------------------------
 
-async function handlePenalty(
-  _caller: { userId: string; role: string },
-  _body: z.infer<typeof PenaltyAction>
-): Promise<never> {
-  throw Errors.conflict(
-    "V-Scores are derived from event history and can no longer be adjusted by a flat penalty. " +
-      "A no-show is recorded by filing the event review with attended = false."
+/** Writes one penalty, then rebuilds the score from history. Retry-safe. */
+async function recordPenalty(input: {
+  volunteerId: string;
+  kind: "late_cancellation" | "on_time_cancellation" | "late_release";
+  points: number;
+  reason: string;
+  dedupeKey: string;
+  outreachId: string;
+  applicationId: string;
+  outreachDayId?: string;
+}) {
+  const admin = getSupabaseAdmin();
+
+  const { error } = await admin.from("score_events").upsert(
+    {
+      volunteer_id: input.volunteerId,
+      kind: input.kind,
+      points: input.points,
+      reason: input.reason,
+      dedupe_key: input.dedupeKey,
+      outreach_id: input.outreachId,
+      application_id: input.applicationId,
+      outreach_day_id: input.outreachDayId ?? null,
+    },
+    { onConflict: "volunteer_id,dedupe_key", ignoreDuplicates: true }
   );
+  if (error) throw Errors.internal("Could not record the penalty.");
+
+  const replay = await replayAndStoreVScore(admin, input.volunteerId);
+
+  return {
+    volunteerId: input.volunteerId,
+    oldScore: replay.previousScore,
+    newScore: replay.score,
+    band: getVScoreBand(replay.score),
+    penalty: input.points,
+    activePenalties: replay.activePenalties,
+  };
+}
+
+async function loadApplicationForPenalty(
+  body: { applicationId: string; outreachId: string; volunteerId: string }
+) {
+  const admin = getSupabaseAdmin();
+  const { data: application, error } = await admin
+    .from("applications")
+    .select("id, outreach_id, volunteer_id, status, late_cancellation")
+    .eq("id", body.applicationId)
+    .maybeSingle();
+  if (error || !application) throw Errors.notFound("Application not found.");
+  if (
+    application.outreach_id !== body.outreachId ||
+    application.volunteer_id !== body.volunteerId
+  ) {
+    throw Errors.badRequest("applicationId does not match the given outreachId/volunteerId.");
+  }
+  return application;
+}
+
+async function handlePenalty(
+  caller: { userId: string; role: string },
+  body: z.infer<typeof PenaltyAction>
+) {
+  const application = await loadApplicationForPenalty(body);
+
+  const isOwningOrg = await isOrgOwner(caller, application.outreach_id as string);
+  const isOwnVolunteer = caller.role === "volunteer" && caller.userId === body.volunteerId;
+
+  if (!isOwningOrg && !isOwnVolunteer) {
+    throw Errors.forbidden("You are not allowed to apply a V-Score penalty for this application.");
+  }
+
+  if (isOwnVolunteer && !isOwningOrg) {
+    // A volunteer may only confirm the penalty the database itself already
+    // stamped for their own cancellation -- never a claim that contradicts
+    // applications.late_cancellation.
+    if (application.status !== "cancelled") {
+      throw Errors.badRequest("This application has not been cancelled.");
+    }
+    const expected = application.late_cancellation ? "late_cancellation" : "on_time_cancellation";
+    if (body.penaltyType !== expected) {
+      throw Errors.badRequest("penaltyType does not match this application's recorded cancellation timing.");
+    }
+  }
+
+  return recordPenalty({
+    volunteerId: body.volunteerId,
+    kind: body.penaltyType,
+    points: V_SCORE_PENALTIES[body.penaltyType],
+    reason:
+      body.penaltyType === "late_cancellation"
+        ? "Cancelled an accepted place inside the late-cancellation window."
+        : "Cancelled an accepted place in good time.",
+    // One cancellation per application, because an application is cancelled
+    // once and stays cancelled. The kind is deliberately NOT in the key: if the
+    // timing were somehow reported both ways, the second must be refused rather
+    // than charged on top of the first.
+    dedupeKey: `cancellation:${body.applicationId}`,
+    outreachId: body.outreachId,
+    applicationId: body.applicationId,
+  });
+}
+
+async function handleLateRelease(
+  caller: { userId: string; role: string },
+  body: z.infer<typeof LateReleaseAction>
+) {
+  const admin = getSupabaseAdmin();
+  const application = await loadApplicationForPenalty(body);
+
+  const isOwningOrg = await isOrgOwner(caller, application.outreach_id as string);
+  const isOwnVolunteer = caller.role === "volunteer" && caller.userId === body.volunteerId;
+  if (!isOwningOrg && !isOwnVolunteer) {
+    throw Errors.forbidden("You are not allowed to record a late release for this application.");
+  }
+
+  /*
+    THE DAY MUST ACTUALLY BE RELEASED AND FLAGGED LATE, and we read that from
+    the database rather than trusting the request. `application_days.late_release`
+    is set by the release path and is absent from the client's grant list
+    precisely so nobody can declare their own lateness; re-reading it here is
+    what stops a crafted call inventing a penalty against somebody.
+  */
+  const { data: day, error: dayError } = await admin
+    .from("application_days")
+    .select("id, released_at, late_release")
+    .eq("application_id", body.applicationId)
+    .eq("outreach_day_id", body.outreachDayId)
+    .maybeSingle();
+  if (dayError) throw Errors.internal("Could not load the committed day.");
+  if (!day || day.released_at === null || day.late_release !== true) {
+    throw Errors.badRequest("That day is not recorded as a late release.");
+  }
+
+  /*
+    The allowance is counted BEFORE this release is charged, which is what
+    "two free" means -- the third one pays. count_recent_late_releases counts
+    released rows including this one, so the prior count is one less.
+  */
+  const { data: recent, error: countError } = await admin.rpc("count_recent_late_releases", {
+    p_volunteer_id: body.volunteerId,
+  });
+  if (countError) throw Errors.internal("Could not count recent late releases.");
+  const priorLateReleases = Math.max(0, Number(recent ?? 0) - 1);
+
+  const points = lateReleasePenalty({
+    priorLateReleases,
+    daysReleased: body.daysReleased,
+    daysCommitted: body.daysCommitted,
+  });
+
+  /*
+    A FREE RELEASE WRITES NOTHING. score_events holds exactly the rows that move
+    a score (`points < 0` is a check constraint), and the fact of the release is
+    already recorded on application_days. Writing a zero row would put an entry
+    in the volunteer's penalty list that deducted nothing, which reads as a
+    punishment they cannot find.
+  */
+  if (points === 0) {
+    const replay = await replayAndStoreVScore(admin, body.volunteerId);
+    return {
+      volunteerId: body.volunteerId,
+      oldScore: replay.previousScore,
+      newScore: replay.score,
+      band: getVScoreBand(replay.score),
+      penalty: 0,
+      activePenalties: replay.activePenalties,
+      withinFreeAllowance: true,
+    };
+  }
+
+  return {
+    ...(await recordPenalty({
+      volunteerId: body.volunteerId,
+      kind: "late_release",
+      points,
+      reason: `Dropped ${body.daysReleased} of ${body.daysCommitted} committed day(s) inside 24 hours of the day starting.`,
+      // Keyed on the released day AND the moment it was released: a day can be
+      // taken back on and dropped late again, and that second drop is a
+      // genuinely new act rather than a repeat of the first.
+      dedupeKey: `late_release:${day.id}:${day.released_at as string}`,
+      outreachId: body.outreachId,
+      applicationId: body.applicationId,
+      outreachDayId: body.outreachDayId,
+    })),
+    withinFreeAllowance: false,
+  };
+}
+
+async function isOrgOwner(caller: { userId: string; role: string }, outreachId: string): Promise<boolean> {
+  if (caller.role !== "organisation") return false;
+  const admin = getSupabaseAdmin();
+  const { data } = await admin.from("outreaches").select("organisation_id").eq("id", outreachId).maybeSingle();
+  return data?.organisation_id === caller.userId;
 }

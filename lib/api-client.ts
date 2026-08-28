@@ -421,30 +421,81 @@ export interface ApplyVScorePenaltyInput {
   outreachId: string;
   volunteerId: string;
   applicationId: string;
-  penaltyType: VScorePenaltyType;
+  /**
+   * Deliberately narrower than `VScorePenaltyType`, which still includes
+   * `no_show` for the review path. Sending one here fails to compile.
+   */
+  penaltyType: Exclude<VScorePenaltyType, 'no_show'>;
+}
+
+export interface RecordLateReleaseInput {
+  outreachId: string;
+  volunteerId: string;
+  applicationId: string;
+  /** The day that was dropped. */
+  outreachDayId: string;
+  daysReleased: number;
+  daysCommitted: number;
+}
+
+export interface RecordLateReleaseResponse extends VScorePenaltyResponse {
+  /**
+   * True when this release fell inside the two-per-90-days free allowance, in
+   * which case nothing was deducted and no row was written. The score comes
+   * back unchanged rather than the call failing, because a free release is a
+   * successful outcome rather than a rejected one.
+   */
+  withinFreeAllowance: boolean;
 }
 
 /**
- * @deprecated The endpoint REFUSES this with a 409 and has done since the
- * V-Score became a derived value (owner-approved 2026-08-26). Do not wire it
- * to a screen.
+ * Records a CANCELLATION deduction (-8 late, -2 on time) as a `score_events`
+ * row, then rebuilds the volunteer's score from their whole history.
  *
- * `volunteer_profiles.v_score` is now a cache of a replay of the volunteer's
- * event history, so a flat penalty written by arithmetic on the stored number
- * sits in no history and is erased by the next replay -- silently, after a
- * screen had already shown it. A no-show is recorded instead by filing the
- * event review with `attended: false`, which floors that event's outcome; the
- * two cancellation penalties have no home in the history yet and are awaiting
- * a decision on a score-events table (docs/REPORT_NOTES.md).
+ * The owning organisation may record either type; a volunteer may only confirm
+ * their own cancellation, and only at the timing the database itself stamped.
  *
- * Kept, rather than deleted, so the contract stays visible if that table is
- * ever approved.
+ * `no_show` IS NOT ACCEPTED and the type reflects that. An absence is recorded
+ * by filing the event review with `attended: false`, which floors that event's
+ * outcome — one writer per change, so a single no-show cannot be punished
+ * twice.
+ *
+ * SAFE TO RETRY. The endpoint deduplicates on the application, so a dropped
+ * connection or a double tap cannot charge somebody twice for one cancellation.
+ *
+ * NOTHING CALLS THIS YET. The standing hold of 2026-08-21 — penalties stay
+ * uncalled until the app has been device-tested — is the owner's and is
+ * separate from whether the machinery exists. It now does.
  */
 export function applyVScorePenalty(
   input: ApplyVScorePenaltyInput,
   options?: RequestOptions
 ): Promise<VScorePenaltyResponse> {
   return apiPost<VScorePenaltyResponse>(API_ROUTES.vscore, { action: 'penalty', ...input }, options);
+}
+
+/**
+ * Records the approved LATE PER-DAY RELEASE deduction — two free in a rolling
+ * 90 days, then -8 x (days released / days committed), floored at -2 and capped
+ * at -8.
+ *
+ * The caller sends the facts of the release; the AMOUNT is computed on the
+ * server from the volunteer's own rolling count and is never sent by the
+ * client, because a client that could name the figure could choose it. The
+ * server also re-reads `application_days.late_release` rather than trusting the
+ * request, so a crafted call cannot invent a penalty against somebody.
+ *
+ * NOTHING CALLS THIS YET — see the note on `applyVScorePenalty`.
+ */
+export function recordLateRelease(
+  input: RecordLateReleaseInput,
+  options?: RequestOptions
+): Promise<RecordLateReleaseResponse> {
+  return apiPost<RecordLateReleaseResponse>(
+    API_ROUTES.vscore,
+    { action: 'late_release', ...input },
+    options
+  );
 }
 
 // ---------------------------------------------------------------------------

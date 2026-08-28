@@ -531,3 +531,110 @@ describe('replayVScore — the score as a derived value', () => {
     expect(replayVScore(allGood).score).toBeLessThanOrEqual(100);
   });
 });
+
+describe('replayVScore — penalties in the stream', () => {
+  const goodEvent = { attended: true, reliability_score: 5, clinical_score: 5 };
+
+  /*
+    THE PROPERTY THAT MAKES THE MIGRATION SAFE. score_events starts empty, so
+    every existing score must replay to exactly what it replayed to before
+    penalties existed. If this fails, running 20260904 would move scores on a
+    platform where nothing was ever penalised.
+  */
+  it('changes nothing at all when there are no penalties', () => {
+    const history = [
+      goodEvent,
+      { attended: true, reliability_score: 3, clinical_score: null },
+      { attended: false, reliability_score: null, clinical_score: null },
+    ];
+    expect(replayVScore(history)).toEqual(replayVScore([...history]));
+    expect(replayVScore(history).score).toBeCloseTo(
+      recomputeVScoreAfterReview(
+        recomputeVScoreAfterReview(
+          recomputeVScoreAfterReview(NEW_VOLUNTEER_V_SCORE, history[0]!),
+          history[1]!
+        ),
+        history[2]!
+      ),
+      10
+    );
+  });
+
+  it('subtracts a flat penalty at its point in the sequence', () => {
+    const withPenalty = replayVScore([
+      { penalty: true, points: V_SCORE_PENALTIES.late_cancellation },
+    ]);
+    expect(withPenalty.score).toBeCloseTo(
+      NEW_VOLUNTEER_V_SCORE + V_SCORE_PENALTIES.late_cancellation,
+      10
+    );
+  });
+
+  /*
+    The behaviour that the running total used to have and that a stored
+    penalty must reproduce: a deduction is not permanent, it is blended away by
+    later events at 0.7x apiece. Same formula, different storage.
+  */
+  it('lets later reviews blend a penalty away, exactly as the running total did', () => {
+    const penaltyThenReview = replayVScore([
+      { penalty: true, points: V_SCORE_PENALTIES.late_cancellation },
+      goodEvent,
+    ]);
+
+    const runningTotal = recomputeVScoreAfterReview(
+      applyVScorePenalty(NEW_VOLUNTEER_V_SCORE, 'late_cancellation'),
+      goodEvent
+    );
+
+    expect(penaltyThenReview.score).toBeCloseTo(runningTotal, 10);
+  });
+
+  it('order matters between a penalty and a review, which is why one stream is merged', () => {
+    const before = replayVScore([{ penalty: true, points: -8 }, goodEvent]).score;
+    const after = replayVScore([goodEvent, { penalty: true, points: -8 }]).score;
+    expect(before).not.toBeCloseTo(after, 5);
+  });
+
+  it('a voided penalty stops counting and is not added back', () => {
+    const voided = replayVScore([
+      { penalty: true, points: -8, voided: true },
+      goodEvent,
+    ]);
+    expect(voided.score).toBeCloseTo(replayVScore([goodEvent]).score, 10);
+  });
+
+  it('never drives a score below zero, however many penalties land', () => {
+    const many = Array.from({ length: 40 }, () => ({
+      penalty: true as const,
+      points: V_SCORE_PENALTIES.no_show,
+    }));
+    expect(replayVScore(many).score).toBe(0);
+  });
+
+  it('a penalty does not touch the attendance count', () => {
+    const result = replayVScore([
+      goodEvent,
+      { penalty: true, points: V_SCORE_PENALTIES.on_time_cancellation },
+    ]);
+    expect(result.eventsAttended).toBe(1);
+  });
+
+  /*
+    The late-release deduction, which had nowhere to live until score_events.
+    The amount is decided by lateReleasePenalty() at the moment of the release
+    and stored; the replay only adds it.
+  */
+  it('carries a late-release deduction at the figure it was decided at', () => {
+    const points = lateReleasePenalty({
+      priorLateReleases: 2,
+      daysReleased: 1,
+      daysCommitted: 4,
+    });
+    expect(points).toBe(-2);
+
+    expect(replayVScore([{ penalty: true, points }]).score).toBeCloseTo(
+      NEW_VOLUNTEER_V_SCORE + points,
+      10
+    );
+  });
+});

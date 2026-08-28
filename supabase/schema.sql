@@ -2046,3 +2046,66 @@ grant insert (
 -- outreach_checkin_codes_select_owner to render the QR.
 revoke insert, update, delete on attendance from authenticated;
 revoke insert, update, delete on outreach_checkin_codes from authenticated;
+
+
+-- ============================================================
+-- score_events — the flat V-Score deductions
+-- (supabase/migrations/20260904_score_events.sql)
+--
+-- The V-Score is DERIVED: volunteer_profiles.v_score is a cache of a replay of
+-- the volunteer's history. This table is the part of that history which
+-- produces no event_reviews row -- cancellations, and late per-day releases.
+--
+-- `no_show` IS DELIBERATELY NOT A KIND. A no-show is already expressed by a
+-- review filed with attended = false, which floors that event's outcome to 0.
+-- Adding it here would punish one absence twice.
+--
+-- `points` is STORED rather than derived, unlike a review's outcome: a
+-- penalty's number IS the decision, and the late-release figure depends on a
+-- rolling 90-day count as it stood at the moment of the release, which cannot
+-- honestly be reconstructed later.
+--
+-- Nothing is client-writable. A client that could insert here could penalise
+-- anybody by name, and one that could update here could void its own penalties.
+-- Reversal is `voided_at`, which leaves the record in place.
+-- ============================================================
+
+do $$ begin
+  create type score_event_kind as enum (
+    'late_cancellation',
+    'on_time_cancellation',
+    'late_release'
+  );
+exception when duplicate_object then null; end $$;
+
+create table if not exists score_events (
+  id uuid primary key default gen_random_uuid(),
+  volunteer_id uuid not null references profiles(id) on delete cascade,
+  kind score_event_kind not null,
+  points numeric not null check (points < 0 and points >= -100),
+  outreach_id uuid references outreaches(id) on delete set null,
+  application_id uuid references applications(id) on delete set null,
+  outreach_day_id uuid references outreach_days(id) on delete set null,
+  reason text not null check (length(btrim(reason)) > 0),
+  voided_at timestamptz,
+  voided_reason text,
+  dedupe_key text not null,
+  created_at timestamptz not null default now(),
+  unique (volunteer_id, dedupe_key)
+);
+
+create index if not exists idx_score_events_replay
+  on score_events (volunteer_id, created_at, id)
+  where voided_at is null;
+
+alter table score_events enable row level security;
+
+drop policy if exists "score_events_select_own_or_admin" on score_events;
+create policy "score_events_select_own_or_admin"
+  on score_events for select
+  to authenticated
+  using (volunteer_id = auth.uid() or is_admin());
+
+revoke insert, update, delete on score_events from authenticated;
+revoke all on score_events from anon;
+grant select on score_events to authenticated;

@@ -108,6 +108,7 @@ disagreement with reasons. Two changes, both argued above and below:
 | **I** ✅ | §11 stats | Reads everything above. |
 | **J** ✅ | §10 vetted sources, surface only | Genuinely last; the feature behind it stays deferred. |
 | **K** ✅ | §8 V-Score reversal | **Approved 2026-08-26**, after G shipped without it. Its own gate, opened separately. |
+| **L** ✅ | `score_events` — a home for the flat penalties | **Approved 2026-08-27.** K left the cancellation and late-release deductions unappliable; this is where they live. |
 
 **Why §12 is not last.** Security and the audit trail are listed twelfth in the
 brief but cannot be built after the actions they record — an admin write shipped
@@ -390,6 +391,30 @@ event's outcome to 0, and CLAUDE.md already required one writer so that a no-sho
 could not be punished twice). The two *cancellation* penalties genuinely have no
 home, because a cancellation produces no review row; giving them one needs a
 table of score events, which is a schema change and stays gated.
+
+#### That table was approved the next day, 2026-08-27 (package L)
+
+The owner's reasoning, and it is the right test: *something does not have to
+break before we build the fix, and leaving a designed rule permanently
+unappliable is worse than the schema change.*
+
+`score_events` holds the three deductions that produce no review row — late
+cancellation, on-time cancellation, and the late per-day release approved on
+2026-08-21, which had never had anywhere to live either. `no_show` is
+deliberately not among them: it already moves the score through the review path,
+and a second route would punish one absence twice.
+
+**No existing score moved.** The table is created empty and the replay gains a
+term that is empty for everybody; the migration re-runs the recompute and
+reports the number of scores it changed, which should be zero.
+
+The one asymmetry worth recording: a penalty's `points` are STORED rather than
+recomputed at replay time. A review stores its ratings because the review is
+evidence and the score is a conclusion; a penalty's number IS the decision.
+Recomputing would let a later change to the amounts re-punish settled
+cancellations, and the late-release figure depends on a rolling 90-day count as
+it stood at the moment of the release, which cannot be reconstructed once the
+window has moved.
 
 ---
 
