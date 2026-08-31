@@ -11,6 +11,7 @@ import {
   applyVScorePenalty,
   computeEventOutcome,
   computeRankingScore,
+  dayCommitmentRatio,
   getReliabilityMultiplier,
   getVScoreBand,
   hasScorableOutcome,
@@ -636,5 +637,165 @@ describe('replayVScore — penalties in the stream', () => {
       NEW_VOLUNTEER_V_SCORE + points,
       10
     );
+  });
+});
+
+
+/*
+  MULTI-DAY PARTICIPATION SCALING (owner-approved 2026-08-30).
+
+  The whole multi-day subsystem records which days a volunteer promised and
+  which they turned up for, and until this the scorer discarded it: 1 day of 4
+  scored exactly the same as 4 of 4. The event outcome is now computed ONCE per
+  event, as it always was, and then multiplied by the share of committed days
+  attended.
+
+  The two things these tests exist to pin down are the ones that would cause
+  silent harm if they regressed: omitting the day figures must mean "do not
+  scale" rather than "attended nothing", and a released day must leave the
+  DENOMINATOR rather than count against the volunteer.
+*/
+describe('dayCommitmentRatio', () => {
+  it('is the plain share of committed days attended', () => {
+    expect(dayCommitmentRatio(4, 4)).toBe(1);
+    expect(dayCommitmentRatio(3, 4)).toBe(0.75);
+    expect(dayCommitmentRatio(1, 4)).toBe(0.25);
+    expect(dayCommitmentRatio(0, 4)).toBe(0);
+  });
+
+  it('returns null rather than zero when there is no day information', () => {
+    // Null is not a ratio of nothing -- it is the absence of a ratio, and the
+    // caller must leave the outcome alone. Reading it as 0 would wipe out a
+    // good review for a volunteer nobody had recorded days for.
+    expect(dayCommitmentRatio(null, null)).toBeNull();
+    expect(dayCommitmentRatio(3, null)).toBeNull();
+    expect(dayCommitmentRatio(null, 4)).toBeNull();
+    expect(dayCommitmentRatio(undefined, undefined)).toBeNull();
+  });
+
+  it('returns null rather than dividing by zero', () => {
+    expect(dayCommitmentRatio(0, 0)).toBeNull();
+    expect(dayCommitmentRatio(2, -1)).toBeNull();
+  });
+
+  it('never exceeds 1, so a miscount cannot inflate an outcome', () => {
+    expect(dayCommitmentRatio(9, 4)).toBe(1);
+  });
+
+  it('rejects non-finite figures instead of producing NaN', () => {
+    expect(dayCommitmentRatio(Number.NaN, 4)).toBeNull();
+    expect(dayCommitmentRatio(2, Number.POSITIVE_INFINITY)).toBeNull();
+  });
+});
+
+describe('computeEventOutcome — scaling by days attended', () => {
+  const perfect: EventOutcomeInput = {
+    attended: true,
+    reliability_score: 5,
+    clinical_score: 5,
+  };
+
+  it('leaves the outcome untouched when no day figures are supplied', () => {
+    // Every caller written before this change, and every path with no day
+    // information to hand, must behave exactly as it did.
+    expect(computeEventOutcome(perfect)).toBe(100);
+  });
+
+  it('leaves the outcome untouched when every committed day was attended', () => {
+    expect(
+      computeEventOutcome({ ...perfect, daysAttended: 4, daysCommitted: 4 })
+    ).toBe(100);
+  });
+
+  it('scales a partial attendance by the share delivered', () => {
+    // 1 of 4 days of a perfect review is no longer identical to 4 of 4.
+    expect(
+      computeEventOutcome({ ...perfect, daysAttended: 1, daysCommitted: 4 })
+    ).toBe(25);
+    expect(
+      computeEventOutcome({ ...perfect, daysAttended: 3, daysCommitted: 4 })
+    ).toBe(75);
+  });
+
+  it('is unchanged for a single-day event, which is the n=1 case', () => {
+    expect(
+      computeEventOutcome({ ...perfect, daysAttended: 1, daysCommitted: 1 })
+    ).toBe(100);
+  });
+
+  it('lands on the no-show floor when zero committed days were attended', () => {
+    // The same 0 that attended:false takes. Somebody marked absent on all four
+    // of the days they committed to did not attend, whatever the review's
+    // overall box says -- and it arrives at that answer by arithmetic rather
+    // than by a special case.
+    expect(
+      computeEventOutcome({ ...perfect, daysAttended: 0, daysCommitted: 4 })
+    ).toBe(0);
+    expect(computeEventOutcome({ ...perfect, attended: false })).toBe(0);
+  });
+
+  it('still returns null for an unscorable review, whatever the days say', () => {
+    // A day ratio is not a substitute for a missing rating. Scaling nothing
+    // still gives nothing, and the score must not move.
+    expect(
+      computeEventOutcome({
+        attended: true,
+        reliability_score: null,
+        clinical_score: null,
+        daysAttended: 4,
+        daysCommitted: 4,
+      })
+    ).toBeNull();
+  });
+
+  it('scales a support-role review, which is scored on reliability alone', () => {
+    expect(
+      computeEventOutcome({
+        attended: true,
+        reliability_score: 4,
+        clinical_score: null,
+        daysAttended: 2,
+        daysCommitted: 4,
+      })
+    ).toBe(40);
+  });
+});
+
+describe('replayVScore — partial attendance moves less than full attendance', () => {
+  const base = { attended: true, reliability_score: 5, clinical_score: 5 } as const;
+
+  it('a volunteer who managed 1 of 4 days ends below one who managed 4 of 4', () => {
+    const full = replayVScore([{ ...base, daysAttended: 4, daysCommitted: 4 }]);
+    const partial = replayVScore([{ ...base, daysAttended: 1, daysCommitted: 4 }]);
+
+    expect(full.score).toBeGreaterThan(partial.score);
+    // 0.7 x 70 + 0.3 x 100 vs 0.7 x 70 + 0.3 x 25.
+    expect(full.score).toBeCloseTo(79, 10);
+    expect(partial.score).toBeCloseTo(56.5, 10);
+  });
+
+  it('counts the event as attended even when only some days were', () => {
+    // events_attended counts EVENTS, not days. Somebody who came on one of four
+    // days took part in the event; the score is what reflects how much of it.
+    const result = replayVScore([{ ...base, daysAttended: 1, daysCommitted: 4 }]);
+    expect(result.eventsAttended).toBe(1);
+  });
+
+  it('a released day leaves the denominator rather than counting against them', () => {
+    // The volunteer committed to 4, released 1 in advance and attended the
+    // other 3. The commitment is now 3 of 3, not 3 of 4, so the outcome is
+    // unscaled -- an honest early release must never become a silent penalty.
+    const released = replayVScore([{ ...base, daysAttended: 3, daysCommitted: 3 }]);
+    const notReleased = replayVScore([{ ...base, daysAttended: 3, daysCommitted: 4 }]);
+
+    expect(released.score).toBeCloseTo(79, 10);
+    expect(released.score).toBeGreaterThan(notReleased.score);
+  });
+
+  it('an upheld dispute still voids the event, ratio or no ratio', () => {
+    const result = replayVScore([
+      { ...base, attended: false, daysAttended: 0, daysCommitted: 4, outcomeVoided: true },
+    ]);
+    expect(result.score).toBe(NEW_VOLUNTEER_V_SCORE);
   });
 });

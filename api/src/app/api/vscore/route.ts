@@ -179,16 +179,6 @@ async function handleReview(
   );
   if (reviewError) throw Errors.internal("Could not save the event review.");
 
-  // null when the review carries no scorable signal (attended but unrated).
-  // Reported honestly rather than as a substituted number, so a caller can
-  // tell "scored 60" from "not scored" -- see the note on the removed
-  // DEFAULT_MISSING_SUBSCORE in lib/vscore.ts.
-  const eventOutcome = computeEventOutcome({
-    attended: body.attended,
-    reliability_score: body.reliabilityScore ?? null,
-    clinical_score: body.clinicalScore ?? null,
-  });
-
   /*
     THE SCORE IS DERIVED NOW, so this REPLAYS the whole history rather than
     blending this one review into the stored number.
@@ -205,7 +195,26 @@ async function handleReview(
     correction to a March event cannot be expressed as an adjustment to today's
     number, because the blend has compounded March through everything since.
   */
-  const replay = await replayAndStoreVScore(admin, body.volunteerId);
+  const replay = await replayAndStoreVScore(admin, body.volunteerId, body.outreachId);
+
+  /*
+    The outcome we REPORT is computed after the replay, and with the same day
+    figures the replay used, so the number handed back is the one that actually
+    moved the score rather than an unscaled version of it. Reporting 100 for a
+    perfect review of 1 day out of 4 would be the endpoint contradicting itself.
+
+    Still null when the review carries no scorable signal (attended but
+    unrated), reported honestly rather than as a substituted number so a caller
+    can tell "scored 60" from "not scored" -- see the note on the removed
+    DEFAULT_MISSING_SUBSCORE in lib/vscore.ts.
+  */
+  const eventOutcome = computeEventOutcome({
+    attended: body.attended,
+    reliability_score: body.reliabilityScore ?? null,
+    clinical_score: body.clinicalScore ?? null,
+    daysAttended: replay.dayCommitment?.attended ?? null,
+    daysCommitted: replay.dayCommitment?.committed ?? null,
+  });
 
   return {
     volunteerId: body.volunteerId,

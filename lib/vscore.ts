@@ -157,6 +157,51 @@ export interface EventOutcomeInput {
   attended: boolean | null;
   reliability_score: number | null;
   clinical_score: number | null;
+  /**
+   * MULTI-DAY PARTICIPATION (owner-approved 2026-08-30). How many of the days
+   * the volunteer still stood committed to they were actually present for, and
+   * how many those were.
+   *
+   * BOTH ARE OPTIONAL, and omitting them means "do not scale" rather than
+   * "zero". That default is load-bearing: every caller that predates this
+   * change, and every path that has no day information to hand, keeps the exact
+   * behaviour it had. A missing number is never read as a bad one — the same
+   * rule that removed DEFAULT_MISSING_SUBSCORE.
+   *
+   * `daysAttended` counts days the organiser did not explicitly mark absent
+   * (`isPresent` in lib/attendance.ts DEFAULTS PRESENT — an unresolved day is
+   * not evidence of anything). `daysCommitted` EXCLUDES released days, because
+   * a day the volunteer dropped in advance left the commitment and is neither a
+   * failure nor an absence.
+   */
+  daysAttended?: number | null;
+  daysCommitted?: number | null;
+}
+
+/**
+ * The share of their own commitment a volunteer turned up for — the multiplier
+ * the event outcome is scaled by.
+ *
+ * Returns NULL, meaning "no day information", when either figure is absent,
+ * non-finite, or the denominator is zero. Null is not zero: the caller must
+ * leave the outcome alone rather than scale it to nothing.
+ *
+ * Clamped into [0, 1] so a miscount can never inflate an outcome above what
+ * the review itself justifies — the same one-way-only property the reliability
+ * multiplier has.
+ *
+ * `attendedRatio` in lib/outreachDays.ts IS this function, re-exported, so the
+ * number a screen shows an organiser and the number the score is scaled by can
+ * never drift apart.
+ */
+export function dayCommitmentRatio(
+  daysAttended: number | null | undefined,
+  daysCommitted: number | null | undefined
+): number | null {
+  if (daysAttended == null || daysCommitted == null) return null;
+  if (!Number.isFinite(daysAttended) || !Number.isFinite(daysCommitted)) return null;
+  if (daysCommitted <= 0) return null;
+  return Math.min(1, Math.max(0, daysAttended / daysCommitted));
 }
 
 /**
@@ -194,6 +239,13 @@ export interface EventOutcomeInput {
  *      constant above: substituting a midpoint here silently penalised anyone
  *      above 60, which is every new volunteer.
  *   5. `attended === null` (never reviewed / unknown) -> NULL, same reasoning.
+ *   6. MULTI-DAY (owner-approved 2026-08-30): the outcome from 2 or 3 is then
+ *      multiplied by `daysAttended / daysCommitted` when both are supplied.
+ *      The whole multi-day subsystem records which days a volunteer promised
+ *      and which they turned up for, and until this the scorer threw it away:
+ *      1 day of 4 scored identically to 4 of 4. The denominator excludes days
+ *      released in advance, so an honest early drop is not a silent penalty.
+ *      Omitting the pair means no scaling at all, never a zero.
  *
  * Returns null rather than a number when there is nothing to score, so the
  * caller must decide what to do about it instead of being handed a plausible
@@ -221,7 +273,26 @@ export function computeEventOutcome(review: EventOutcomeInput): number | null {
       ? reliability * REVIEW_SCORE_SCALE
       : ((reliability + clinical) / 2) * REVIEW_SCORE_SCALE;
 
-  return clampScore(outcome);
+  /*
+    THE ONE OUTCOME IS THEN SCALED BY THE SHARE OF DAYS ATTENDED (case 6).
+
+    Computed once per event and scaled once, never once per day. Scoring per
+    day would let a month-long campaign move a V-Score twenty times harder than
+    a one-day clinic, which is a statement about the event's length rather than
+    about the volunteer.
+
+    No day information -> no scaling, which is every single-day event whose
+    attendance was never resolved and every caller written before this existed.
+
+    A ratio of ZERO lands on exactly 0, the same floor `attended === false`
+    takes. That is the no-show case arriving by a second route and it is
+    deliberately not special-cased: somebody who committed to four days and was
+    marked absent on all four did not attend, whatever the review's overall
+    box says. Anything above zero is a PARTIAL ATTENDER, scored on the share
+    they delivered rather than treated as a no-show.
+  */
+  const ratio = dayCommitmentRatio(review.daysAttended, review.daysCommitted);
+  return clampScore(ratio === null ? outcome : outcome * ratio);
 }
 
 /** True when a review carries enough signal to move a V-Score at all. */
@@ -390,7 +461,19 @@ export function applyVScorePenalties(
 // correction, which makes the recompute self-checking instead of a leap.
 // ---------------------------------------------------------------------------
 
-/** One reviewed event, as the replay sees it. */
+/**
+ * One reviewed event, as the replay sees it.
+ *
+ * It extends `EventOutcomeInput`, so `daysAttended` / `daysCommitted` travel
+ * with each event and the day scaling is applied inside the replay rather than
+ * baked into a stored number. That is deliberate and matches how a review is
+ * treated everywhere else: the days a volunteer promised and the days they were
+ * present are EVIDENCE that lives in `application_days` and `attendance`, and
+ * the outcome is a conclusion drawn from it. Storing the scaled figure would
+ * freeze a conclusion drawn before the organiser had finished resolving the
+ * days. (Contrast `ReplayPenalty.points`, which IS stored, for the reasons set
+ * out there.)
+ */
 export interface ReplayEvent extends EventOutcomeInput {
   /**
    * An upheld ATTENDANCE dispute: the volunteer was there after all. Counts
@@ -509,6 +592,12 @@ export function replayVScore(entries: readonly ReplayEntry[]): ReplayResult {
       attended,
       reliability_score: entry.reliability_score,
       clinical_score: entry.clinical_score,
+      // Carried through explicitly. This object is rebuilt rather than spread
+      // so that `attended` can be overridden by an upheld attendance dispute --
+      // which means every field the outcome depends on has to be named here,
+      // and a field forgotten is a field silently ignored.
+      daysAttended: entry.daysAttended,
+      daysCommitted: entry.daysCommitted,
     });
   }
 

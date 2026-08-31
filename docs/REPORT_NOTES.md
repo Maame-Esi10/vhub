@@ -738,7 +738,7 @@ exception-based marking assumes the organiser is present. But daily resolution
 is not *required*: unresolved days simply do not count, exactly as an unrated
 review moves nothing.
 
-### V-Score: one event, one movement (approved 2026-08-12, gated — not built)
+### V-Score: one event, one movement (approved 2026-08-12, BUILT 2026-08-31)
 
 `event_outcome` is computed **once per event**, scaled by
 `days_attended / days_committed`. A month-long campaign must not move a score
@@ -1940,10 +1940,9 @@ the wrong starting position in front of the organisation.
 
 ### Still gated
 
-The approved change that scales `event_outcome` by days attended over days
-committed is NOT built, and neither is continuous availability. `attendedRatio`
-exists as a pure function for display and is wired to nothing in the V-Score
-path, so no score has moved.
+Continuous availability is not built. The scaling of `event_outcome` by days
+attended over days committed WAS built on 2026-08-31 — see "Partial attendance
+finally reaches the score" at the end of this file.
 
 ## A day span wherever a date is shown (2026-08-20)
 
@@ -3104,3 +3103,130 @@ function" ought to be something that was checked rather than reasoned about.
 There is a unit test asserting the same property from the other side: a history
 with no penalties replays to exactly what it replayed to before penalties
 existed.
+
+
+## Partial attendance finally reaches the score (2026-08-31)
+
+The multi-day subsystem had been collecting evidence that nothing consumed. A
+volunteer says which days of an outreach they will come to (`application_days`),
+the organiser resolves each day as it happens (`attendance`), and the scorer
+then took one review row and ignored every bit of it: somebody who managed one
+Saturday of four scored exactly the same as somebody who managed all four. This
+closes that, and it is the largest correctness gap the product had left.
+
+**The rule.** An event outcome is still computed **once per event** — the
+0–100 number derived from the review's attendance box and its one or two star
+ratings — and it is now **multiplied by the share of committed days the
+volunteer was actually present for**. A perfect review of 4 days out of 4 still
+scores 100. The same perfect review of 1 day out of 4 scores 25, and blends into
+the V-Score at that weight.
+
+**Once per event, never once per day, and that is the whole point.** Scoring
+each day separately would let a month-long campaign move a score twenty times
+harder than a one-day clinic. That would be the app making a statement about how
+long an event ran rather than about the volunteer, and it would let a single
+long event dominate somebody's entire history.
+
+### The two ways this could have quietly hurt people, and what stops each
+
+Both were live risks, and both are closed by rules that already existed
+elsewhere in the project rather than by anything invented here.
+
+**A released day must not become a penalty.** Per-day release exists so that a
+volunteer who cannot make one Saturday of four can say so instead of abandoning
+the campaign or taking a no-show. If a released day stayed in the denominator,
+using that escape hatch honestly would score 3/4 and cost the volunteer
+reputation — rebuilding the exact trap the feature was built to remove. The
+denominator therefore counts only days still committed to (`released_at is
+null`), which is the same filter every other day count in the app already
+applies. Release a day and the commitment becomes 3 of 3, not 3 of 4.
+
+**An organiser's inaction must not become a volunteer's absence.** Attendance is
+resolved per day by a human, and plenty of days will never be resolved at all.
+`isPresent` already defaults to present for exactly this reason — absence is an
+explicit human judgement, never an inference from silence, because a flat phone
+or an organiser who never opened the screen is not evidence of anything. The
+ratio inherits that: an unresolved day counts as attended, and the ratio falls
+only where somebody actually marked a person absent.
+
+Those two together are why the migration's dry run is expected to come back
+**empty**. Nobody on the platform has been marked absent on part of a multi-day
+event, so every ratio is currently 1.0 and the scaling is a no-op for everybody.
+The rule now exists for the first time somebody is.
+
+### Zero attended days is still a no-show, and gets there by arithmetic
+
+The approved shape was "partial attendance takes the ratio; only zero attended
+days takes the flat no-show treatment". That did not need a second rule: a ratio
+of zero multiplies the outcome to exactly the 0 that a review filed with
+`attended = false` already produces. So the no-show case arrives at the same
+floor by a second route without a branch, and somebody marked absent on all four
+of the days they committed to lands there whatever the review's overall
+attendance box says.
+
+### A missing number is not a bad number
+
+`daysAttended` and `daysCommitted` are optional, and `dayCommitmentRatio`
+returns **null** rather than zero when either is absent. Null means "do not
+scale"; the outcome passes through untouched. Every caller written before this
+change, and every path with no day information to hand, therefore behaves
+exactly as it did.
+
+This is the same lesson as the removed `DEFAULT_MISSING_SUBSCORE`, which
+substituted a midpoint 3/5 for an unrated review and thereby dragged every
+volunteer toward 60 from a starting score of 70. Reading an absent figure as a
+poor one is how a data gap turns into a reputation loss. A read path with no
+days must leave the score alone.
+
+### The ratio is derived on every replay, never stored on the review
+
+A review stores its ratings and the outcome is derived from them, because the
+review is evidence and the score is a conclusion. The days are evidence in the
+same sense, and unlike the ratings they keep changing after the review is filed:
+an organiser who resolves day 3 a week later has produced new evidence, and the
+score has to move. Storing a scaled number at review time would freeze a
+conclusion drawn before the organiser had finished. So `replayAndStoreVScore`
+reads `application_days` and `attendance` on every replay and recomputes the
+ratio each time.
+
+This is deliberately the opposite treatment from `score_events.points`, which IS
+stored — a penalty's number is the decision itself, not evidence for one, and
+the late-release figure depends on a rolling window that has since moved.
+
+### One function, two callers
+
+`attendedRatio` in `lib/outreachDays.ts` had been sitting there for display, with
+a comment saying the V-Score consumption was gated. It is now an alias of
+`dayCommitmentRatio` in `lib/vscore.ts` rather than a second copy of the same
+division, so the figure an organiser is shown on screen and the figure their
+volunteer's score is scaled by are provably the same number. The alias points
+that way round because `lib/vscore.ts` imports nothing at all and must stay that
+way — it is imported by the serverless API, which has no business pulling in a
+UI date helper.
+
+`vscore_day_ratio()` in the migration is a third implementation, in SQL, and the
+same standing arrangement applies to it as to `vscore_event_outcome()`: it
+exists so the owner can see the movement in the SQL editor before anything is
+written, the TypeScript is the version that runs in production, and if the two
+ever disagree the SQL is the bug.
+
+### Why the ratio is applied at the point of use rather than inside the outcome function
+
+In SQL, `vscore_event_outcome` is `immutable` and takes three scalars. Adding a
+fourth parameter creates an *overload* rather than replacing the function, which
+would leave two functions that have to agree with each other — the drift this
+project keeps closing. So the migration multiplies at the point of use, in the
+replay's review branch, and the pair together mirror the single TypeScript
+`computeEventOutcome`.
+
+### The bug the tests caught
+
+`replayVScore` rebuilds the review object field by field before blending, rather
+than spreading it, because `attended` has to be overridable by an upheld
+attendance dispute. That means every field the outcome depends on must be named
+explicitly — and the first version of this change named the two new ones in the
+interface and forgot them there. The pure function scaled correctly and the
+replay did not, so the scaling was silently inert through the only path that
+actually runs in production. A test asserting that 1-of-4 ends below 4-of-4
+caught it. The comment at that call site now says why the object is rebuilt and
+what forgetting a field costs.

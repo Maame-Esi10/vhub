@@ -16,6 +16,7 @@
  */
 
 import { parseCalendarDate } from '@/components/ui/dateUtils';
+import { dayCommitmentRatio } from '@/lib/vscore';
 
 /**
  * A sanity bound on how many days one outreach may span, enforced by the form.
@@ -435,13 +436,15 @@ function ordinal(value: number): string {
  * they committed to nothing (which the database now prevents, but a read path
  * must not divide by it regardless).
  *
- * DISPLAY ONLY at present. The approved change that scales `event_outcome` by
- * this ratio — so a month-long event cannot move a V-Score twenty times harder
- * than a one-day clinic — is NOT wired up here; V-Score maths stays in
- * lib/vscore.ts and is gated. This exists so the attendance and review screens
- * can show the organiser what they are judging.
+ * NO LONGER DISPLAY-ONLY (owner-approved 2026-08-30). This ratio is now the
+ * multiplier `computeEventOutcome` scales an event outcome by, so a volunteer
+ * who managed 1 of 4 committed days no longer scores identically to one who
+ * managed 4 of 4. It is therefore an ALIAS of `dayCommitmentRatio` in
+ * lib/vscore.ts rather than a second copy of the same arithmetic: the number
+ * the attendance and review screens show an organiser and the number the score
+ * is scaled by are now provably the same number.
+ *
+ * The V-Score maths itself still lives in lib/vscore.ts, which imports nothing
+ * — which is why the alias points that way round and not the other.
  */
-export function attendedRatio(daysAttended: number, daysCommitted: number): number | null {
-  if (daysCommitted <= 0) return null;
-  return Math.min(1, Math.max(0, daysAttended / daysCommitted));
-}
+export const attendedRatio = dayCommitmentRatio;

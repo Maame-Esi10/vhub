@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { replayVScore, type ReplayEntry } from "@/lib/vscore";
+import { isPresent } from "@/lib/attendance";
 
 /**
  * Rebuilds one volunteer's V-Score from their whole history.
@@ -31,6 +32,14 @@ import { replayVScore, type ReplayEntry } from "@/lib/vscore";
  * problem: it was incremented per review, so an edited review counted twice
  * and an upheld attendance dispute could not restore a wrongly-recorded
  * absence.
+ *
+ * IT ALSO READS THE DAYS (owner-approved 2026-08-30). Each review's outcome is
+ * scaled by the share of committed days the volunteer was present for, so 1 day
+ * of 4 no longer scores identically to 4 of 4. Those two figures are derived
+ * here on every replay rather than stored on the review, because they are
+ * evidence that can still change after a review is filed -- an organiser
+ * resolving day 3 a week later must move the score, and it will, on the next
+ * replay.
  */
 
 export interface ReplayOutcome {
@@ -42,6 +51,16 @@ export interface ReplayOutcome {
   correctedEvents: number;
   /** How many penalties are counting against this volunteer right now. */
   activePenalties: number;
+  /**
+   * The day figures for the outreach the caller nominated, or null when it
+   * nominated none or holds no live commitment there.
+   *
+   * It is returned rather than recomputed by the caller because the replay has
+   * already read them, and because an endpoint that reported an UNSCALED
+   * outcome while storing a scaled score would be telling the organisation
+   * something the score does not agree with.
+   */
+  dayCommitment: DayCommitment | null;
 }
 
 /**
@@ -64,29 +83,44 @@ interface SortableEntry {
 
 export async function replayAndStoreVScore(
   admin: SupabaseClient,
-  volunteerId: string
+  volunteerId: string,
+  /** Report this outreach's day figures back, so a caller can explain itself. */
+  reportDaysFor?: string
 ): Promise<ReplayOutcome> {
-  const [{ data: profile }, { data: reviews }, { data: disputes }, { data: penalties }] =
-    await Promise.all([
-      admin
-        .from("volunteer_profiles")
-        .select("v_score, events_attended")
-        .eq("id", volunteerId)
-        .maybeSingle(),
-      admin
-        .from("event_reviews")
-        .select("outreach_id, attended, reliability_score, clinical_score, created_at, id")
-        .eq("volunteer_id", volunteerId),
-      admin
-        .from("disputes")
-        .select("outreach_id, type")
-        .eq("volunteer_id", volunteerId)
-        .eq("status", "upheld"),
-      admin
-        .from("score_events")
-        .select("id, points, voided_at, created_at")
-        .eq("volunteer_id", volunteerId),
-    ]);
+  const [
+    { data: profile },
+    { data: reviews },
+    { data: disputes },
+    { data: penalties },
+    { data: applications },
+    { data: attendanceRows },
+  ] = await Promise.all([
+    admin
+      .from("volunteer_profiles")
+      .select("v_score, events_attended")
+      .eq("id", volunteerId)
+      .maybeSingle(),
+    admin
+      .from("event_reviews")
+      .select("outreach_id, attended, reliability_score, clinical_score, created_at, id")
+      .eq("volunteer_id", volunteerId),
+    admin
+      .from("disputes")
+      .select("outreach_id, type")
+      .eq("volunteer_id", volunteerId)
+      .eq("status", "upheld"),
+    admin
+      .from("score_events")
+      .select("id, points, voided_at, created_at")
+      .eq("volunteer_id", volunteerId),
+    admin.from("applications").select("id, outreach_id").eq("volunteer_id", volunteerId),
+    admin
+      .from("attendance")
+      .select("outreach_id, outreach_day_id, organiser_status")
+      .eq("volunteer_id", volunteerId),
+  ]);
+
+  const days = await loadDayCommitment(admin, applications ?? [], attendanceRows ?? []);
 
   const upheldAny = new Set<string>();
   const upheldAttendance = new Set<string>();
@@ -121,6 +155,10 @@ export async function replayAndStoreVScore(
         clinical_score: review.clinical_score as number | null,
         outcomeVoided: upheldAny.has(outreachId),
         attendanceCorrected: upheldAttendance.has(outreachId),
+        // Both null for an outreach we hold no live commitment for, which means
+        // "do not scale" rather than "attended nothing". See EventOutcomeInput.
+        daysAttended: days.get(outreachId)?.attended ?? null,
+        daysCommitted: days.get(outreachId)?.committed ?? null,
       },
     });
   }
@@ -165,5 +203,89 @@ export async function replayAndStoreVScore(
       upheldAny.has(review.outreach_id as string)
     ).length,
     activePenalties: (penalties ?? []).filter((penalty) => penalty.voided_at === null).length,
+    dayCommitment: reportDaysFor ? days.get(reportDaysFor) ?? null : null,
   };
+}
+
+/** What the day scaling needs to know about one outreach. */
+interface DayCommitment {
+  /** Days still committed to -- released days have LEFT the count. */
+  committed: number;
+  /** How many of those the organiser did not explicitly mark absent. */
+  attended: number;
+}
+
+/**
+ * Builds the per-outreach day figures each event outcome is multiplied by.
+ *
+ * TWO RULES DO THE WORK, and both are settled policy rather than new decisions:
+ *
+ *   1. `released_at is null` -- "everything that COUNTS days filters released
+ *      days" (CLAUDE.md). A day dropped in advance departs the commitment: it
+ *      is not a failure and not an absence, so it must leave the DENOMINATOR
+ *      too. Leaving it in would turn every honest early release into a silent
+ *      score penalty, which is the exact trap per-day release was built to
+ *      remove.
+ *   2. `isPresent` DEFAULTS PRESENT -- a day with no attendance row, or a row
+ *      the organiser never resolved, counts as attended. Silence is not a
+ *      judgement, so an organiser who never opens the attendance screen cannot
+ *      cost a volunteer anything, and a flat phone is not an absence. The ratio
+ *      falls only where a human actually marked somebody absent.
+ *
+ * Together those mean the ratio is 1.0, and the scaling therefore a no-op, for
+ * every volunteer on the platform today -- which is why the recompute shipping
+ * with this change can be checked against an empty dry-run report.
+ *
+ * An outreach with no live commitment rows gets NO entry, and the caller then
+ * passes nulls, meaning "do not scale".
+ */
+async function loadDayCommitment(
+  admin: SupabaseClient,
+  applications: readonly { id: string; outreach_id: string }[],
+  attendanceRows: readonly {
+    outreach_id: string;
+    outreach_day_id: string | null;
+    organiser_status: "present" | "absent" | null;
+  }[]
+): Promise<Map<string, DayCommitment>> {
+  const byOutreach = new Map<string, DayCommitment>();
+  if (applications.length === 0) return byOutreach;
+
+  const outreachByApplication = new Map<string, string>();
+  for (const application of applications) {
+    outreachByApplication.set(application.id, application.outreach_id);
+  }
+
+  const { data: committedDays } = await admin
+    .from("application_days")
+    .select("application_id, outreach_day_id")
+    .in(
+      "application_id",
+      applications.map((application) => application.id)
+    )
+    .is("released_at", null);
+
+  // Keyed on outreach AND day, not on the day alone: one volunteer holds days
+  // across many outreaches, and a bare day id would collide between them.
+  const resolved = new Map<string, { organiser_status: "present" | "absent" | null }>();
+  for (const row of attendanceRows) {
+    if (!row.outreach_day_id) continue;
+    resolved.set(`${row.outreach_id}:${row.outreach_day_id}`, {
+      organiser_status: row.organiser_status,
+    });
+  }
+
+  for (const day of committedDays ?? []) {
+    const outreachId = outreachByApplication.get(day.application_id as string);
+    if (!outreachId) continue;
+
+    const entry = byOutreach.get(outreachId) ?? { committed: 0, attended: 0 };
+    entry.committed += 1;
+    if (isPresent(resolved.get(`${outreachId}:${day.outreach_day_id as string}`))) {
+      entry.attended += 1;
+    }
+    byOutreach.set(outreachId, entry);
+  }
+
+  return byOutreach;
 }
