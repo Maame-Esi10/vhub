@@ -1344,7 +1344,8 @@ create table if not exists admin_actions (
     'dispute',
     'document',
     'vetted_source',
-    'policy'
+    'policy',
+    'score_event'
   )),
   target_id uuid,
   action text not null check (length(btrim(action)) > 0),

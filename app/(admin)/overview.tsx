@@ -115,6 +115,23 @@ export default function AdminOverview() {
         </Pressable>
 
         <Pressable
+          onPress={() => router.push('/(admin)/deductions')}
+          accessibilityRole="button"
+          accessibilityLabel="Open the V-Score deductions list"
+          style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+        >
+          <View style={styles.cardHeader}>
+            <MaterialCommunityIcons name="scale-balance" size={20} color={colors.primary} />
+            <Text style={styles.cardTitle}>V-Score deductions</Text>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+          </View>
+          <Text style={styles.cardBody}>
+            Points taken off a volunteer for a cancelled place or a day dropped late. Reversing one
+            rebuilds their score without it and tells them why — the record itself is never deleted.
+          </Text>
+        </Pressable>
+
+        <Pressable
           onPress={() => router.push('/(admin)/sources')}
           accessibilityRole="button"
           accessibilityLabel="Open the vetted sources list"

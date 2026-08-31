@@ -9,15 +9,24 @@ import {
   Input,
   ListSkeleton,
   ScreenHeader,
+  Badge,
   Toast,
   VScoreBadge,
   formatEventDate,
 } from '@/components/ui';
 import { getRemarkLabel, getRemarkTone } from '@/constants/review-remarks';
-import { useMyDisputes, useMyReviews, useOutreachDaysForMany, useRaiseDispute } from '@/hooks';
+import {
+  SCORE_EVENT_LABELS,
+  useMyDisputes,
+  useMyReviews,
+  useMyScoreEvents,
+  useOutreachDaysForMany,
+  useRaiseDispute,
+  type MyEventReview,
+  type ScoreEventRow,
+} from '@/hooks';
 import type { Dispute, DisputeType } from '@/types/database';
 import { formatDaySpan } from '@/lib/outreachDays';
-import type { MyEventReview } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
@@ -43,6 +52,15 @@ export default function VolunteerFeedback() {
   const volunteerId = useAuthStore((state) => state.user)?.id;
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const reviewsQuery = useMyReviews(volunteerId);
+
+  /*
+    THE DEDUCTIONS THAT WERE NOT REVIEWS. A cancelled place and a day dropped
+    inside 24 hours both move a V-Score and produce no review, so before this
+    they were the one thing that could change somebody's number with nothing
+    anywhere to explain it. `score_events.reason` is non-blank by check
+    constraint precisely so there is always something honest to show here.
+  */
+  const deductionsQuery = useMyScoreEvents(volunteerId);
 
   const reviews = useMemo(() => reviewsQuery.data ?? [], [reviewsQuery.data]);
 
@@ -140,23 +158,48 @@ export default function VolunteerFeedback() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          reviews.length > 0 ? (
-            <View style={styles.intro}>
-              <View style={styles.introRow}>
-                <Text style={styles.introTitle}>
-                  {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
+          <>
+            {reviews.length > 0 ? (
+              <View style={styles.intro}>
+                <View style={styles.introRow}>
+                  <Text style={styles.introTitle}>
+                    {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
+                  </Text>
+                  {typeof volunteerProfile?.v_score === 'number' ? (
+                    <VScoreBadge score={volunteerProfile.v_score} />
+                  ) : null}
+                </View>
+                <Text style={styles.introBody}>
+                  Everything organisations have written about your work. Organisations you apply to
+                  in future see only your averages and how often each remark comes up, never a
+                  single review, and never these notes.
                 </Text>
-                {typeof volunteerProfile?.v_score === 'number' ? (
-                  <VScoreBadge score={volunteerProfile.v_score} />
-                ) : null}
               </View>
-              <Text style={styles.introBody}>
-                Everything organisations have written about your work. Organisations you apply to in
-                future see only your averages and how often each remark comes up, never a single
-                review, and never these notes.
-              </Text>
-            </View>
-          ) : null
+            ) : null}
+
+            {/*
+              RENDERS NOTHING WHEN THERE ARE NONE, which is almost everybody. An
+              empty "deductions" heading on a good volunteer's screen implies
+              there is a record to worry about.
+
+              It sits ABOVE the reviews and outside the intro card, because it
+              is a different kind of thing: the reviews are what people said,
+              this is what the platform did.
+            */}
+            {(deductionsQuery.data ?? []).length > 0 ? (
+              <View style={styles.deductions}>
+                <Text style={styles.deductionsTitle}>Score deductions</Text>
+                <Text style={styles.deductionsBody}>
+                  Points taken off your V-Score for something other than a review — cancelling a
+                  place you had been given, or dropping a day you had committed to inside 24 hours
+                  of it. Each one says what it was for. Later events pull your score back up.
+                </Text>
+                {(deductionsQuery.data ?? []).map((deduction) => (
+                  <DeductionCard key={deduction.id} deduction={deduction} />
+                ))}
+              </View>
+            ) : null}
+          </>
         }
         renderItem={({ item }) => (
           <ReviewCard
@@ -228,6 +271,49 @@ export default function VolunteerFeedback() {
       <Toast message={disputeToast} onDismiss={() => setDisputeToast(null)} durationMs={5000} />
 
     </SafeAreaView>
+  );
+}
+
+/**
+ * One deduction, in the volunteer's own words rather than the enum's.
+ *
+ * A REVERSED ONE IS STILL SHOWN, and shown as reversed. Hiding it would mean
+ * somebody who had been told about a penalty could later find no trace of it,
+ * which reads as the app having lost the record rather than as the penalty
+ * having been withdrawn — and the admin's reason for reversing it is the part
+ * they most want to read.
+ */
+function DeductionCard({ deduction }: { deduction: ScoreEventRow }) {
+  const reversed = deduction.voided_at !== null;
+
+  return (
+    <View style={[styles.deductionCard, reversed && styles.deductionCardReversed]}>
+      <View style={styles.deductionHeader}>
+        <Text style={styles.deductionPoints}>{deduction.points}</Text>
+        <Text style={styles.deductionKind} numberOfLines={1}>
+          {SCORE_EVENT_LABELS[deduction.kind]}
+        </Text>
+        {reversed ? <Badge label="Reversed" tone="success" /> : null}
+      </View>
+
+      <Text style={styles.deductionMeta} numberOfLines={2}>
+        {deduction.outreach?.title ?? 'Event no longer listed'} ·{' '}
+        {formatEventDate(deduction.created_at)}
+      </Text>
+
+      <Text style={styles.deductionReason}>{deduction.reason}</Text>
+
+      {reversed ? (
+        <View style={styles.deductionReversedBlock}>
+          <Text style={styles.deductionReversedLabel}>
+            These points were put back on your score.
+          </Text>
+          {deduction.voided_reason ? (
+            <Text style={styles.deductionReason}>{deduction.voided_reason}</Text>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -368,6 +454,58 @@ function ScorePill({ label, value }: { label: string; value: number | null }) {
 }
 
 const styles = StyleSheet.create({
+  /*
+    Given real breathing room from the intro card above and the first review
+    card below, rather than dropped flush into the stack — a section jammed
+    against its neighbours reads as unfinished.
+  */
+  deductions: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.xl,
+    gap: spacing.md,
+  },
+  deductionsTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 16,
+    color: colors.textPrimary,
+  },
+  deductionsBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textSecondary,
+  },
+  deductionCard: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  deductionCardReversed: { opacity: 0.72 },
+  deductionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  deductionPoints: { fontFamily: fontFamily.semiBold, fontSize: 18, color: colors.danger },
+  deductionKind: { flex: 1, fontFamily: fontFamily.semiBold, fontSize: 15, color: colors.textPrimary },
+  deductionMeta: { fontFamily: fontFamily.regular, fontSize: 13, color: colors.textSecondary },
+  deductionReason: {
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textPrimary,
+  },
+  deductionReversedBlock: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: spacing.xs,
+  },
+  deductionReversedLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    color: colors.success,
+  },
   disputeRow: {
     flexDirection: 'row',
     alignItems: 'center',

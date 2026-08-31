@@ -3230,3 +3230,96 @@ replay did not, so the scaling was silently inert through the only path that
 actually runs in production. A test asserting that 1-of-4 ends below 4-of-4
 caught it. The comment at that call site now says why the object is rebuilt and
 what forgetting a field costs.
+
+## Both ends of a V-Score penalty become visible (2026-08-31)
+
+`score_events` was written by `/api/vscore`, read by the replay, and shown to
+nobody. A volunteer could lose points with nowhere to find out what for, and an
+admin could neither see a deduction nor undo one. That made the flat penalties
+the only irreversible thing left in a score model whose entire point is that it
+is derived and therefore correctable — an upheld dispute could already reach
+back and void a *review*; nothing could reach a *penalty*.
+
+Two surfaces and one endpoint close that.
+
+### What the volunteer sees
+
+Their own deductions now sit on "My feedback", above the reviews. They are put
+outside the intro card on purpose: the reviews are what people said about them,
+and a deduction is what the platform did to them, and running the two together
+would blur which is which.
+
+Each one shows the points, what kind it was in plain words ("Late cancellation",
+"Dropped a day late"), the event, the date, and the written reason.
+`score_events.reason` is non-blank by check constraint precisely so there is
+always something honest to show.
+
+**The section renders nothing at all when there are none**, which will be almost
+everybody. An empty "Score deductions" heading on a good volunteer's screen
+implies there is a record to worry about.
+
+### What the admin sees, and why it is a list rather than a search
+
+The moderation screen is deliberately a search with no browsable directory,
+because moderation starts with a complaint about a specific person and a roll of
+every account invites looking through people for its own sake. This screen is
+the opposite and for a reason that does not contradict it: it browses
+**decisions the platform has already made about somebody's number**, not people.
+It is the same kind of thing as the activity log, the table only ever holds rows
+that moved a score, and an admin has to be able to find a wrong deduction
+without already knowing whose it was.
+
+It is capped at 200 rows. If it ever grows past that, the cap is the bug and the
+fix is paging — never a silently truncated list an admin believes is complete.
+
+### Reversing one
+
+`/api/score-event` sets `voided_at` and `voided_reason`, replays, writes the
+audit row, then tells the volunteer.
+
+**It is an UPDATE, never a DELETE.** The row is the evidence behind a number
+somebody was shown; a voided row simply stops counting in the replay, which is
+exactly the treatment an upheld dispute gives a review. Both the volunteer and
+the admin keep seeing it, marked reversed. Hiding it would mean somebody who had
+been told about a penalty could later find no trace of it — which reads as the
+app having lost the record rather than as the penalty having been withdrawn.
+
+**The score is REPLAYED, not adjusted.** Adding the points back onto the stored
+number would be wrong twice over: the clamp to [0, 100] may already have
+swallowed part of the deduction, and every review filed since has blended it
+forward at 0.7x apiece. Only replaying the history without it produces the score
+the corrected history implies. That is also why the toast reports both numbers —
+how far a score actually moves depends on what was filed after the penalty, and
+an admin told only "done" cannot tell a working reversal from a no-op.
+
+**It is one-way.** There is no un-void. Re-applying a deduction an admin decided
+was wrong needs its own justification and its own audit row, and the honest way
+to express that is a new penalty rather than the resurrection of a reversed one.
+The dedupe key would refuse a duplicate anyway.
+
+**The volunteer is told, with the amount and the new score named.** A reversal in
+silence is indistinguishable from a score that drifted, and the person the
+points were taken from is the one with the most reason to know they came back.
+The push reuses the existing `application_status` notification type rather than
+adding a new one — the type is a column with a CHECK on it, and a new value
+would be a migration for a message the volunteer reads as ordinary news about
+their standing. The dispute decision made the same call for the same reason.
+
+### The migration that had to ship with it
+
+`admin_actions.target_type` is a CHECK constraint rather than an enum, and
+20260825b said in as many words that this was so later packages could extend it
+with a plain drop-and-add instead of the two-paste enum dance. `20260907` is the
+first time that decision was collected on.
+
+It has to land with the endpoint rather than after it: `recordAdminAction`
+throws when the insert fails, which is the correct behaviour for a decision that
+cannot be recorded, and would make every reversal fail until the constraint knew
+the word.
+
+### One stale doc line fixed in passing
+
+`resolveDispute` in `lib/api-client.ts` still said upholding "does NOT recompute
+a V-Score" and called that "a separate, gated change". It was approved on
+2026-08-26 and has recomputed ever since. The endpoint was right and its client
+wrapper was describing a world that had stopped existing.

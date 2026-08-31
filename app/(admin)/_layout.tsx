@@ -78,6 +78,7 @@ export default function AdminTabsLayout() {
       */}
       <Tabs.Screen name="activity" options={{ href: null }} />
       <Tabs.Screen name="stats" options={{ href: null }} />
+      <Tabs.Screen name="deductions" options={{ href: null }} />
       <Tabs.Screen name="sources" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="account-security" options={{ href: null }} />

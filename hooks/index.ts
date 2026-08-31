@@ -196,3 +196,11 @@ export type {
   UpdateVolunteerProfileParams,
   UpdateOrganisationProfileParams,
 } from './useProfileEditor';
+export {
+  scoreEventKeys,
+  useMyScoreEvents,
+  useAllScoreEvents,
+  useVoidScoreEvent,
+  SCORE_EVENT_LABELS,
+} from './useScoreEvents';
+export type { ScoreEventRow, AdminScoreEventRow, VoidScoreEventParams } from './useScoreEvents';

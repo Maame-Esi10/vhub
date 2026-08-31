@@ -50,6 +50,7 @@ export const API_ROUTES = {
   moderation: '/api/moderation',
   disputeResolution: '/api/dispute-resolution',
   vettedSource: '/api/vetted-source',
+  scoreEvent: '/api/score-event',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -992,11 +993,13 @@ export function moderateAccount(
 /**
  * An admin's decision on one dispute.
  *
- * Upholding records that the volunteer was right and tells both parties in the
- * same words. It does NOT recompute a V-Score and does not rewrite the
- * attendance row or the review — that record is the evidence, and a correction
- * sits beside it rather than on top of it. Recalculating a score from full
- * history is a separate, gated change.
+ * Upholding records that the volunteer was right, tells both parties in the
+ * same words, and RECOMPUTES their V-Score from full history (owner-approved
+ * 2026-08-26): the disputed event stops counting and everything after it is
+ * replayed on top of that.
+ *
+ * It still does not rewrite the attendance row or the review — that record is
+ * the evidence, and a correction sits beside it rather than on top of it.
  */
 export function resolveDispute(
   disputeId: string,
@@ -1164,4 +1167,33 @@ export async function pingApi(): Promise<ApiReachability> {
       reason: `Unexpected ${err.status} response (${err.code}) -- check EXPO_PUBLIC_API_BASE_URL.`,
     };
   }
+}
+
+/**
+ * An admin reversing one V-Score deduction.
+ *
+ * The row is NOT deleted — a penalty is the evidence behind a number somebody
+ * was shown, so it stays and stops counting, the same treatment an upheld
+ * dispute gives a review. The volunteer keeps seeing it, marked as reversed.
+ *
+ * The score is then REPLAYED rather than adjusted: the clamp to [0, 100] may
+ * already have swallowed part of the deduction, and every review filed since
+ * has blended it forward, so adding the points back would not produce the score
+ * the corrected history implies.
+ *
+ * One-way. There is no un-void; re-applying a deduction would be a new penalty
+ * with its own justification, not a resurrection of a reversed one.
+ */
+export function voidScoreEvent(
+  scoreEventId: string,
+  reason: string,
+  options?: RequestOptions
+): Promise<{
+  scoreEventId: string;
+  volunteerId: string;
+  pointsReturned: number;
+  oldScore: number;
+  newScore: number;
+}> {
+  return apiPost(API_ROUTES.scoreEvent, { scoreEventId, reason }, options);
 }

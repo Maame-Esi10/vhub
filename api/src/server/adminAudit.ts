@@ -25,7 +25,8 @@ export type AdminActionTarget =
   | "dispute"
   | "document"
   | "vetted_source"
-  | "policy";
+  | "policy"
+  | "score_event";
 
 export interface AdminActionInput {
   targetType: AdminActionTarget;
