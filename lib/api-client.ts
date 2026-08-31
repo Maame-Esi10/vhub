@@ -51,6 +51,7 @@ export const API_ROUTES = {
   disputeResolution: '/api/dispute-resolution',
   vettedSource: '/api/vetted-source',
   scoreEvent: '/api/score-event',
+  accountClosure: '/api/account-closure',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -1195,4 +1196,55 @@ export function voidScoreEvent(
   newScore: number;
 }> {
   return apiPost(API_ROUTES.scoreEvent, { scoreEventId, reason }, options);
+}
+
+// ---------------------------------------------------------------------------
+// /api/account-closure
+// ---------------------------------------------------------------------------
+
+export interface CloseAccountResponse {
+  closedAt: string;
+  role: 'volunteer' | 'organisation';
+  /**
+   * False when the profile was closed but the login could not be revoked. The
+   * screen must say so plainly rather than claiming a clean close: the account
+   * is anonymised either way, but the person could still sign in until it is
+   * retried.
+   */
+  loginRevoked: boolean;
+  documentsDestroyed: number;
+  /** Organisation closure. */
+  outreachesCancelled?: number;
+  volunteersNotified?: number;
+  /** Volunteer closure. */
+  applicationsWithdrawn?: number;
+  placesBackfilled?: number;
+}
+
+/**
+ * Closes the signed-in user's own account. Immediate and irreversible.
+ *
+ * IT ANONYMISES AND REVOKES; IT DOES NOT DELETE. The person is removed — name,
+ * contact details, photograph, biography, skills — the private evidence
+ * (credential and organisation documents) is destroyed, and the login is
+ * banned. What stays is the record of work: outreaches, applications,
+ * attendance, reviews and score events.
+ *
+ * That is not a softening of the promise, it IS the promise: an organisation's
+ * record of who worked at its clinic is its record too, not only the
+ * volunteer's, and a V-Score is derived by replaying those reviews. Deleting
+ * them would silently move the scores of everyone who worked alongside the
+ * person leaving.
+ *
+ * The caller must sign out afterwards. The session is not invalidated by the
+ * ban until it is next refreshed, so the app has to end it deliberately.
+ */
+export function closeAccount(options?: RequestOptions): Promise<CloseAccountResponse> {
+  return apiPost<CloseAccountResponse>(
+    API_ROUTES.accountClosure,
+    // The literal the endpoint requires. It defends against a mis-tap, not
+    // against the account holder, who is entitled to close their own account.
+    { confirmation: 'CLOSE' },
+    options
+  );
 }

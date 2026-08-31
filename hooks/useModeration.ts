@@ -53,6 +53,10 @@ export function useAccountSearch(term: string) {
         // the endpoint: offering an action that will always fail is worse than
         // not offering it.
         .neq('role', 'admin')
+        // A closed account is not a person any more. Its row survives so other
+        // people's event history survives, but there is nobody to suspend and
+        // nothing a suspension would stop.
+        .is('closed_at', null)
         .order('full_name')
         .limit(25);
 
@@ -74,6 +78,10 @@ export function useModeratedAccounts() {
         .from('profiles')
         .select('id, full_name, email, role, region, moderation_state, moderation_reason')
         .neq('moderation_state', 'active')
+        // Somebody suspended who then closed their account is gone; listing
+        // them under "currently stopped" would offer a reinstatement that
+        // restores nothing.
+        .is('closed_at', null)
         .order('moderated_at', { ascending: false });
 
       if (error) throw new Error(error.message || 'Could not load moderated accounts.');

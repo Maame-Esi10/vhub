@@ -10,7 +10,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, EditSectionCard, Input, ScreenHeader, SettingsGroupLabel } from '@/components/ui';
+import {
+  Button,
+  ConfirmDialog,
+  EditSectionCard,
+  Input,
+  ScreenHeader,
+  SettingsGroupLabel,
+} from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
   MIN_PASSWORD_LENGTH,
@@ -19,7 +26,9 @@ import {
   useCancelEmailChange,
   useChangeLoginEmail,
   useChangePassword,
+  useCloseAccount,
 } from '@/hooks/useAccountSecurity';
+import { useSignOut } from '@/hooks/useSignOut';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -68,6 +77,37 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
   const changeEmail = useChangeLoginEmail();
   const changePassword = useChangePassword();
   const cancelChange = useCancelEmailChange();
+
+  /*
+    CLOSING THE ACCOUNT. Immediate, irreversible, and gated behind typing the
+    word rather than a single tap — this is the only control in the app that
+    cannot be undone by anybody, including an administrator.
+  */
+  const closeAccount = useCloseAccount();
+  const { signOut } = useSignOut();
+  const [closeVisible, setCloseVisible] = useState(false);
+  const [closeConfirmation, setCloseConfirmation] = useState('');
+  const [closeAttempted, setCloseAttempted] = useState(false);
+  const closeConfirmed = closeConfirmation.trim().toUpperCase() === 'CLOSE';
+
+  function handleClose() {
+    setCloseAttempted(true);
+    if (!closeConfirmed) return;
+
+    closeAccount.mutate(undefined, {
+      onSuccess: () => {
+        /*
+          SIGNING OUT IS PART OF THE OPERATION, not a courtesy. The ban does not
+          invalidate the session the caller is holding until it is next
+          refreshed, so leaving them signed in would show an anonymised version
+          of their own account -- their name replaced, their profile emptied --
+          which reads as the app having broken rather than as a closure that
+          worked.
+        */
+        void signOut();
+      },
+    });
+  }
 
   // `new_email` is populated by Supabase only while a change awaits
   // confirmation, so reading it from the session (rather than tracking a local
@@ -355,8 +395,88 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
           <Text style={styles.footnote}>
             Forgotten your password? Sign out and use “Forgot Password” on the login screen.
           </Text>
+
+          {/*
+            THE DANGER ZONE, given real separation from the password card above
+            rather than dropped straight underneath it. It is the one control
+            here that nothing can undo, and a destructive action jammed against
+            an ordinary one invites the wrong tap.
+          */}
+          <SettingsGroupLabel>CLOSING YOUR ACCOUNT</SettingsGroupLabel>
+
+          <View style={styles.dangerCard}>
+            <View style={styles.dangerHeader}>
+              <MaterialCommunityIcons
+                name="alert-circle-outline"
+                size={20}
+                color={colors.danger}
+              />
+              <Text style={styles.dangerTitle}>Close my account</Text>
+            </View>
+
+            {/*
+              Says exactly what survives and what does not, BEFORE the button.
+              A closure that quietly kept records the person believed were gone
+              would be the app breaking its own privacy policy in the one place
+              somebody is most entitled to trust it.
+            */}
+            <Text style={styles.dangerBody}>
+              This removes you from V-HUB straight away. Your name, contact details, photo and
+              everything you have written about yourself are cleared, any document you uploaded is
+              destroyed, and you will not be able to sign in again.
+            </Text>
+            <Text style={styles.dangerBody}>
+              Events you actually took part in stay on record — that you attended, and reviews
+              written about that work. An organisation’s record of who worked at its clinic is
+              its record too, not only yours, so it is kept without your name on it.
+            </Text>
+            <Text style={styles.dangerBody}>
+              Anything still ahead of you is cancelled first, and anyone affected is told.
+            </Text>
+
+            <Button
+              title="Close my account"
+              variant="outline"
+              onPress={() => {
+                setCloseVisible(true);
+                setCloseConfirmation('');
+                setCloseAttempted(false);
+              }}
+              style={styles.action}
+            />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmDialog
+        visible={closeVisible}
+        icon="alert-circle-outline"
+        tone="destructive"
+        title="Close your account?"
+        message="This cannot be undone, by you or by anybody at V-HUB. Type CLOSE to confirm."
+        confirmLabel="Close my account"
+        cancelLabel="Keep my account"
+        busy={closeAccount.isPending}
+        onConfirm={handleClose}
+        onCancel={() => {
+          setCloseVisible(false);
+          setCloseConfirmation('');
+          setCloseAttempted(false);
+        }}
+      >
+        <Input
+          label="Type CLOSE"
+          required
+          value={closeConfirmation}
+          onChangeText={setCloseConfirmation}
+          placeholder="CLOSE"
+          autoCapitalize="characters"
+          error={closeAttempted && !closeConfirmed ? 'Type CLOSE to confirm.' : undefined}
+        />
+        {closeAccount.error ? (
+          <Text style={styles.error}>{closeAccount.error.message}</Text>
+        ) : null}
+      </ConfirmDialog>
     </SafeAreaView>
   );
 }
@@ -472,6 +592,28 @@ const styles = StyleSheet.create({
   },
   action: {
     marginTop: spacing.base,
+  },
+  dangerCard: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  dangerHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dangerTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  dangerBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.textSecondary,
   },
   footnote: {
     fontFamily: fontFamily.regular,

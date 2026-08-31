@@ -3458,3 +3458,149 @@ unchanged, for the same reason `server/waitlist.ts` was extracted for
 moderation: three callers now write penalties — the vscore endpoint, the
 cancellation path and the nightly sweep — and two copies of a rule drift while
 both continue to look like they work.
+
+## Account closure: the promise the product could not keep (2026-08-31)
+
+`constants/policy.ts` promised "You can ask V-HUB to close your account, and
+closing it removes your profile." No path existed anywhere in the app, and no
+contact address either, so the promise was unactionable twice over — the only
+written commitment the product could not keep.
+
+Building it turned out to be almost entirely a question of *what closure means*,
+and the answer was already written two lines further down the same policy.
+
+### Deleting would have broken a different promise, and other people's scores
+
+Every table hangs off `profiles` with `on delete cascade`. Deleting a profile
+row destroys the profile, the role profile, applications, committed days,
+attendance, event reviews, disputes, score deductions, push tokens and
+notifications. For an organisation it also destroys every outreach it ever ran,
+and everything hanging off those — including **other people's** attendance and
+reviews.
+
+The policy already forbade that:
+
+> "Records of events you actually took part in — that you attended, and reviews
+> written about that work — are kept, because an organisation's record of who
+> worked at its clinic is its record too, not only yours."
+
+And the consequence was worse than a broken promise. A V-Score is now derived by
+replaying `event_reviews`. One organisation closing its account would delete
+every review it ever wrote, and on the next replay every volunteer who worked
+for it would silently lose those events — someone with twelve events, eight of
+them with that organisation, drifting back toward 70 and showing four events
+attended, with nothing anywhere explaining it. Their upheld disputes would go
+too, taking the corrections those disputes were holding in place.
+
+**A warning that applies regardless of this feature: deleting a user from the
+Supabase dashboard takes exactly that path.** It is not reachable from the app,
+but it is reachable from the console.
+
+### So closure anonymises and revokes
+
+The person is removed; the record of work is kept; the private evidence is
+destroyed; the login is banned. What survives is decided by one test — **is this
+a record of somebody's WORK, or a record of the PERSON?**
+
+Outreaches, applications, attendance, reviews, disputes and score events are the
+first, and are untouched. Names, contact details, photographs, biographies,
+skill lists, credential documents, organisation documents, registration numbers,
+push tokens and stored notifications are the second, and go.
+
+`v_score` and `events_attended` are deliberately **kept**. They are derived from
+the reviews that are being kept, so clearing them would leave the cache
+disagreeing with the history the next replay reads.
+
+### The login could not simply be deleted
+
+`profiles.id` references `auth.users(id) on delete cascade`. Deleting the login
+would take the entire profile with it and destroy everything the design just
+decided to keep.
+
+So the login is **banned** instead — `ban_duration: '876000h'`, which is the
+hundred years Supabase's own documentation uses. I checked that the parameter
+exists in the installed `@supabase/supabase-js` 2.110.1 rather than assuming it,
+so the fallback (scrambling the password) was not needed.
+
+The stored email is scrambled to `closed+<id>@accounts.invalid` in the same
+call, and that does two useful things at once: password reset can never recover
+the account, and the person's real address is freed, so somebody who closes an
+account and later changes their mind can sign up again as a genuinely new user
+rather than finding their own email permanently taken.
+
+### The order of operations is load-bearing
+
+1. **Stop the future first.** An organisation's cancellation emails name the
+   event, and a waitlist promotion has to reach a real organisation record.
+   Anonymising first would send everybody a message from "Closed account" about
+   an event nobody could identify.
+2. **Destroy the private evidence.** Credentials and organisation documents are
+   the one category destroyed outright rather than anonymised, because unlike an
+   attendance row they are not a record of anyone else's work — they were only
+   ever evidence for a decision already made.
+3. **Anonymise.**
+4. **Delete the delivery plumbing.** Push tokens left in place would keep
+   receiving notifications for an account nobody can sign into.
+5. **Revoke the login last.** If anything above fails, the account is still
+   reachable and the closure can be retried. Banning first would lock somebody
+   out of a half-closed account they could no longer act on.
+
+### No V-Score penalty, and that needed saying in code
+
+Closure withdraws live applications, and penalties went live earlier the same
+day. Those withdrawals go through `server/accountStop.ts`, which writes to
+`applications` directly rather than through `/api/application-status`, so they
+never reach the cancellation deduction. Somebody leaving the platform is not
+abandoning an event, and a parting deduction on an account nobody will ever look
+at again would be spite. It is now stated in the extracted module rather than
+being true by accident of which function calls which.
+
+### The extraction
+
+`stopOrganisation` and `stopVolunteer` moved out of `/api/moderation` into
+`api/src/server/accountStop.ts` unchanged. Closure needs exactly the same two
+operations, and the asymmetry between them is the same one moderation
+documented: an organisation holds other people's Saturdays, a volunteer holds a
+place somebody else could have had.
+
+This is the third time this call has been made in the project, after
+`server/waitlist.ts` and `server/scorePenalties.ts`, and the reasoning does not
+change: two copies drift, and the drift is invisible because both copies still
+look like they work — one of them simply stops telling somebody their Saturday
+was cancelled.
+
+### An admin cannot close their own account from the app
+
+They do it in the SQL editor, where admins are made in the first place. Beyond
+the symmetry, the operational reason: an admin closing themselves through the
+app could leave the platform with no administrator at all, the credential and
+dispute queues unreachable, and no way back except the SQL editor anyway.
+
+### Where "closed" has to be filtered
+
+The profile row survives, so every surface that treats a profile as a *live
+person* has to exclude it: both public profile views (filtered in the migration
+itself, because they are `security_invoker = false` and bypass RLS entirely),
+the new-match notification pool, the under-subscription escalation pool, and both
+admin account searches. Historical rows are untouched — a closed volunteer still
+appears in an organisation's past attendance, without a name.
+
+### One knowing limitation
+
+**The avatar's Cloudinary asset is orphaned.** `profiles.avatar_url` stores a
+delivery URL rather than a `public_id`, so there is nothing to address a delete
+with. The column is cleared, so the image leaves every screen in the app, but
+the file itself remains in Cloudinary at a URL nothing links to. Recorded here
+rather than left to be discovered. Fixing it properly means storing the
+`public_id` alongside the URL, which is a schema change for a small gain and was
+not worth bundling into this.
+
+### The policy was rewritten to match
+
+Package H's rule is that if a claim stops describing the code, the claim is the
+bug. "You can ask V-HUB to close your account" was wrong twice over — there was
+nobody to ask, and now there is nothing to ask, because the app does it. The
+section now says plainly that the person is removed, that anything still ahead
+is cancelled and the people affected told, and that records of real work are
+kept with the name removed — including the reason, which is that other people's
+V-Scores are worked out from those same records.

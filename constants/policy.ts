@@ -65,8 +65,10 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
   {
     heading: 'What you can ask for',
     paragraphs: [
-      'You can see and edit everything on your profile from the app. You can withdraw a credential document. You can ask V-HUB to close your account, and closing it removes your profile.',
-      'Records of events you actually took part in — that you attended, and reviews written about that work — are kept, because an organisation’s record of who worked at its clinic is its record too, not only yours.',
+      'You can see and edit everything on your profile from the app, and you can withdraw a credential document at any time.',
+      'You can close your account yourself, from Settings then Account & Security. It happens immediately. Your name, contact details, photo and everything you have written about yourself are cleared, any document you uploaded is destroyed, and you will not be able to sign in again.',
+      'Anything still ahead of you is cancelled first, and anyone affected is told — an organisation’s upcoming outreaches, or the places a volunteer was holding.',
+      'Records of events you actually took part in — that you attended, and reviews written about that work — are kept, with your name removed. They are kept because an organisation’s record of who worked at its clinic is its record too, not only yours, and because other people’s V-Scores are worked out from those same records. Deleting them would quietly change somebody else’s score.',
     ],
   },
 ];

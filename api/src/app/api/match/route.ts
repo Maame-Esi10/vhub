@@ -847,7 +847,12 @@ async function notifyCandidates(outreach: Record<string, unknown>) {
       profile:profiles!inner ( region, district, push_tokens ( expo_push_token ) )
     `
     )
-    .eq("verification_status", "verified");
+    .eq("verification_status", "verified")
+      // A closed account is never a candidate. Its profile row survives so the
+      // event history of everyone it worked with survives with it, but the
+      // person is gone -- matching them, or pushing them a new outreach, would
+      // be the app addressing somebody who asked to be removed.
+    .is("profile.closed_at", null);
 
   if (outreach.region) {
     candidateQuery = candidateQuery.eq("profile.region", outreach.region as string);

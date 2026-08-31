@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/lib/supabase';
-import { cancelEmailChange } from '@/lib/api-client';
+import { cancelEmailChange, closeAccount } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
@@ -172,4 +172,23 @@ export function passwordStrength(value: string): PasswordStrength {
   if (value.length >= 12 && classes >= 3) return 'strong';
   if (classes >= 2) return 'fair';
   return 'weak';
+}
+
+/**
+ * Closing your own account.
+ *
+ * IMMEDIATE AND IRREVERSIBLE. There is no grace period and nothing to cancel:
+ * that was considered and rejected because it needs a scheduled job, a "closing
+ * soon" state on every screen and a way to undo it — three moving parts for
+ * something a person does once.
+ *
+ * No cache invalidation, deliberately. The only correct next step is to sign
+ * out, which resets the whole store; refreshing queries against an account that
+ * has just been anonymised would repaint the screen with blanked data on the
+ * way out.
+ */
+export function useCloseAccount() {
+  return useMutation({
+    mutationFn: () => closeAccount(),
+  });
 }

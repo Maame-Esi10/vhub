@@ -12,6 +12,7 @@ export {
   syncProfileEmail,
   passwordStrength,
   MIN_PASSWORD_LENGTH,
+  useCloseAccount,
 } from './useAccountSecurity';
 export type {
   ChangePasswordParams,
