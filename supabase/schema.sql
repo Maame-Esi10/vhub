@@ -1878,6 +1878,34 @@ grant update (
   avatar_url
 ) on profiles to authenticated;
 
+-- INSERT is column-listed too (added 20260909). It was NOT, for a long time,
+-- and profiles was the only table in this file with that gap: every other one
+-- does `revoke insert ... grant insert (columns)`. Supabase grants
+-- `authenticated` a TABLE-LEVEL insert on everything in `public` by default,
+-- and a table-level grant covers every column -- including server-only ones
+-- added later, which is how `closed_at`, `moderation_state`,
+-- `moderation_reason` and `moderated_at` all ended up silently insertable at
+-- signup. The comment above them claiming they were protected by omission was
+-- true of UPDATE and false of INSERT.
+--
+-- These four are EXACTLY what the client inserts, and the app has only two
+-- insert paths (useSignUp and useAuthGuard's bootstrapProfileFromMetadata),
+-- both writing the same four. SIGNUP DEPENDS ON THIS LIST: removing a column
+-- from it breaks registration.
+--
+-- `role` stays because it is set once at signup; it is absent from the UPDATE
+-- list, which is what makes it immutable afterwards, and
+-- profiles_insert_own's with-check carries `and role <> 'admin'`.
+revoke insert on profiles from authenticated;
+grant insert (
+  id,
+  role,
+  full_name,
+  email
+) on profiles to authenticated;
+
+revoke insert, update, delete on profiles from anon;
+
 -- organisation_profiles: `verified` is deliberately ABSENT — it is the trust
 -- badge volunteers use to judge whether an outreach is legitimate, so it must
 -- only ever be set by an admin/service-role review. The INSERT grant list

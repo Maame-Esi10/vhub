@@ -44,11 +44,24 @@
 -- ============================================================
 -- 1. The column
 --
--- SERVER-ONLY, and it protects itself by construction rather than by a revoke.
--- `profiles` is granted as "revoke the whole table, then grant back the named
--- columns" (see the bottom of supabase/schema.sql), so a column added later is
--- not in that list and is not client-writable. That is the intended state here
--- and the verification below asserts it:
+-- SERVER-ONLY.
+--
+-- **CORRECTED 2026-08-31 by 20260909_lock_profiles_insert.sql -- READ THAT ONE
+-- TOO.** This comment used to claim the column "protects itself by construction
+-- rather than by a revoke", because `profiles` is granted as "revoke the whole
+-- table, then grant back the named columns". That is TRUE OF UPDATE and FALSE
+-- OF INSERT: the block at the bottom of schema.sql revokes UPDATE and never
+-- revokes INSERT, so Supabase's default table-level insert grant stood and
+-- covered every column. The verification below caught it -- client_write_grants
+-- came back 1, not 0. The check was right; this comment was wrong.
+--
+-- Nothing was exposed: `profiles_insert_own` binds the insert to the caller's
+-- own id, so the two attacks that matter (closing somebody else's account,
+-- reopening your own) were never available. 20260909 adds the missing INSERT
+-- column list. **After running it, this file's verification returns 0 as
+-- written.**
+--
+-- The intent, unchanged:
 --
 --   a client that could SET it could close somebody else's account;
 --   a client that could CLEAR it could reopen its own.

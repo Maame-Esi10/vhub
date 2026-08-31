@@ -3604,3 +3604,69 @@ section now says plainly that the person is removed, that anything still ahead
 is cancelled and the people affected told, and that records of real work are
 kept with the name removed — including the reason, which is that other people's
 V-Scores are worked out from those same records.
+
+## The migration's own check caught a claim I got wrong (2026-08-31)
+
+`20260908` added `profiles.closed_at` and asserted, in a comment, that the
+column "protects itself by construction rather than by a revoke" — because
+`profiles` is granted as "revoke the whole table, then grant back the named
+columns", so a column added later is not in the list and is not writable.
+
+**That is true of UPDATE and false of INSERT**, and the migration's own
+verification said so: `client_write_grants` came back **1** where it asserted 0.
+
+The grant block at the bottom of `schema.sql` does `revoke update on profiles`
+and then names six columns. It never revokes INSERT, because the insert path is
+what lets signup create the row. Supabase grants `authenticated` a TABLE-LEVEL
+insert on everything in `public` by default, and **a table-level grant covers
+every column, including ones added years later**. So every server-only column
+added to `profiles` since — `closed_at`, and before it `moderation_state`,
+`moderation_reason`, `moderated_at` — has been silently settable in the single
+insert that creates a profile at signup.
+
+**`profiles` was the only table in the schema with this gap.**
+`volunteer_profiles`, `organisation_profiles`, `outreaches`, `applications` and
+`disputes` all do `revoke insert ... grant insert (columns)`.
+
+### How bad it actually was
+
+Narrower than the raw number suggests, and worth stating precisely rather than
+either minimising or inflating. `profiles_insert_own`'s with-check is
+`auth.uid() = id and role <> 'admin'`, so the two attacks that matter were never
+available:
+
+- **Closing somebody else's account** — impossible. The insert has to carry the
+  caller's own id, and their row already exists, so it would collide with the
+  primary key.
+- **Reopening a closed account** — impossible. Clearing `closed_at` needs
+  UPDATE, and UPDATE *is* correctly column-listed without it.
+
+What was available: a brand-new user could set `closed_at` or the moderation
+columns in the one insert that creates their own profile. Closing yourself at
+birth is self-harm rather than an attack, and pre-setting `moderation_state`
+buys nothing because an admin's later suspension overwrites it. **Nothing was
+exposed and no data needs repairing.**
+
+### Why it is still worth a migration
+
+A column list is the difference between "no attack exists today" and "no attack
+can exist". The specific risk was forward-looking: the next server-only column
+added to `profiles` would have inherited the same hole, silently, with a comment
+above it confidently saying it was protected.
+
+`20260909` adds the missing list — exactly `id, role, full_name, email`, checked
+against both of the app's insert paths — and revokes anon's write grants for
+symmetry with every other table. `schema.sql` carries the same block so a fresh
+install is not born with the gap, and `20260908`'s comment is corrected in place
+rather than quietly edited, the same treatment `20260903b` got when its missing
+RLS was found.
+
+### The lesson
+
+**The verification query was worth more than the reasoning above it.** The
+comment was written from a correct general principle applied to the wrong half
+of the grant model, and it read as authoritative. The only reason it did not
+become permanent documentation of a false claim is that the file asserted a
+number and the number disagreed.
+
+Write the check even when the reasoning feels airtight — especially then.
