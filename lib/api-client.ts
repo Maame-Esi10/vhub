@@ -1,6 +1,6 @@
 import type { Layer1MatchResult } from '@/lib/matching/layer1';
 import { supabase } from '@/lib/supabase';
-import type { VScoreBand, VScorePenaltyType } from '@/lib/vscore';
+import type { VScoreBand } from '@/lib/vscore';
 import type { ApplicationStatus, Outreach, OutreachRoleType } from '@/types/database';
 
 /**
@@ -418,28 +418,18 @@ export interface VScorePenaltyResponse {
   penalty: number;
 }
 
-export interface ApplyVScorePenaltyInput {
-  outreachId: string;
-  volunteerId: string;
-  applicationId: string;
-  /**
-   * Deliberately narrower than `VScorePenaltyType`, which still includes
-   * `no_show` for the review path. Sending one here fails to compile.
-   */
-  penaltyType: Exclude<VScorePenaltyType, 'no_show'>;
-}
-
 export interface RecordLateReleaseInput {
   outreachId: string;
   volunteerId: string;
   applicationId: string;
-  /** The day that was dropped. */
+  /** The day that was dropped. Every other input is counted server-side. */
   outreachDayId: string;
-  daysReleased: number;
-  daysCommitted: number;
 }
 
-export interface RecordLateReleaseResponse extends VScorePenaltyResponse {
+export interface RecordLateReleaseResponse extends Partial<VScorePenaltyResponse> {
+  volunteerId: string;
+  /** The deduction, or 0 when nothing was charged. */
+  penalty: number;
   /**
    * True when this release fell inside the two-per-90-days free allowance, in
    * which case nothing was deducted and no row was written. The score comes
@@ -447,46 +437,37 @@ export interface RecordLateReleaseResponse extends VScorePenaltyResponse {
    * successful outcome rather than a rejected one.
    */
   withinFreeAllowance: boolean;
+  /** Why nothing was charged, when nothing was. Null when a penalty applied. */
+  skipped?: string | null;
 }
 
 /**
- * Records a CANCELLATION deduction (-8 late, -2 on time) as a `score_events`
- * row, then rebuilds the volunteer's score from their whole history.
+ * THE CANCELLATION PENALTY IS NOT CALLED FROM HERE, and there is no wrapper for
+ * it on purpose.
  *
- * The owning organisation may record either type; a volunteer may only confirm
- * their own cancellation, and only at the timing the database itself stamped.
- *
- * `no_show` IS NOT ACCEPTED and the type reflects that. An absence is recorded
- * by filing the event review with `attended: false`, which floors that event's
- * outcome — one writer per change, so a single no-show cannot be punished
- * twice.
- *
- * SAFE TO RETRY. The endpoint deduplicates on the application, so a dropped
- * connection or a double tap cannot charge somebody twice for one cancellation.
- *
- * NOTHING CALLS THIS YET. The standing hold of 2026-08-21 — penalties stay
- * uncalled until the app has been device-tested — is the owner's and is
- * separate from whether the machinery exists. It now does.
+ * It is applied by `setApplicationStatus` as part of the withdrawal itself,
+ * because it may only be charged when the volunteer held an ACCEPTED place, and
+ * `applications` stops recording what a cancelled row used to be the moment it
+ * is cancelled. A separate call made afterwards could not tell an abandoned
+ * accepted place from a withdrawn pending application. /api/vscore's `penalty`
+ * action was removed for that reason on 2026-08-31.
  */
-export function applyVScorePenalty(
-  input: ApplyVScorePenaltyInput,
-  options?: RequestOptions
-): Promise<VScorePenaltyResponse> {
-  return apiPost<VScorePenaltyResponse>(API_ROUTES.vscore, { action: 'penalty', ...input }, options);
-}
 
 /**
  * Records the approved LATE PER-DAY RELEASE deduction — two free in a rolling
  * 90 days, then -8 x (days released / days committed), floored at -2 and capped
  * at -8.
  *
- * The caller sends the facts of the release; the AMOUNT is computed on the
- * server from the volunteer's own rolling count and is never sent by the
- * client, because a client that could name the figure could choose it. The
- * server also re-reads `application_days.late_release` rather than trusting the
- * request, so a crafted call cannot invent a penalty against somebody.
+ * The caller names WHICH DAY was dropped and nothing else. The amount, the day
+ * counts and the rolling allowance are all computed on the server from rows the
+ * client cannot write, because anything the client could name it could choose.
+ * The server re-reads `application_days.late_release` rather than trusting the
+ * request, so a crafted call cannot invent a penalty against somebody, and it
+ * charges nothing at all unless the volunteer held an accepted place.
  *
- * NOTHING CALLS THIS YET — see the note on `applyVScorePenalty`.
+ * SAFE TO RETRY, and safe to fire and forget: the deduction is deduplicated on
+ * the released day and the moment it was released, and the nightly sweep
+ * catches any call that never arrived.
  */
 export function recordLateRelease(
   input: RecordLateReleaseInput,
@@ -515,23 +496,41 @@ export interface ApplicationStatusResponse {
   application: ApplicationSummary;
   /** The waitlisted applicant auto-promoted into the freed slot, if any. */
   promoted: ApplicationSummary | null;
+  /**
+   * The V-Score deduction this withdrawal cost, when it cost one. Null for
+   * every other status change, for an organisation cancelling somebody's place,
+   * and for a volunteer who was only pending or waitlisted.
+   */
+  penalty: { points: number; newScore: number; band: string } | null;
 }
 
 /**
  * Sets an application's status, sending the applicant the transactional email
  * + push and auto-promoting the best waitlisted applicant when an accepted
- * spot is cancelled. Idempotent, so it is safe to call after
- * `useCancelApplication` has already written `cancelled` directly.
+ * spot is cancelled.
+ *
+ * FOR A VOLUNTEER'S OWN WITHDRAWAL THIS IS NOW THE WHOLE OPERATION, not a
+ * follow-up to a direct write. The server needs to see the status the row held
+ * BEFORE the cancellation, because a V-Score deduction is only fair when the
+ * volunteer held an accepted place, and nothing records that afterwards. Cancel
+ * the row from the client first and the server has nothing left to judge.
+ *
+ * Still idempotent: re-sending a status the row already holds is a no-op that
+ * only re-runs the promotion check, and applies no penalty.
  */
 export function setApplicationStatus(
   applicationId: string,
   status: Extract<ApplicationStatus, 'accepted' | 'rejected' | 'waitlisted' | 'cancelled'>,
-  options?: RequestOptions
+  options?: RequestOptions & {
+    /** The volunteer's withdrawal reason, written with the status change. */
+    cancellationReason?: string | null;
+  }
 ): Promise<ApplicationStatusResponse> {
+  const { cancellationReason, ...requestOptions } = options ?? {};
   return apiPost<ApplicationStatusResponse>(
     API_ROUTES.applicationStatus,
-    { applicationId, status },
-    options
+    { applicationId, status, cancellationReason: cancellationReason ?? null },
+    requestOptions
   );
 }
 

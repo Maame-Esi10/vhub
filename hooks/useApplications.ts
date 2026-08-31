@@ -551,6 +551,19 @@ function applicationInsertMessage(
   return error?.message || 'Could not submit your application. Please try again.';
 }
 
+/**
+ * What a withdrawal produced: the cancelled application, and the V-Score
+ * deduction it cost, when it cost one.
+ *
+ * `penalty` is null for a volunteer who was only pending or waitlisted, and the
+ * screen must say nothing about a score in that case rather than reporting a
+ * deduction of zero — "you lost 0 points" reads as a punishment.
+ */
+export interface CancelApplicationResult {
+  application: Application;
+  penalty: { points: number; newScore: number; band: string } | null;
+}
+
 export interface CancelApplicationParams {
   applicationId: string;
   /** Needed only to invalidate the right caches. */
@@ -563,54 +576,48 @@ export interface CancelApplicationParams {
 /**
  * Withdraws an application.
  *
- * Only `status` and the free-text `cancellation_reason` are written, and
- * status can only ever be written to 'cancelled' —
- * `applications_update_own_cancel` pins the volunteer to exactly that value.
- * cancelled_at and late_cancellation are stamped by the
- * `trg_applications_stamp_cancellation` BEFORE trigger (supabase/schema.sql),
- * which is also what decides whether the withdrawal counts as late (within 24
- * hours of the event start). Doing it there rather than here means a
- * volunteer can't backdate a withdrawal to dodge the bigger V-Score penalty,
- * and the returned row carries the values the trigger actually wrote.
+ * THE SERVER DOES THE WHOLE THING NOW (changed 2026-08-31, when V-Score
+ * penalties were wired live). This used to write `status = 'cancelled'`
+ * directly through RLS and then call `/api/application-status` afterwards, as a
+ * best-effort nudge to promote the waitlist. That order has to be inverted, and
+ * the reason is not tidiness:
  *
- * `/api/application-status` is then called with the same 'cancelled' status.
- * That second call is idempotent (the row is already cancelled, so it is a
- * no-op write) and exists purely to run the step this direct write cannot:
- * promoting the highest-match waitlisted applicant into the freed slot and
- * notifying them, which touches another volunteer's row and so needs the
- * service role. Best-effort — the withdrawal itself has already succeeded, so
- * a promotion failure must not be reported to the volunteer as a failed
- * withdrawal.
+ *   A withdrawal is only penalised when the volunteer held an ACCEPTED place.
+ *   Pulling out of something you were merely pending or waitlisted for costs
+ *   nobody anything, and charging for it would punish the honest version of
+ *   changing your mind. But `applications` does not record what a cancelled row
+ *   used to be — once `status` reads 'cancelled', the previous value is gone.
+ *   Cancelling from the client first therefore destroyed the one fact the
+ *   server needed to decide whether a penalty was deserved.
+ *
+ * So the endpoint now reads the current status, writes the cancellation and the
+ * reason together, lets `trg_applications_stamp_cancellation` stamp
+ * `cancelled_at` and `late_cancellation` (which is what decides -8 rather than
+ * -2, and is stamped by the database so a volunteer cannot backdate a
+ * withdrawal to dodge the larger deduction), records the deduction, replays the
+ * score, and offers the freed place to the waitlist. One request, one outcome.
+ *
+ * FAILURE BEHAVIOUR CHANGED WITH IT, for the better. Before, a failed API call
+ * left the application withdrawn and the waitlist un-promoted — a half-done
+ * withdrawal nobody could see. Now the call either does all of it or none of
+ * it, and the volunteer is told to try again.
+ *
+ * The deduction itself is best-effort INSIDE the endpoint: the withdrawal is
+ * never reported as failed because a penalty could not be written.
  */
 export function useCancelApplication() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: CancelApplicationParams): Promise<Application> => {
-      const { data, error } = await supabase
-        .from('applications')
-        .update({
-          status: 'cancelled',
-          cancellation_reason: params.reason?.trim() ? params.reason.trim() : null,
-        })
-        .eq('id', params.applicationId)
-        .select()
-        .single();
+    mutationFn: async (params: CancelApplicationParams): Promise<CancelApplicationResult> => {
+      const response = await setApplicationStatus(params.applicationId, 'cancelled', {
+        cancellationReason: params.reason?.trim() ? params.reason.trim() : null,
+      });
 
-      if (error || !data) {
-        throw new Error(error?.message || 'Could not withdraw your application. Please try again.');
-      }
-
-      try {
-        await setApplicationStatus(params.applicationId, 'cancelled');
-      } catch (promotionError) {
-        console.warn(
-          '[applications] withdrawal saved, but waitlist promotion could not run:',
-          promotionError instanceof Error ? promotionError.message : promotionError
-        );
-      }
-
-      return data as Application;
+      return {
+        application: response.application as unknown as Application,
+        penalty: response.penalty,
+      };
     },
     onSuccess: (_application, params) => {
       queryClient.invalidateQueries({

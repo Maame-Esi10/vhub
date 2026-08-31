@@ -1,10 +1,6 @@
 import { z } from "zod";
-import {
-  computeEventOutcome,
-  getVScoreBand,
-  lateReleasePenalty,
-  V_SCORE_PENALTIES,
-} from "@/lib/vscore";
+import { computeEventOutcome, getVScoreBand } from "@/lib/vscore";
+import { recordLateReleasePenalty } from "../../../server/scorePenalties";
 import { replayAndStoreVScore } from "../../../server/vscoreReplay";
 import { REVIEW_REMARKS } from "@/constants/review-remarks";
 import { authenticate } from "../../../server/auth";
@@ -25,14 +21,20 @@ const VALID_REMARK_SLUGS = new Set(REVIEW_REMARKS.map((remark) => remark.slug));
 //   clinical_score). Auth: the caller must be the organisation that owns the
 //   outreach being reviewed (mirroring event_reviews_insert_org's RLS check).
 //
-//   action "penalty": records a CANCELLATION deduction (-8 late, -2 on time)
-//   as a `score_events` row. Auth: the owning organisation, or the volunteer
-//   for their own cancellation and only at the timing the database itself
-//   stamped.
-//
 //   action "late_release": records the approved late per-day release deduction
 //   as a `score_events` row. Auth: the owning organisation, or the volunteer
-//   for their own application.
+//   for their own application. Every number behind the amount is read from the
+//   database here; none of it is taken from the request.
+//
+// THE "penalty" ACTION WAS REMOVED when penalties were wired live (2026-08-31),
+// and its removal is a correctness fix rather than tidying. A cancellation is
+// only penalised when the volunteer held an ACCEPTED place -- withdrawing a
+// pending or waitlisted application costs nobody anything -- and that fact is
+// gone the moment `status` reads 'cancelled', because the row does not record
+// what it was before. An endpoint called after the fact could therefore not
+// tell a fair penalty from an unfair one. The cancellation and its deduction
+// are now ONE server operation, in /api/application-status, where the previous
+// status is still in hand.
 //
 // `no_show` IS REFUSED, and that is not an oversight. A no-show already moves
 // the score through the review path -- a review filed with attended:false
@@ -75,25 +77,13 @@ const ReviewAction = z.object({
 });
 
 /**
- * `no_show` is absent from this enum on purpose, so the refusal is a
- * validation error naming the two legal values rather than a branch buried in
- * the handler. See the contract note above.
- */
-const PenaltyAction = z.object({
-  action: z.literal("penalty"),
-  outreachId: z.string().uuid(),
-  volunteerId: z.string().uuid(),
-  applicationId: z.string().uuid(),
-  penaltyType: z.enum(["late_cancellation", "on_time_cancellation"]),
-});
-
-/**
- * The late per-day release deduction, approved 2026-08-21 and homeless until
- * `score_events` existed.
+ * The late per-day release deduction, approved 2026-08-21.
  *
- * The caller sends the FACTS of the release; the amount is computed here from
- * `lateReleasePenalty` and the volunteer's own rolling 90-day count, never sent
- * by the client. A client that could name the figure could choose it.
+ * The caller names WHICH DAY was dropped and nothing else. `daysReleased` and
+ * `daysCommitted` used to be request fields, which was a hole: they are the
+ * numerator and denominator of the deduction, so a client that could send them
+ * could choose its own penalty. Both are now counted server-side, along with
+ * the rolling 90-day allowance, from rows the client cannot write.
  */
 const LateReleaseAction = z.object({
   action: z.literal("late_release"),
@@ -102,15 +92,9 @@ const LateReleaseAction = z.object({
   applicationId: z.string().uuid(),
   /** Which day was dropped. It is what makes the deduction deduplicable. */
   outreachDayId: z.string().uuid(),
-  daysReleased: z.number().int().min(1),
-  daysCommitted: z.number().int().min(1),
 });
 
-const VScoreRequestBody = z.discriminatedUnion("action", [
-  ReviewAction,
-  PenaltyAction,
-  LateReleaseAction,
-]);
+const VScoreRequestBody = z.discriminatedUnion("action", [ReviewAction, LateReleaseAction]);
 
 export async function POST(req: Request): Promise<Response> {
   try {
@@ -123,10 +107,7 @@ export async function POST(req: Request): Promise<Response> {
     if (body.action === "review") {
       return Response.json(await handleReview(caller, body));
     }
-    if (body.action === "late_release") {
-      return Response.json(await handleLateRelease(caller, body));
-    }
-    return Response.json(await handlePenalty(caller, body));
+    return Response.json(await handleLateRelease(caller, body));
   } catch (err) {
     return errorResponse(err);
   }
@@ -226,67 +207,26 @@ async function handleReview(
 }
 
 // ---------------------------------------------------------------------------
-// action: penalty  and  action: late_release
+// action: late_release
 //
-// Both write a `score_events` row and then replay. The row is the penalty's
-// home in the replayable history; before it existed, a deduction was arithmetic
-// on the stored score and the next replay erased it silently, which is why the
-// action was disabled between 2026-08-26 and 2026-08-27.
+// Writes a `score_events` row and then replays. The row is the penalty's home
+// in the replayable history; before it existed, a deduction was arithmetic on
+// the stored score and the next replay erased it silently.
 //
 // `dedupe_key` is what makes a retry safe. A dropped connection, a double tap,
-// a cron that runs twice — any of them would otherwise charge somebody twice
-// for one act. `ignoreDuplicates` turns the second write into a no-op, and the
-// replay that follows is idempotent, so a retry converges on the same score
-// rather than a lower one.
+// a nightly sweep catching up on a call that failed -- any of them would
+// otherwise charge somebody twice for one act.
 // ---------------------------------------------------------------------------
 
-/** Writes one penalty, then rebuilds the score from history. Retry-safe. */
-async function recordPenalty(input: {
-  volunteerId: string;
-  kind: "late_cancellation" | "on_time_cancellation" | "late_release";
-  points: number;
-  reason: string;
-  dedupeKey: string;
-  outreachId: string;
-  applicationId: string;
-  outreachDayId?: string;
-}) {
-  const admin = getSupabaseAdmin();
-
-  const { error } = await admin.from("score_events").upsert(
-    {
-      volunteer_id: input.volunteerId,
-      kind: input.kind,
-      points: input.points,
-      reason: input.reason,
-      dedupe_key: input.dedupeKey,
-      outreach_id: input.outreachId,
-      application_id: input.applicationId,
-      outreach_day_id: input.outreachDayId ?? null,
-    },
-    { onConflict: "volunteer_id,dedupe_key", ignoreDuplicates: true }
-  );
-  if (error) throw Errors.internal("Could not record the penalty.");
-
-  const replay = await replayAndStoreVScore(admin, input.volunteerId);
-
-  return {
-    volunteerId: input.volunteerId,
-    oldScore: replay.previousScore,
-    newScore: replay.score,
-    band: getVScoreBand(replay.score),
-    penalty: input.points,
-    activePenalties: replay.activePenalties,
-  };
-}
-
-async function loadApplicationForPenalty(
-  body: { applicationId: string; outreachId: string; volunteerId: string }
+async function handleLateRelease(
+  caller: { userId: string; role: string },
+  body: z.infer<typeof LateReleaseAction>
 ) {
   const admin = getSupabaseAdmin();
+
   const { data: application, error } = await admin
     .from("applications")
-    .select("id, outreach_id, volunteer_id, status, late_cancellation")
+    .select("id, outreach_id, volunteer_id, status")
     .eq("id", body.applicationId)
     .maybeSingle();
   if (error || !application) throw Errors.notFound("Application not found.");
@@ -296,59 +236,6 @@ async function loadApplicationForPenalty(
   ) {
     throw Errors.badRequest("applicationId does not match the given outreachId/volunteerId.");
   }
-  return application;
-}
-
-async function handlePenalty(
-  caller: { userId: string; role: string },
-  body: z.infer<typeof PenaltyAction>
-) {
-  const application = await loadApplicationForPenalty(body);
-
-  const isOwningOrg = await isOrgOwner(caller, application.outreach_id as string);
-  const isOwnVolunteer = caller.role === "volunteer" && caller.userId === body.volunteerId;
-
-  if (!isOwningOrg && !isOwnVolunteer) {
-    throw Errors.forbidden("You are not allowed to apply a V-Score penalty for this application.");
-  }
-
-  if (isOwnVolunteer && !isOwningOrg) {
-    // A volunteer may only confirm the penalty the database itself already
-    // stamped for their own cancellation -- never a claim that contradicts
-    // applications.late_cancellation.
-    if (application.status !== "cancelled") {
-      throw Errors.badRequest("This application has not been cancelled.");
-    }
-    const expected = application.late_cancellation ? "late_cancellation" : "on_time_cancellation";
-    if (body.penaltyType !== expected) {
-      throw Errors.badRequest("penaltyType does not match this application's recorded cancellation timing.");
-    }
-  }
-
-  return recordPenalty({
-    volunteerId: body.volunteerId,
-    kind: body.penaltyType,
-    points: V_SCORE_PENALTIES[body.penaltyType],
-    reason:
-      body.penaltyType === "late_cancellation"
-        ? "Cancelled an accepted place inside the late-cancellation window."
-        : "Cancelled an accepted place in good time.",
-    // One cancellation per application, because an application is cancelled
-    // once and stays cancelled. The kind is deliberately NOT in the key: if the
-    // timing were somehow reported both ways, the second must be refused rather
-    // than charged on top of the first.
-    dedupeKey: `cancellation:${body.applicationId}`,
-    outreachId: body.outreachId,
-    applicationId: body.applicationId,
-  });
-}
-
-async function handleLateRelease(
-  caller: { userId: string; role: string },
-  body: z.infer<typeof LateReleaseAction>
-) {
-  const admin = getSupabaseAdmin();
-  const application = await loadApplicationForPenalty(body);
 
   const isOwningOrg = await isOrgOwner(caller, application.outreach_id as string);
   const isOwnVolunteer = caller.role === "volunteer" && caller.userId === body.volunteerId;
@@ -357,48 +244,41 @@ async function handleLateRelease(
   }
 
   /*
-    THE DAY MUST ACTUALLY BE RELEASED AND FLAGGED LATE, and we read that from
-    the database rather than trusting the request. `application_days.late_release`
-    is set by the release path and is absent from the client's grant list
-    precisely so nobody can declare their own lateness; re-reading it here is
-    what stops a crafted call inventing a penalty against somebody.
+    ONLY AN ACCEPTED APPLICATION IS PENALISED, the same rule a cancellation
+    follows and for the same reason: a pending or waitlisted volunteer dropping
+    a day has taken no place from anybody. Reported as a successful no-op rather
+    than an error, because from the volunteer's side nothing went wrong.
   */
-  const { data: day, error: dayError } = await admin
-    .from("application_days")
-    .select("id, released_at, late_release")
-    .eq("application_id", body.applicationId)
-    .eq("outreach_day_id", body.outreachDayId)
-    .maybeSingle();
-  if (dayError) throw Errors.internal("Could not load the committed day.");
-  if (!day || day.released_at === null || day.late_release !== true) {
-    throw Errors.badRequest("That day is not recorded as a late release.");
+  if (application.status !== "accepted") {
+    return {
+      volunteerId: body.volunteerId,
+      penalty: 0,
+      withinFreeAllowance: false,
+      skipped: "the volunteer did not hold an accepted place",
+    };
   }
 
-  /*
-    The allowance is counted BEFORE this release is charged, which is what
-    "two free" means -- the third one pays. count_recent_late_releases counts
-    released rows including this one, so the prior count is one less.
-  */
-  const { data: recent, error: countError } = await admin.rpc("count_recent_late_releases", {
-    p_volunteer_id: body.volunteerId,
-  });
-  if (countError) throw Errors.internal("Could not count recent late releases.");
-  const priorLateReleases = Math.max(0, Number(recent ?? 0) - 1);
+  const { data: outreach } = await admin
+    .from("outreaches")
+    .select("title")
+    .eq("id", body.outreachId)
+    .maybeSingle();
 
-  const points = lateReleasePenalty({
-    priorLateReleases,
-    daysReleased: body.daysReleased,
-    daysCommitted: body.daysCommitted,
+  const result = await recordLateReleasePenalty(admin, {
+    volunteerId: body.volunteerId,
+    applicationId: body.applicationId,
+    outreachId: body.outreachId,
+    outreachDayId: body.outreachDayId,
+    outreachTitle: (outreach?.title as string | null) ?? null,
   });
 
   /*
-    A FREE RELEASE WRITES NOTHING. score_events holds exactly the rows that move
-    a score (`points < 0` is a check constraint), and the fact of the release is
-    already recorded on application_days. Writing a zero row would put an entry
-    in the volunteer's penalty list that deducted nothing, which reads as a
+    A FREE RELEASE WRITES NOTHING, and still reports the current score. The fact
+    of it lives on `application_days.late_release`; a zero-point row would put
+    an entry in the volunteer's list that deducted nothing, which reads as a
     punishment they cannot find.
   */
-  if (points === 0) {
+  if (!result.outcome) {
     const replay = await replayAndStoreVScore(admin, body.volunteerId);
     return {
       volunteerId: body.volunteerId,
@@ -407,25 +287,20 @@ async function handleLateRelease(
       band: getVScoreBand(replay.score),
       penalty: 0,
       activePenalties: replay.activePenalties,
-      withinFreeAllowance: true,
+      withinFreeAllowance: result.skipped === "within the free allowance",
+      skipped: result.skipped,
     };
   }
 
   return {
-    ...(await recordPenalty({
-      volunteerId: body.volunteerId,
-      kind: "late_release",
-      points,
-      reason: `Dropped ${body.daysReleased} of ${body.daysCommitted} committed day(s) inside 24 hours of the day starting.`,
-      // Keyed on the released day AND the moment it was released: a day can be
-      // taken back on and dropped late again, and that second drop is a
-      // genuinely new act rather than a repeat of the first.
-      dedupeKey: `late_release:${day.id}:${day.released_at as string}`,
-      outreachId: body.outreachId,
-      applicationId: body.applicationId,
-      outreachDayId: body.outreachDayId,
-    })),
+    volunteerId: body.volunteerId,
+    oldScore: result.outcome.previousScore,
+    newScore: result.outcome.score,
+    band: getVScoreBand(result.outcome.score),
+    penalty: result.points,
+    activePenalties: result.outcome.activePenalties,
     withinFreeAllowance: false,
+    skipped: null,
   };
 }
 

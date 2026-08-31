@@ -11,6 +11,9 @@ import {
 import { notifyUsers, type UserNotification } from "../../../server/notify";
 import { emailApplicant, pushApplicant, promoteFromWaitlist } from "../../../server/waitlist";
 
+import { recordCancellationPenalty } from "../../../server/scorePenalties";
+import { getVScoreBand } from "@/lib/vscore";
+
 export const runtime = "nodejs";
 
 /** Postgres check-constraint violation -- here, `slots_filled <= slots_total`. */
@@ -29,6 +32,9 @@ const CHECK_VIOLATION = "23514";
 //
 // ASSUMPTION flagged for owner sign-off (see final report): the mobile app's
 // existing `useCancelApplication` hook (hooks/useApplications.ts) already
+// [SUPERSEDED 2026-08-31 -- kept because the reasoning below still explains
+// why the endpoint is idempotent. The volunteer no longer cancels the row
+// directly; see "THE CANCELLATION PENALTY" below.]
 // writes `status = 'cancelled'` directly via Supabase + RLS, which is what
 // stamps `cancelled_at`/`late_cancellation` (trg_applications_stamp_cancellation)
 // and re-derives `slots_filled` (trg_applications_sync_slots_filled). THIS
@@ -48,6 +54,16 @@ const CHECK_VIOLATION = "23514";
 const StatusChangeBody = z.object({
   applicationId: z.string().uuid(),
   status: z.enum(["accepted", "rejected", "waitlisted", "cancelled"]),
+  /**
+   * The withdrawal reason from the Figma "Withdrawal Process" screen, written
+   * in the same statement as the status change.
+   *
+   * It used to be written by the client in its own direct update, which is no
+   * longer possible: the client must not cancel the row itself (see the note
+   * on the penalty below), and `applications_update_own_cancel` would refuse an
+   * update that set only the reason while the status was still 'pending'.
+   */
+  cancellationReason: z.string().trim().max(1000).nullish(),
 });
 
 // ---------------------------------------------------------------------------
@@ -146,16 +162,45 @@ export async function POST(req: Request): Promise<Response> {
 
     const previousStatus = application.status;
     if (previousStatus === body.status) {
-      // Idempotent no-op -- e.g. the volunteer's own direct cancel already
-      // ran and this call is just here to trigger the promotion check.
-      return Response.json(await maybePromoteWaitlist(admin, outreach as OutreachRow, application as ApplicationRow, previousStatus, body.status));
+      /*
+        Idempotent no-op: the row already reads what the caller asked for, so
+        only the promotion check is worth running.
+
+        NO PENALTY IS APPLIED ON THIS PATH, and it is not an omission. If the
+        row already says 'cancelled', what it said BEFORE is gone, and a penalty
+        applied here could not tell an abandoned accepted place from a withdrawn
+        pending application. Charging on a guess is worse than not charging, so
+        this branch deliberately does nothing to the score.
+      */
+      return Response.json({
+        ...(await maybePromoteWaitlist(
+          admin,
+          outreach as OutreachRow,
+          application as ApplicationRow,
+          previousStatus,
+          body.status
+        )),
+        penalty: null,
+      });
     }
 
     const { data: updated, error: updateError } = await admin
       .from("applications")
-      .update({ status: body.status })
+      .update({
+        status: body.status,
+        // Only ever written alongside a cancellation, and only when one was
+        // given. An omitted key would silently keep a reason from a previous
+        // withdrawal of the same application after a re-apply.
+        ...(body.status === "cancelled"
+          ? { cancellation_reason: body.cancellationReason?.trim() || null }
+          : {}),
+      })
       .eq("id", body.applicationId)
-      .select("id, outreach_id, volunteer_id, status, match_score")
+      // `late_cancellation` is selected back because the BEFORE trigger has
+      // just decided it, and it is what chooses -8 over -2. Reading it from the
+      // returned row rather than recomputing it here means the penalty and the
+      // database agree by construction.
+      .select("id, outreach_id, volunteer_id, status, match_score, late_cancellation")
       .single();
 
     if (updateError) {
@@ -174,6 +219,65 @@ export async function POST(req: Request): Promise<Response> {
       previousStatus,
       body.status
     );
+
+    /*
+      THE CANCELLATION PENALTY (wired live 2026-08-31, owner-approved).
+
+      IT LIVES HERE AND NOWHERE ELSE, and the reason is the whole design. A
+      withdrawal is only penalised when the volunteer held an ACCEPTED place:
+      pulling out of something you were pending or waitlisted for costs nobody
+      anything, leaves no organiser short, and is exactly what the app wants
+      instead of somebody going quiet. But `applications` does not record what a
+      cancelled row used to be, so that distinction exists for the length of
+      this request and no longer. Any endpoint asked to apply the penalty
+      afterwards would be guessing, which is why /api/vscore's `penalty` action
+      was removed rather than left as a second door.
+
+      This is also why the client no longer cancels the row itself first: doing
+      so consumed the previous status before the server ever saw it, and this
+      handler would fall into the idempotent no-op branch above with nothing
+      left to judge.
+
+      ONLY THE VOLUNTEER'S OWN WITHDRAWAL COUNTS. An organisation cancelling
+      somebody's place is the organisation's decision, and charging the
+      volunteer for it would be the app punishing a person for what was done to
+      them. Moderation withdrawals do not come through here at all.
+
+      BEST-EFFORT, on purpose, and the opposite way round from the audit trail.
+      The withdrawal has already succeeded and the place has already been
+      offered to the waitlist; a failure to record the deduction must not be
+      reported to the volunteer as a failed withdrawal, leading them to try
+      again. The nightly sweep does not cover this case (there is nothing left
+      to detect), so a failure here means one uncharged cancellation, which is
+      the right way for this to fail.
+    */
+    let penalty: { points: number; newScore: number; band: string } | null = null;
+    if (
+      body.status === "cancelled" &&
+      previousStatus === "accepted" &&
+      isOwnVolunteer &&
+      !isOwningOrg
+    ) {
+      try {
+        const outcome = await recordCancellationPenalty(admin, {
+          volunteerId: application.volunteer_id as string,
+          applicationId: body.applicationId,
+          outreachId: application.outreach_id as string,
+          outreachTitle: (outreach.title as string | null) ?? null,
+          lateCancellation: (updated as { late_cancellation?: boolean }).late_cancellation === true,
+        });
+        penalty = {
+          points: (updated as { late_cancellation?: boolean }).late_cancellation === true ? -8 : -2,
+          newScore: outcome.score,
+          band: getVScoreBand(outcome.score),
+        };
+      } catch (penaltyError) {
+        console.warn(
+          "[application-status] withdrawal saved, but the V-Score deduction could not be recorded:",
+          penaltyError instanceof Error ? penaltyError.message : penaltyError
+        );
+      }
+    }
 
     // Tell the applicant, for an organisation-driven decision. A volunteer's
     // own cancellation doesn't need one -- they already know.
@@ -196,7 +300,7 @@ export async function POST(req: Request): Promise<Response> {
       await pushApplicant(admin, application.volunteer_id, outreach as OutreachRow, body.status);
     }
 
-    return Response.json(result);
+    return Response.json({ ...result, penalty });
   } catch (err) {
     return errorResponse(err);
   }

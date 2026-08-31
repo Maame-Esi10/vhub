@@ -10,6 +10,7 @@ import {
   ErrorState,
   FlyerBackground,
   ListSkeleton,
+  Toast,
   formatEventDate,
   formatEventTimeRange,
   isUpcomingEvent,
@@ -68,6 +69,7 @@ export default function OutreachDetail() {
   const [fullFormVisible, setFullFormVisible] = useState(false);
   const [withdrawVisible, setWithdrawVisible] = useState(false);
   const [releaseVisible, setReleaseVisible] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
 
   /*
@@ -198,7 +200,19 @@ export default function OutreachDetail() {
     if (!application || !outreachId || !volunteerId) return;
     cancelApplication.mutate(
       { applicationId: application.id, volunteerId, outreachId, reason },
-      { onSuccess: () => setWithdrawVisible(false) }
+      {
+        onSuccess: (result) => {
+          setWithdrawVisible(false);
+          // Said out loud at the moment it happens. `penalty` is null unless
+          // they gave up an ACCEPTED place, so withdrawing a pending
+          // application says nothing about a score, because nothing moved.
+          setToast(
+            result.penalty
+              ? `Withdrawn. That cost ${Math.abs(result.penalty.points)} V-Score points — you were holding a place. Your score is now ${Math.round(result.penalty.newScore)}.`
+              : 'Withdrawn.'
+          );
+        },
+      }
     );
   }
 
@@ -653,14 +667,41 @@ export default function OutreachDetail() {
         }
         onRelease={(outreachDayId) =>
           application &&
-          releaseDay.mutate({
-            applicationId: application.id,
-            outreachDayId,
-            release: true,
-            // outreach.id, not the route param: the param is string|undefined
-            // and this is only reachable once the outreach has loaded.
-            outreachId: outreach.id,
-          })
+          releaseDay.mutate(
+            {
+              applicationId: application.id,
+              outreachDayId,
+              release: true,
+              // outreach.id, not the route param: the param is string|undefined
+              // and this is only reachable once the outreach has loaded.
+              outreachId: outreach.id,
+              // Lets the server be told who dropped the day. Everything that
+              // decides the deduction is still read from the database.
+              volunteerId,
+            },
+            {
+              onSuccess: (result) => {
+                /*
+                  The sheet already warns BEFORE the tap that a day inside 24
+                  hours counts as a late cancellation, but it cannot name a
+                  figure — the amount depends on how many late releases are
+                  already in the rolling window, which only the server knows.
+                  This is where the number gets said.
+
+                  Nothing is said when nothing was charged. "That cost you 0
+                  points" reads as a punishment.
+                */
+                if (result.penalty) {
+                  setToast(
+                    `Day dropped. That cost ${Math.abs(result.penalty)} V-Score points` +
+                      (result.newScore === null
+                        ? '.'
+                        : ` — your score is now ${Math.round(result.newScore)}.`)
+                  );
+                }
+              },
+            }
+          )
         }
         onRecommit={(outreachDayId) =>
           application &&
@@ -710,6 +751,8 @@ export default function OutreachDetail() {
         onConfirm={handleWithdraw}
         onDismiss={() => setWithdrawVisible(false)}
       />
+
+      <Toast message={toast} onDismiss={() => setToast(null)} durationMs={6000} />
     </SafeAreaView>
   );
 }

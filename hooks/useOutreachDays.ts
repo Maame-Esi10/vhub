@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { outreachKeys } from '@/hooks/useOutreaches';
+import { scoreEventKeys } from '@/hooks/useScoreEvents';
+import { recordLateRelease } from '@/lib/api-client';
 import { sortDayStrings, sortDays } from '@/lib/outreachDays';
 import type { OutreachDay } from '@/types/database';
 
@@ -171,13 +173,35 @@ export function useDayCoverageForMany(outreachIds: readonly string[]) {
   });
 }
 
+/**
+ * What releasing a day cost, so the screen can say so rather than leaving the
+ * volunteer to find it on their feedback screen later.
+ *
+ * `penalty` is 0 for an on-time release, one inside the free allowance, a
+ * take-back, or a volunteer who did not hold an accepted place — and also when
+ * the call could not be made at all. The screen must therefore say nothing
+ * about a score when it is 0, never "that cost you 0 points".
+ */
+export interface ReleaseDayResult {
+  /** Negative when something was deducted, 0 otherwise. */
+  penalty: number;
+  /** The score after the deduction, when there was one. */
+  newScore: number | null;
+}
+
 export interface ReleaseDayParams {
   applicationId: string;
   outreachDayId: string;
   /** True releases the day; false takes it back on while it is still ahead. */
   release: boolean;
-  /** Only used to refresh the right caches afterwards. */
+  /** Used to refresh the right caches, and to name the outreach to the server. */
   outreachId: string;
+  /**
+   * Needed only so the server can be told who released the day. Omitting it
+   * skips the deduction call entirely — the nightly sweep would still catch it,
+   * which is why this is optional rather than required.
+   */
+  volunteerId?: string;
 }
 
 /**
@@ -207,7 +231,7 @@ export function useReleaseCommittedDay() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: ReleaseDayParams): Promise<void> => {
+    mutationFn: async (params: ReleaseDayParams): Promise<ReleaseDayResult> => {
       const { error } = await supabase
         .from('application_days')
         .update({ released_at: params.release ? new Date().toISOString() : null })
@@ -220,12 +244,53 @@ export function useReleaseCommittedDay() {
             (params.release ? 'Could not release that day.' : 'Could not take that day back on.')
         );
       }
+
+      /*
+        TELL THE SERVER, and let it decide whether anything is owed.
+
+        The client deliberately does not work out whether this release was late,
+        how many days were promised, or how many late releases came before it.
+        Every one of those is a term in the deduction, and anything the client
+        could name it could choose. The endpoint re-reads the lot from rows the
+        client cannot write — including `application_days.late_release`, which
+        the database stamps and the client has no grant on — and charges nothing
+        at all if the release was on time, inside the free allowance, or made by
+        somebody who did not hold an accepted place.
+
+        BEST-EFFORT, and safe as such. The release itself has already succeeded
+        and must not be reported as failed because a deduction could not be
+        recorded; and the nightly sweep re-checks every late release that has no
+        deduction against it, so a call that never arrived is caught within a
+        day rather than lost. The deduction is deduplicated on the released day
+        AND the moment it was released, so the sweep cannot charge it twice.
+      */
+      if (params.release && params.volunteerId) {
+        try {
+          const result = await recordLateRelease({
+            outreachId: params.outreachId,
+            volunteerId: params.volunteerId,
+            applicationId: params.applicationId,
+            outreachDayId: params.outreachDayId,
+          });
+          return { penalty: result.penalty, newScore: result.newScore ?? null };
+        } catch (penaltyError) {
+          console.warn(
+            '[outreachDays] day released, but the V-Score check could not run:',
+            penaltyError instanceof Error ? penaltyError.message : penaltyError
+          );
+        }
+      }
+
+      return { penalty: 0, newScore: null };
     },
     onSuccess: (_result, params) => {
       queryClient.invalidateQueries({ queryKey: outreachDayKeys.all });
       queryClient.invalidateQueries({ queryKey: outreachKeys.detail(params.outreachId) });
       // The count behind the late-cancellation warning moves with this.
       queryClient.invalidateQueries({ queryKey: [...outreachDayKeys.all, 'late-releases'] });
+      // A late release may have just moved the score and written a row the
+      // volunteer can read on My feedback.
+      queryClient.invalidateQueries({ queryKey: scoreEventKeys.all });
     },
   });
 }

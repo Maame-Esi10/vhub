@@ -799,3 +799,36 @@ describe('replayVScore — partial attendance moves less than full attendance', 
     expect(result.score).toBe(NEW_VOLUNTEER_V_SCORE);
   });
 });
+
+/*
+  THE COMPOSITION PROPERTY, asserted because the wiring depends on it.
+
+  Each late release is charged as ONE act (daysReleased = 1) against the
+  ORIGINAL commitment, rather than the running total being recharged. That is
+  what makes the deduction additive, and it is what makes it meet the -8
+  withdrawal figure exactly at its own edge: dropping every day of a four-day
+  commitment one at a time costs the same as abandoning the event outright.
+
+  If this test fails, the wiring in api/src/server/scorePenalties.ts is charging
+  the wrong denominator.
+*/
+describe('late releases compose to the withdrawal figure', () => {
+  it('four single-day drops of a four-day commitment total -8', () => {
+    let total = 0;
+    for (let priorLateReleases = 2; priorLateReleases < 6; priorLateReleases += 1) {
+      total += lateReleasePenalty({ priorLateReleases, daysReleased: 1, daysCommitted: 4 });
+    }
+    expect(total).toBe(LATE_RELEASE_MAX_PENALTY);
+  });
+
+  it('is charged per act, so one drop of four costs a quarter of a withdrawal', () => {
+    expect(lateReleasePenalty({ priorLateReleases: 2, daysReleased: 1, daysCommitted: 4 })).toBe(
+      LATE_RELEASE_MAX_PENALTY / 4
+    );
+  });
+
+  it('the first two in the window are still free', () => {
+    expect(lateReleasePenalty({ priorLateReleases: 0, daysReleased: 1, daysCommitted: 4 })).toBe(0);
+    expect(lateReleasePenalty({ priorLateReleases: 1, daysReleased: 1, daysCommitted: 4 })).toBe(0);
+  });
+});

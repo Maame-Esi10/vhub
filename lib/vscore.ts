@@ -376,6 +376,21 @@ export function applyVScorePenalty(score: number, penalty: VScorePenaltyType): n
  * -15 reserved for not showing up — which is right, because somebody who
  * releases a day told you.
  */
+/**
+ * The rolling window the free allowance is counted over, in days.
+ *
+ * Lives here rather than in lib/outreachDays.ts because it is a term in the
+ * penalty rule, and the serverless API needs it: lib/vscore.ts imports nothing
+ * at all, while lib/outreachDays.ts pulls in a UI date helper that has no place
+ * in a server bundle. It is re-exported there, so every existing caller and the
+ * warning copy are unchanged.
+ *
+ * ROLLING rather than lifetime, deliberately. A lifetime counter can never be
+ * worked off, and a penalty nobody can escape stops changing behaviour.
+ * Somebody unreliable last year and dependable since is dependable.
+ */
+export const LATE_RELEASE_WINDOW_DAYS = 90;
+
 export const LATE_RELEASE_FREE_ALLOWANCE = 2;
 export const LATE_RELEASE_MAX_PENALTY = -8;
 export const LATE_RELEASE_MIN_PENALTY = -2;

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { EmptyState, ErrorState, FilterChips, ListSkeleton } from '@/components/ui';
+import { EmptyState, ErrorState, FilterChips, ListSkeleton, Toast } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { VolunteerApplicationCard, WithdrawSheet } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
@@ -49,6 +49,8 @@ type Row =
 export default function Applications() {
   const router = useRouter();
   const volunteerId = useAuthStore((state) => state.user)?.id;
+
+  const [toast, setToast] = useState<string | null>(null);
 
   const applicationsQuery = useVolunteerApplications(volunteerId);
   const cancelApplication = useCancelApplication();
@@ -140,7 +142,23 @@ export default function Applications() {
         outreachId: withdrawing.outreach_id,
         reason,
       },
-      { onSuccess: () => setWithdrawing(null) }
+      {
+        onSuccess: (result) => {
+          setWithdrawing(null);
+          /*
+            SAID OUT LOUD, at the moment it happens. A score that moves silently
+            is a score somebody discovers later and cannot connect to anything
+            they did — and `penalty` is null unless they actually gave up an
+            accepted place, so a volunteer withdrawing a pending application is
+            told nothing about a deduction, because there was none.
+          */
+          setToast(
+            result.penalty
+              ? `Withdrawn. That cost ${Math.abs(result.penalty.points)} V-Score points — you were holding a place. Your score is now ${Math.round(result.penalty.newScore)}.`
+              : 'Withdrawn.'
+          );
+        },
+      }
     );
   }
 
@@ -249,6 +267,8 @@ export default function Applications() {
           onDismiss={() => setWithdrawing(null)}
         />
       ) : null}
+
+      <Toast message={toast} onDismiss={() => setToast(null)} durationMs={6000} />
     </SafeAreaView>
   );
 }

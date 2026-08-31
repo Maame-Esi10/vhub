@@ -3323,3 +3323,134 @@ the word.
 a V-Score" and called that "a separate, gated change". It was approved on
 2026-08-26 and has recomputed ever since. The endpoint was right and its client
 wrapper was describing a world that had stopped existing.
+
+## V-Score penalties go live (2026-08-31)
+
+The two flat deductions — withdrawing from an outreach, and dropping a committed
+day inside 24 hours of it — now actually move a score. The formulas were
+approved and built long ago and called by nothing; this is the wiring, and
+almost all of the work turned out to be about *where* a penalty can honestly be
+applied rather than how much it should be.
+
+### The fact with a lifetime of one request
+
+A withdrawal is only fair to penalise when the volunteer held an **accepted**
+place. Pulling out of something you were merely pending or waitlisted for costs
+nobody anything: no place was held, no organiser was left short, and it is
+exactly the behaviour the app wants instead of somebody going quiet. Charging
+for it would punish the honest version of changing your mind.
+
+But `applications` does not record what a cancelled row used to be. The moment
+`status` reads `'cancelled'`, nothing on the row can distinguish an abandoned
+accepted place from a withdrawn pending application. **That distinction exists
+for the length of one request and then it is gone.**
+
+Everything else follows from that single observation.
+
+**The client stopped cancelling the row itself.** `useCancelApplication` used to
+write `status = 'cancelled'` directly through RLS and then call
+`/api/application-status` afterwards as a best-effort nudge to promote the
+waitlist. That order destroyed the previous status before the server ever saw
+it: by the time the endpoint ran, it fell into its idempotent no-op branch with
+nothing left to judge. The endpoint now performs the whole withdrawal — reads
+the current status, writes the cancellation and the reason together, lets the
+trigger stamp `cancelled_at` and `late_cancellation`, records the deduction,
+replays the score, and offers the freed place to the waitlist.
+
+**`/api/vscore`'s `penalty` action was removed rather than fixed.** It could be
+called at any time after a cancellation, which means it could never tell a fair
+penalty from an unfair one. An endpoint that cannot answer the question it
+exists to answer should not exist; leaving it as a second door would have meant
+the unfair path stayed reachable forever.
+
+**The failure behaviour changed with it, and improved.** Before: a failed API
+call left the application withdrawn and the waitlist un-promoted — a half-done
+withdrawal nobody could see. Now the request either does all of it or none of
+it, and the volunteer is told to try again. The deduction alone is best-effort
+*inside* the endpoint: a withdrawal must never be reported as failed because a
+penalty could not be written, or the volunteer will withdraw twice.
+
+### The late release, and why it needed a sweep
+
+Releasing a day is a direct client write — the volunteer updates
+`application_days.released_at` and a database trigger decides whether it was
+late. The deduction needs the service role, so the app calls `/api/vscore`
+afterwards. **That call can simply not happen**: the network drops, the app is
+closed, or a crafted client omits it deliberately. Without a backstop, "penalties
+are live" would really have meant "penalties are live for volunteers whose phone
+cooperated", which is worse than not having them at all.
+
+So a fifth pass was added to the existing daily cron. It finds late releases on
+accepted applications with no deduction against them and charges them. It is
+safe to run every night and twice, because the deduction is deduplicated on the
+released day *plus the moment it was released* — a release the app already
+charged is a no-op.
+
+**The cancellation deliberately has no equivalent sweep**, and that asymmetry is
+worth stating so nobody later "fixes" it: the cancellation penalty is applied
+inside the same request that performs the cancellation, so there is no window in
+which one exists without the other. There is nothing left to detect afterwards.
+
+**`PENALTIES_LIVE_FROM` is a permanent floor, not a rolling window.** Releases
+made before penalties went live are never charged. Charging somebody for a day
+they dropped while the app was telling them nothing would happen is retroactive
+punishment, and it would arrive as a score drop with no act attached to it.
+
+### The amount stopped being something a client could choose
+
+`/api/vscore`'s late-release action used to take `daysReleased` and
+`daysCommitted` in the request body. Its own doc comment said the amount was
+"never sent by the client" — but those two numbers *are* the numerator and
+denominator of the amount. A crafted call could send a denominator of 400 and be
+charged the floor instead of the real figure.
+
+Both are now counted server-side, along with the rolling allowance, from rows
+the client has no write grant on. What they mean took some deciding:
+
+- **`daysCommitted` is every `application_days` row, released or not.** That is
+  the promise the volunteer originally made, and it is the denominator the
+  approved formula was calibrated against ("1 of 4 days → −2"). Counting only
+  the days still live would shrink the denominator with each drop and make the
+  third drop cost more than the first for no stated reason.
+- **`daysReleased` is always 1.** Each late release is one act, charged for
+  itself. Charging the running total would re-charge days already paid for, and
+  the dedupe key is per-day-per-moment precisely because each act is its own
+  event. The consequence is worth having: four single-day drops of a four-day
+  commitment total exactly −8, which is the withdrawal figure the formula was
+  built to meet at its own edge. There is a unit test asserting that
+  composition, so a change to the wiring that broke it would fail rather than
+  quietly overcharge.
+- **The prior-releases count is taken as of `released_at`, strictly before it**,
+  rather than as of now. That makes the figure reproducible: the sweep catching
+  a release from yesterday computes the same number the live call would have,
+  instead of a different and equally confident one. It also removed the "count
+  including this one, then subtract one" fudge the endpoint used to do.
+
+### One judgement that is not in the approved formula
+
+**A late release is only charged on an accepted application**, the same rule as
+a cancellation. Nothing in the approved deduction says this — it was written
+before per-day release had a status to check — but the reasoning is identical: a
+pending or waitlisted volunteer dropping a day has taken no place from anybody.
+Recorded here rather than assumed silently.
+
+### Saying it out loud
+
+Both deductions are reported at the moment they happen, with the amount and the
+new score named, and both appear on the volunteer's My feedback screen
+afterwards. The release sheet already warned *before* the tap that a day inside
+24 hours counts as a late cancellation, but it cannot name a figure — the amount
+depends on how many late releases are already in the rolling window, which only
+the server knows. The toast is where the number gets said.
+
+**Nothing is said when nothing was charged.** A withdrawal from a pending
+application says only "Withdrawn", and a free release says nothing about a score
+at all. "That cost you 0 points" reads as a punishment.
+
+### The extraction
+
+`recordPenalty` moved out of `/api/vscore` into `api/src/server/scorePenalties.ts`
+unchanged, for the same reason `server/waitlist.ts` was extracted for
+moderation: three callers now write penalties — the vscore endpoint, the
+cancellation path and the nightly sweep — and two copies of a rule drift while
+both continue to look like they work.

@@ -16,7 +16,7 @@
  */
 
 import { parseCalendarDate } from '@/components/ui/dateUtils';
-import { dayCommitmentRatio } from '@/lib/vscore';
+import { dayCommitmentRatio, LATE_RELEASE_WINDOW_DAYS } from '@/lib/vscore';
 
 /**
  * A sanity bound on how many days one outreach may span, enforced by the form.
@@ -382,7 +382,7 @@ export function isLateReleaseWindow(
  * off.
  */
 export const LATE_RELEASE_FREE_COUNT = 2;
-export const LATE_RELEASE_WINDOW_DAYS = 90;
+export { LATE_RELEASE_WINDOW_DAYS } from '@/lib/vscore';
 
 export type LateReleaseStanding = 'first' | 'final_warning' | 'deducting';
 
