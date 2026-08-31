@@ -3426,13 +3426,17 @@ the client has no write grant on. What they mean took some deciding:
   instead of a different and equally confident one. It also removed the "count
   including this one, then subtract one" fudge the endpoint used to do.
 
-### One judgement that is not in the approved formula
+### One judgement that is not in the approved formula — CONFIRMED BY THE OWNER
 
 **A late release is only charged on an accepted application**, the same rule as
 a cancellation. Nothing in the approved deduction says this — it was written
 before per-day release had a status to check — but the reasoning is identical: a
 pending or waitlisted volunteer dropping a day has taken no place from anybody.
-Recorded here rather than assumed silently.
+
+Flagged as a judgement rather than presented as spec, and **confirmed by the
+owner on 2026-08-31**, in her words: a pending or waitlisted volunteer "has
+taken no place from anybody and left no organiser short, so there is nothing to
+charge for." It is settled policy now, not an assumption.
 
 ### Saying it out loud
 
