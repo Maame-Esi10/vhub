@@ -19,6 +19,8 @@ export type {
   ChangeLoginEmailParams,
   PasswordStrength,
 } from './useAccountSecurity';
+export { useRequestPasswordReset, useCompletePasswordReset } from './usePasswordReset';
+export type { CompletePasswordResetParams } from './usePasswordReset';
 export { useSignDeclaration } from './useSignDeclaration';
 export { adminActionKeys, useAdminActions, useAdminActionsForTarget } from './useAdminActions';
 export { documentUrlKeys, useDocumentUrl } from './useDocumentUrl';

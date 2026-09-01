@@ -59,11 +59,11 @@ export default function Login() {
   const errorMessage = validationError ?? signIn.error?.message ?? null;
 
   const handleForgotPassword = useCallback(() => {
-    // TODO: intentional no-op. No forgot-password screen/route exists yet —
-    // deferred per the project owner (out of Phase 1 scope, design-refs/
-    // Forgot Password.png is unused for now). Wire to
-    // supabase.auth.resetPasswordForEmail when that screen is built.
-  }, []);
+    // Was an intentional no-op for the whole of Phase 1: somebody who forgot
+    // their password had no route back into their account at all. The flow is
+    // now app/(auth)/forgot-password.tsx -> reset-password.tsx.
+    router.push('/(auth)/forgot-password');
+  }, [router]);
 
   const goToWelcome = useCallback(() => {
     router.push('/(auth)/welcome');

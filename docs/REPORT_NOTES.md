@@ -3815,3 +3815,114 @@ that is wrong by one and looks right. Eleven unit tests pin the behaviour that
 would otherwise only be visible under load: that the limit allows exactly N,
 that a window does not reset one millisecond early, that `Retry-After` rounds
 up and is never zero, and that refusals keep the window open.
+
+## Forgot password: the way back into an account (2026-09-01)
+
+Queue item 6. `app/(auth)/login.tsx` had a "Forgot Password?" link that did
+nothing — a deliberate no-op with a TODO on it since Phase 1. Somebody who
+forgot their password had no route back into their account by any path: no
+screen, no email, and no contact address anywhere in the app to write to.
+
+### What was built
+
+Two screens and one hook file.
+
+`app/(auth)/forgot-password.tsx` is the designed screen
+(`design-refs/Forgot Password.png`): back arrow, wordmark, illustration panel,
+"Reset Password", one email field, the dark action button, "Back to login".
+
+`app/(auth)/reset-password.tsx` takes the six-digit code from the email plus
+the new password and its confirmation, and finishes the job.
+
+`hooks/usePasswordReset.ts` holds the two mutations. It is deliberately
+separate from `useAccountSecurity`, which changes the password of somebody who
+is **signed in and can prove they know the current one**. This is for somebody
+signed out who can prove nothing except that they can read the account's email.
+Different problems, different proofs — conflating them is how an app ends up
+letting one stand in for the other.
+
+### A code, not a link — and this departs from the design
+
+The design says "Enter your email to receive a recovery link", and that is the
+only screen it draws. Whatever happens after the email arrives was never
+designed, in either approach, so a second screen had to be invented either way.
+
+**The link route means deep-link plumbing that does not exist yet.** A recovery
+link has to reopen the app through the `vhub://` scheme, and the app then has
+to pull session tokens out of the URL fragment itself and call `setSession` —
+because password recovery genuinely needs the session in order to write the new
+password. Nothing in this app parses a deep link today. The one other emailed
+link, the login-email change in `useAccountSecurity`, is verified entirely on
+Supabase's side; the app only has to reopen, never to read anything out of the
+URL. So the link route is new machinery whose failure modes all sit where we
+cannot see them: a scheme that differs between the dev client and a real build,
+Android mail clients that treat custom schemes inconsistently, and a redirect
+allowlist that fails silently by falling back to the project's Site URL.
+
+**A code is typed into a screen we control.** It behaves identically in the dev
+client and in a production build, needs no allowlist entry, and the flow never
+leaves the app. The layout the design does specify is unchanged; only the word
+"link" becomes "code".
+
+**What it costs, and this is the one thing that needs doing outside the code:**
+Supabase's default recovery email template contains only the link. The template
+must include `{{ .Token }}` or the email arrives with no code in it and the
+screen cannot work. That is one line in Authentication → Email Templates →
+Reset Password.
+
+If the link route is preferred after all, the change is confined to one screen
+plus the deep-link handling — the request half is identical either way.
+
+### The code and the new password are on ONE screen, on purpose
+
+Verifying the code **signs the person in**. At that instant they hold a real
+session, opened with a code from an email rather than a password. Splitting the
+steps across two screens would create a state where somebody is signed in on a
+recovery code and has not yet chosen a password — worth not having at all.
+Asking for both at once makes the verification and the new password a single
+submission, so that state never exists.
+
+The auth guard leaves the screen alone while this happens. `AUTH_ENTRY_SCREENS`
+in `useAuthGuard` is welcome/login/register only, so a session appearing
+mid-flow does not yank the user into their tab group before the password is
+written. That exclusion already existed for the onboarding wizard, which needs
+it for exactly the same reason — this is the second thing to rely on it, and
+neither needed a change to make it work.
+
+On success the screen sends the user to the root rather than to a role home, so
+the guard routes them the way it routes any other sign-in — including a
+volunteer whose onboarding is unfinished, who belongs on welcome and not in the
+tabs.
+
+### What is deliberately not revealed
+
+`resetPasswordForEmail` succeeds whether or not the address has an account, and
+the screen says something true either way ("if that address has a V-HUB
+account…"). An app that answered differently for a known address would let
+anybody test whether a particular nurse has signed up here. It is the same
+reasoning as `/api/document-url`'s flat 403.
+
+The same applies to a bad code. Supabase reports a wrong code, a used code and
+an expired one with one message, and the screen keeps them as one message:
+telling somebody which of the three it was tells a stranger the same thing.
+
+### Two smaller things
+
+**The illustration is drawn, not dropped in.** The design's artwork is not among
+the exported assets, and a stock illustration would put a look in the app that
+exists nowhere else in it. The panel uses its own tinted ground, two off-edge
+discs and one icon from the family every other screen draws from — the same
+treatment the no-flyer outreach banner already uses.
+
+**The validation messages are derived from state, not written into it on
+submit.** That is the Create Outreach wizard's bug, fixed there in August: a
+snapshot taken at submit time leaves a message on screen describing a field the
+user has since corrected.
+
+### Not built, and worth knowing
+
+Supabase limits how often it will send a recovery email — a handful an hour on
+the free tier's built-in mailer. That error is surfaced as-is rather than
+softened, because "try again later" is the only honest thing to say and the
+user needs to know the email is not simply lost. There is no in-app throttle on
+top of it: a second one would have to guess at a number Supabase already knows.
