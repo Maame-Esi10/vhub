@@ -58,7 +58,7 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
   {
     heading: 'Who else is involved',
     paragraphs: [
-      'V-HUB stores its data with Supabase, its documents and photos with Cloudinary, and sends email through Resend. Push notifications go through Expo and, on Android, through Google’s messaging service, because Android permits no other way to deliver them.',
+      'V-HUB stores its data with Supabase, its documents and photos with Cloudinary, and sends its email through a Google mail account. Push notifications go through Expo and, on Android, through Google’s messaging service, because Android permits no other way to deliver them.',
       'Skill matching sends the list of skills an outreach asks for and the list you hold to Google’s Gemini so it can spot that two differently-worded skills are the same thing. Your name is not sent, and nothing that identifies you is sent.',
     ],
   },

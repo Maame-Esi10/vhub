@@ -48,7 +48,7 @@ V-HUB connects health volunteers (nurses, pharmacy students, first aiders, docto
 | Matching AI | Google Gemini Flash (Layer 2 semantic enrichment) |
 | Secure storage | Expo SecureStore |
 | Media | Cloudinary |
-| Email | Resend |
+| Email | Gmail SMTP via `nodemailer` (dedicated Google account; no domain, so no Resend) |
 | UI | Material Community Icons, Inter font |
 
 ## Current Status

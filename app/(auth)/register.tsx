@@ -174,6 +174,14 @@ export default function Register() {
             We sent a confirmation link to {email.trim()}. Verify your address, then log in to
             finish setting up your account.
           </Text>
+          {/* The confirmation email is the most spam-prone message V-HUB sends: it goes
+              to somebody who has never heard from the sender, and it contains a link.
+              Since delivery moved to a Gmail account rather than a branded domain
+              (2026-09-01), the filter risk is real enough to name here. Same wording as
+              the reset-password screen, deliberately. */}
+          <Text style={styles.confirmationHint}>
+            Nothing arrived? Check your spam folder first.
+          </Text>
           <Button
             title="Back to Login"
             variant="solid"
@@ -774,6 +782,14 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: 14,
     lineHeight: 21,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  confirmationHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: spacing.xl,

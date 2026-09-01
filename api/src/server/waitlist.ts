@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { sendApplicationStatusEmail, type ApplicationStatusEmailKind } from "./resend";
+import { sendApplicationStatusEmail, type ApplicationStatusEmailKind } from "./email";
 import { notifyUsers } from "./notify";
 
 /**

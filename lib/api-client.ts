@@ -8,7 +8,7 @@ import type { ApplicationStatus, Outreach, OutreachRoleType } from '@/types/data
  * Vercel). Screens never call this directly -- hooks in `hooks/` do, and
  * screens consume those hooks (CLAUDE.md conventions).
  *
- * Everything that needs a secret (Gemini, Resend, the Supabase service-role
+ * Everything that needs a secret (Gemini, the Gmail app password, the Supabase service-role
  * key) or heavy compute lives behind these endpoints. This module holds NO
  * secrets: it forwards the caller's own Supabase access token, which the API
  * verifies with `auth.getUser()` before doing any work.

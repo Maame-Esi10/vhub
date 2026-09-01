@@ -8,7 +8,7 @@ import {
   sendApplicationStatusEmails,
   type ApplicationStatusEmailKind,
   type ApplicationStatusEmailParams,
-} from "../../../server/resend";
+} from "../../../server/email";
 import { notifyUsers, type UserNotification } from "../../../server/notify";
 import { emailApplicant, pushApplicant, promoteFromWaitlist } from "../../../server/waitlist";
 

@@ -147,7 +147,7 @@ export interface UpdateApplicationStatusParams {
  *
  * Accept, reject and waitlist all go through `/api/application-status` rather
  * than writing Supabase directly, because the decision has side effects only
- * the service role can perform: the Resend status email to the applicant, the
+ * the service role can perform: the status email to the applicant, the
  * Expo push, and — when an accepted spot is later freed — promoting the
  * highest-match waitlisted applicant, which is another volunteer's row and so
  * is unreachable under this organisation's RLS.

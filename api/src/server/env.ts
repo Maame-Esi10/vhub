@@ -36,11 +36,32 @@ export const env = {
   get geminiModel(): string {
     return process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
   },
-  get resendApiKey(): string {
-    return requireEnv("RESEND_API_KEY");
+  /**
+   * The dedicated Gmail account every V-HUB email is sent through, and the
+   * Google APP PASSWORD authenticating it -- a 16-character credential that
+   * grants full access to that mailbox, which is exactly why the account is a
+   * dedicated one holding nothing. Replaced RESEND_API_KEY / RESEND_FROM on
+   * 2026-09-01; see server/mailer.ts for why Resend could not be kept.
+   */
+  get gmailUser(): string {
+    return requireEnv("GMAIL_USER");
   },
-  get resendFrom(): string {
-    return requireEnv("RESEND_FROM");
+  get gmailAppPassword(): string {
+    return requireEnv("GMAIL_APP_PASSWORD");
+  },
+  /** Optional. The only part of the sender that is ours to choose. */
+  get mailFromName(): string {
+    return process.env.MAIL_FROM_NAME?.trim() || "V-HUB";
+  },
+  /**
+   * Gmail overwrites the From header with the authenticated account unless the
+   * address is a verified "Send mail as" alias, so the address half is not a
+   * setting -- it is always GMAIL_USER, and only the display name varies.
+   * Building it here rather than taking a whole address from an env var stops
+   * anyone configuring a sender Gmail will silently rewrite.
+   */
+  get mailFrom(): string {
+    return `"${this.mailFromName}" <${this.gmailUser}>`;
   },
   /** Null when unset -- Expo push works without it, just at a lower rate limit. */
   get expoAccessToken(): string | null {

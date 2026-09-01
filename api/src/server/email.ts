@@ -1,14 +1,15 @@
-import { Resend } from "resend";
-import { env } from "./env";
+import { sendMail, sendMailBatch, type MailMessage } from "./mailer";
 
-let cachedClient: Resend | null = null;
-
-function getResendClient(): Resend {
-  if (!cachedClient) {
-    cachedClient = new Resend(env.resendApiKey);
-  }
-  return cachedClient;
-}
+/**
+ * The transactional emails V-HUB sends about an application.
+ *
+ * WAS server/resend.ts UNTIL 2026-09-01. The wording of every message below is
+ * unchanged; only the transport underneath it moved, from Resend's API to the
+ * project's Gmail SMTP account. The reasoning for that move lives in
+ * server/mailer.ts. This file was always split so that `subjectFor` / `bodyFor`
+ * build the content and the exported functions do the sending, which is why
+ * swapping the transport touched no copy at all.
+ */
 
 export type ApplicationStatusEmailKind =
   | "accepted"
@@ -76,54 +77,46 @@ function bodyFor(params: ApplicationStatusEmailParams): string {
       );
     case "cancelled":
       return (
-        `Hi ${params.volunteerName},
-
-` +
+        `Hi ${params.volunteerName},\n\n` +
         `"${params.outreachTitle}"${where} on ${when} has been CANCELLED and will not take place. ` +
-        `You do not need to attend.
-
-` +
+        `You do not need to attend.\n\n` +
         `Nothing about this affects your standing on V-HUB -- it was not your decision and it is not ` +
-        `counted against you. Please do keep applying to other outreaches.
-
-` +
+        `counted against you. Please do keep applying to other outreaches.\n\n` +
         `-- The V-HUB Team`
       );
   }
 }
 
+function toMessage(params: ApplicationStatusEmailParams): MailMessage {
+  return {
+    to: params.to,
+    subject: subjectFor(params.kind, params.outreachTitle),
+    text: bodyFor(params),
+  };
+}
+
 /**
- * Sends the accepted/rejected/waitlisted transactional email.
- * Best-effort: logs and swallows failures rather than throwing, so a Resend
+ * Sends the accepted/rejected/waitlisted/cancelled transactional email.
+ * Best-effort: logs and swallows failures rather than throwing, so a mail
  * outage never blocks the status change itself from succeeding -- the
  * status update to the database is the source of truth, the email is a
  * courtesy notification on top of it.
  */
 export async function sendApplicationStatusEmail(params: ApplicationStatusEmailParams): Promise<void> {
   try {
-    const client = getResendClient();
-    await client.emails.send({
-      from: env.resendFrom,
-      to: params.to,
-      subject: subjectFor(params.kind, params.outreachTitle),
-      text: bodyFor(params),
-    });
+    await sendMail(toMessage(params));
   } catch (err) {
-    console.error("[resend] failed to send application-status email:", err instanceof Error ? err.message : err);
+    console.error("[email] failed to send application-status email:", err instanceof Error ? err.message : err);
   }
 }
 
-/** Resend's batch endpoint accepts at most 100 messages per request. */
-const RESEND_BATCH_LIMIT = 100;
-
 /**
- * Sends many application-status emails in one call.
+ * Sends many application-status emails over one pooled SMTP connection.
  *
- * Needed by the batch accept/waitlist path: Resend's free tier rate-limits to
- * roughly 2 requests per second, so looping `sendApplicationStatusEmail` over
- * an oversubscribed event's 40 applicants would start dropping messages a
- * second in. `batch.send` posts up to 100 messages as a single request, which
- * sidesteps the limit entirely.
+ * Needed by the batch accept/waitlist path, where an oversubscribed event can
+ * move forty applicants at once. `sendMailBatch` isolates each message, so one
+ * undeliverable address costs one email rather than the whole batch -- which
+ * is what the Resend implementation this replaces did, silently.
  *
  * Best-effort in exactly the same way as the single-message version: the
  * database write is the source of truth and a mail failure must never fail the
@@ -135,21 +128,13 @@ export async function sendApplicationStatusEmails(
   if (messages.length === 0) return;
 
   try {
-    const client = getResendClient();
-    for (let i = 0; i < messages.length; i += RESEND_BATCH_LIMIT) {
-      const chunk = messages.slice(i, i + RESEND_BATCH_LIMIT);
-      await client.batch.send(
-        chunk.map((params) => ({
-          from: env.resendFrom,
-          to: params.to,
-          subject: subjectFor(params.kind, params.outreachTitle),
-          text: bodyFor(params),
-        }))
-      );
+    const { failed } = await sendMailBatch(messages.map(toMessage));
+    if (failed > 0) {
+      console.error(`[email] ${failed} of ${messages.length} application-status emails failed`);
     }
   } catch (err) {
     console.error(
-      "[resend] failed to send batched application-status emails:",
+      "[email] failed to send batched application-status emails:",
       err instanceof Error ? err.message : err
     );
   }
