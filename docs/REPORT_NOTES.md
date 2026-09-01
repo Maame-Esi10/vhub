@@ -3870,6 +3870,13 @@ must include `{{ .Token }}` or the email arrives with no code in it and the
 screen cannot work. That is one line in Authentication → Email Templates →
 Reset Password.
 
+**That line could not be added for a month, and the reason turned out to be the
+bigger story.** Supabase locked email-template editing for new free-tier
+projects on its own mailer, so the field was not editable at all. Unpicking
+that surfaced a much larger problem sitting underneath it - see "Email
+delivery" at the end of this document. The template line is in place as of
+2026-09-01 and the reset flow works as designed.
+
 If the link route is preferred after all, the change is confined to one screen
 plus the deep-link handling — the request half is identical either way.
 
@@ -3926,3 +3933,172 @@ the free tier's built-in mailer. That error is surfaced as-is rather than
 softened, because "try again later" is the only honest thing to say and the
 user needs to know the email is not simply lost. There is no in-app throttle on
 top of it: a second one would have to guess at a number Supabase already knows.
+
+---
+
+## Email delivery - the Gmail SMTP route (2026-09-01)
+
+Everything in this section came out of a single question: why could the
+password-reset template not be edited? The answer was a Supabase policy change,
+but chasing it uncovered that **no V-HUB email had ever reached anybody except
+the project owner**, in either of the two independent systems that send it.
+
+### There were two email systems and both were broken, in different ways
+
+**Supabase Auth** sends the signup confirmation, the password recovery code and
+the login-email-change confirmation. These never touched Resend. They went
+through Supabase's own built-in mailer, which **refuses to deliver to any
+address that is not a member of the project's team** and rate-limits to two
+messages an hour. Because "Confirm email" is ON, the consequence was not a
+degraded feature but a closed front door: **a stranger could not register at
+all.** They submitted the form, an auth user was created, no email arrived, and
+they were left on "Check your email" with no way forward and nothing on screen
+to explain it.
+
+**The V-HUB API** sends the application decision emails, the waitlist promotion
+and the outreach-cancelled notice. Those went through Resend. Resend will only
+send from a verified domain; without one the single usable sender is
+`onboarding@resend.dev`, which delivers **only to the address the Resend account
+itself was registered under** and refuses every other recipient with a 403.
+
+**Neither failure was visible anywhere.** Both API send paths log the error and
+swallow it - correctly, because a Resend outage must never fail an accept
+decision that the database has already recorded - so total, permanent delivery
+failure looked exactly like everything working. This is worth stating plainly
+in the report: the fault was not in any of the code, and no test could have
+caught it, because every component behaved as designed.
+
+### The decision: no domain
+
+A verified domain would have fixed both systems at once and is the correct
+answer for a production service. It was ruled out on cost - this is a free-tier
+project throughout, and a recurring registration fee is not part of it.
+
+That constraint eliminates Resend entirely, because Resend has no usable sender
+without one. The remaining free option is a mail server that will accept us on
+account credentials alone, which in practice means Gmail.
+
+**A dedicated Google account was created**, `vhub.notifications@gmail.com`, with
+the account name set to V-HUB and 2-Step Verification enabled so that an app
+password could be generated. A dedicated account rather than a personal one for
+two reasons that happen to agree: a Google **app password** grants full access
+to the mailbox it belongs to - read as well as send - so pasting one into two
+dashboards should never expose a personal inbox; and a clean account keeps the
+project's sending reputation separate from anybody's ordinary mail.
+
+### What changed, in two halves
+
+**Supabase's half is configuration only.** Custom SMTP now points at
+`smtp.gmail.com:465` authenticated as that account. This lifted all three
+limitations in one move: delivery to any address, the hourly cap raised from
+two, and - the original question - **email templates became editable again**,
+because the lock only ever applied to Supabase's own mailer. `{{ .Token }}` went
+into the recovery template and the six-digit reset flow works as built.
+
+**The API's half replaced Resend with `nodemailer`.** `server/resend.ts` became
+`server/email.ts`, and a new `server/mailer.ts` holds the transport. **Not one
+word of any email changed**: the module was already split so that `subjectFor`
+and `bodyFor` build the content while the exported functions send it, so the
+swap touched the transport and nothing else. `resend` came out of
+`api/package.json` - which removed eighteen packages - and `RESEND_API_KEY` /
+`RESEND_FROM` were replaced by `GMAIL_USER`, `GMAIL_APP_PASSWORD` and an
+optional `MAIL_FROM_NAME`.
+
+Two things improved on the way through rather than merely being ported:
+
+- **A failed message no longer takes the batch down with it.** The Resend
+  implementation posted up to 100 messages as one `batch.send` inside a single
+  try/catch, so one bad address discarded every remaining message in the chunk,
+  silently. SMTP has no batch verb, so the replacement is a loop over one
+  pooled connection with each message its own attempt. An organisation
+  accepting forty applicants can no longer lose thirty-nine emails to one
+  malformed address.
+- **A stale pooled connection is retried rather than reported as a lost
+  email.** A connection cached on a warm serverless instance can be frozen
+  between invocations and dead on the next one while still looking open. Every
+  send now retries once through a rebuilt transport, which is
+  indistinguishable from a real failure at the call site otherwise.
+
+**The sender address is not a setting and cannot be one.** Authenticating to
+`smtp.gmail.com` as one account and sending as another makes Gmail overwrite
+the From header with the authenticated address, unless the other address is a
+verified "Send mail as" alias - and verifying an alias means proving control of
+a domain, which is the thing being worked around. Only the display name is
+ours, which is why `env.mailFrom` composes `"V-HUB" <the gmail address>` rather
+than reading a whole address from an environment variable that could be set to
+something Gmail would silently rewrite.
+
+### The confirmation link had nowhere to land
+
+Supabase sends every auth email's link to the project's **Site URL**, which was
+still `http://localhost:3000`. A volunteer clicking "confirm your email" landed
+on a browser connection error. Their address **was** confirmed at that moment -
+Supabase verifies the token before redirecting - but everything visible said
+the app was broken, and the natural response to that is to give up rather than
+to go back and log in.
+
+The project has no website. The only address available to point at is the
+Vercel deployment serving the API, whose root returned a bare 404, which is no
+improvement. So `api/src/app/page.tsx` was added: one static page at that root,
+in the app's own palette, saying the address is confirmed and to go back to the
+app and log in.
+
+**It confirms nothing itself** - by the time the browser arrives, Supabase has
+already done the work - which is why it is safe as a plain page with no session
+and no Supabase client of its own. Two details are deliberate. It **reads the
+error out of the URL before asserting anything**, because an expired or
+already-used link is the likeliest non-success and telling somebody their
+address is confirmed when it is not sends them to a login that will refuse them
+for no visible reason. And it **clears the URL fragment** after reading it: a
+successful confirmation arrives with real session tokens in the fragment, and
+leaving them in the address bar puts working credentials into browser history -
+the same instinct as never storing a signed document URL.
+
+### Stated limitations
+
+These are consequences of the no-domain decision, not defects, and they belong
+in the report as such.
+
+**A hard daily ceiling of roughly 500 recipients per rolling 24 hours.** That is
+a free Gmail account's limit; some sources put the figure for SMTP specifically
+lower. It counts **recipients**, not messages, and it is a rolling window rather
+than a midnight reset. Supabase's auth emails and the app's own emails now draw
+on the same allowance. Nowhere near binding at this project's scale - a busy day
+is tens of messages - but it is a real ceiling, and V-HUB could not be operated
+at national scale on it without moving to a domain and a proper provider. Moving
+would be a change of transport only: `server/mailer.ts` is the single place that
+would change.
+
+**Deliverability is materially worse than a branded domain would give.** Mail
+sent through Google's servers from a real Gmail address carries valid SPF and
+DKIM and aligns with DMARC, so none of it is forged-looking and none of it is
+rejected outright. The residual risk is filtering, and it falls unevenly:
+
+- The **signup confirmation is the most exposed message in the system**, and it
+  is the one gating registration. It goes to somebody who has never heard from
+  the sender and it contains a link - the shape of a phishing email, scored
+  accordingly - and institutional mail systems (`ug.edu.gh`, hospital and NGO
+  domains, precisely V-HUB's users) filter harder than consumer Gmail.
+- The **display name says V-HUB while the address says gmail.com**. Legitimate
+  services rarely do that and impersonation does it constantly, so filters
+  weight the mismatch.
+- A **new account has no sending reputation**, and Google may throttle one that
+  suddenly emits bursts of near-identical automated mail.
+- The **password reset code is the least exposed of them**, because the
+  code-not-link decision means that email contains no clickable link at all.
+  That choice was made for deep-linking reasons and turns out to help here too.
+
+What reduces it, and was done: the dedicated account with a consistent display
+name, low and unbursty volume, plain-text bodies with no links beyond the one
+Supabase requires, and a spam-folder line on both screens that wait for an
+email - `reset-password.tsx` already had one, and the register screen's
+confirmation state was given the same wording. What cannot be had without a
+domain: DMARC alignment with a V-HUB domain, a branded sender, and a warmed
+domain reputation.
+
+**One operational trap worth recording.** Changing that Google account's
+password revokes every app password it has issued. All V-HUB email - the app's
+and Supabase's alike - stops at that moment, and the failure looks like Supabase
+breaking rather than like a revoked credential. Recovery is generating a new app
+password and pasting it into both Supabase's SMTP settings and Vercel's
+`GMAIL_APP_PASSWORD`.
