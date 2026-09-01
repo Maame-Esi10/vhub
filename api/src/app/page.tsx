@@ -3,6 +3,25 @@
 import { useEffect, useState } from "react";
 
 /**
+ * THE REAL MARK, IMPORTED FROM THE EXPO APP'S assets/ RATHER THAN COPIED HERE.
+ *
+ * The `@/*` alias in api/tsconfig.json points at the repo root, and
+ * `outputFileTracingRoot` in next.config.ts already tells Vercel's bundler to
+ * treat that root as in-scope -- the same arrangement that lets this project
+ * import the one copy of the scoring math instead of mirroring it. So the page
+ * renders the SAME FILE every screen in the app renders. A copy under
+ * api/public/ would have been the conventional answer and was rejected for the
+ * usual reason: two copies of an asset are two things to keep in step, and the
+ * one nobody looks at is the one that goes stale.
+ *
+ * Imported for its `.src` and drawn with a plain <img> rather than next/image
+ * on purpose. next/image would route a fixed-size logo through Vercel's image
+ * optimiser, which is metered on the free tier; the static import already
+ * gives a content-hashed, immutably-cached URL, which is all this needs.
+ */
+import logo from "@/assets/logo.png";
+
+/**
  * Where a confirmation link lands.
  *
  * WHY THIS PAGE EXISTS. Supabase sends every auth email's link to the
@@ -24,7 +43,6 @@ import { useEffect, useState } from "react";
  */
 
 /** Palette lifted from constants/theme.ts so the page is recognisably V-HUB. */
-const NAVY = "#12172B";
 const CORAL = "#FF6B6B";
 const TEXT = "#111827";
 const MUTED = "#6B7280";
@@ -98,24 +116,17 @@ export default function ConfirmationPage() {
           textAlign: "center",
         }}
       >
-        <div
-          style={{
-            width: 64,
-            height: 64,
-            borderRadius: 32,
-            margin: "0 auto 24px",
-            backgroundColor: NAVY,
-            color: "#FFFFFF",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 22,
-            fontWeight: 700,
-            letterSpacing: 1,
-          }}
-        >
-          V
-        </div>
+        {/* No disc behind it: the mark is coral on transparent and the app's own
+            brand strip shows it plain on a light ground. Width and height are
+            set so the card does not reflow when the image arrives. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={logo.src}
+          alt="V-HUB"
+          width={64}
+          height={64}
+          style={{ display: "block", margin: "0 auto 24px" }}
+        />
 
         {/* Nothing is asserted until the URL has been read in the browser --
             rendering "confirmed" first and correcting it a tick later would

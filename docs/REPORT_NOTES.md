@@ -4043,6 +4043,21 @@ improvement. So `api/src/app/page.tsx` was added: one static page at that root,
 in the app's own palette, saying the address is confirmed and to go back to the
 app and log in.
 
+**The mark on it is the real logo, and it is not a second copy of the file.**
+`api/tsconfig.json`'s `@/*` alias points at the repo root and
+`outputFileTracingRoot` already declares that root in scope for Vercel's
+bundler - the arrangement that lets this project import the single copy of the
+scoring math rather than mirroring it. The page imports `assets/logo.png`
+through it, so it renders the same file every screen in the app renders, and a
+future change to the logo reaches the page without anybody remembering to
+update it. The conventional answer, a copy under `api/public/`, was rejected
+for the usual reason: two copies of an asset are two things to keep in step,
+and the one nobody looks at is the one that goes stale. It is drawn with a
+plain `<img>` from the static import's `.src` rather than `next/image`, which
+would route a fixed-size logo through Vercel's metered image optimiser to no
+benefit; the static import already yields a content-hashed, immutably cached
+URL.
+
 **It confirms nothing itself** - by the time the browser arrives, Supabase has
 already done the work - which is why it is safe as a plain page with no session
 and no Supabase client of its own. Two details are deliberate. It **reads the
