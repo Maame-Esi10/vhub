@@ -1,5 +1,10 @@
 import type { ProfileRole } from "@/types/database";
 import { Errors } from "./httpErrors";
+import {
+  enforceAuthFailureRateLimit,
+  enforceIpRateLimit,
+  enforceUserRateLimit,
+} from "./rateLimit";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 
 export interface AuthedCaller {
@@ -23,17 +28,39 @@ export interface AuthedCaller {
  * SUPABASE_JWT_SECRET env var to keep in sync. The cost is one extra network
  * call per request, which is negligible next to the Gemini/Resend/Expo calls
  * these endpoints already make.
+ *
+ * IT IS ALSO WHERE RATE LIMITING LIVES, and that is not an accident of
+ * convenience. Every route calls this as its first statement, so putting the
+ * limiter here means a route added later is covered without anyone having to
+ * remember to cover it -- the alternative, a line at the top of twenty-one
+ * handlers, is a line that will eventually be missed in the twenty-second.
+ * Three counters apply, in this order:
+ *
+ *   1. the per-address limit, BEFORE the Supabase Auth call, so a flood of
+ *      junk tokens is refused without this project paying for a lookup;
+ *   2. the per-address FAILED-authentication limit, on every path that
+ *      rejects, which is the counter an attacker actually runs into;
+ *   3. the caller's own default per-user limit, once they are known.
+ *
+ * See `rateLimit.ts` for the numbers, the reasoning behind each, and the
+ * documented limitation that the counters are per serverless instance.
  */
 export async function authenticate(req: Request): Promise<AuthedCaller> {
+  // First, before the Supabase Auth round-trip below: an unauthenticated
+  // flood must not be able to spend this project's quota just by arriving.
+  enforceIpRateLimit(req);
+
   const header = req.headers.get("authorization");
   const token = header?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (!token) {
+    enforceAuthFailureRateLimit(req);
     throw Errors.unauthenticated("Missing Authorization: Bearer <token> header.");
   }
 
   const admin = getSupabaseAdmin();
   const { data: userData, error: userError } = await admin.auth.getUser(token);
   if (userError || !userData?.user) {
+    enforceAuthFailureRateLimit(req);
     throw Errors.unauthenticated("Invalid or expired session token.");
   }
 
@@ -44,8 +71,14 @@ export async function authenticate(req: Request): Promise<AuthedCaller> {
     .single();
 
   if (profileError || !profile) {
+    enforceAuthFailureRateLimit(req);
     throw Errors.unauthenticated("No profile found for this account.");
   }
+
+  // The backstop every signed-in caller passes through. Endpoints that need
+  // something tighter -- match, document-url, vscore, upload-signature,
+  // account-closure -- add their own bucket immediately after calling this.
+  enforceUserRateLimit(profile.id as string, "default");
 
   return { userId: profile.id as string, role: profile.role as ProfileRole };
 }

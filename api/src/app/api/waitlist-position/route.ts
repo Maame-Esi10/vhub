@@ -1,5 +1,6 @@
 import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
+import { enforceIpRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { rankApplicants } from "@/lib/roster";
 
@@ -37,6 +38,10 @@ interface WaitlistRow {
 
 export async function POST(req: Request): Promise<Response> {
   try {
+    // First, ahead of validation and of authentication, so a flood is refused
+    // before this project spends anything on it. Counted once per request
+    // however many times it is called -- see server/rateLimit.ts.
+    enforceIpRateLimit(req);
     const caller = await authenticate(req);
     if (caller.role !== "volunteer") {
       throw Errors.forbidden("Only a volunteer has a waitlist position.");

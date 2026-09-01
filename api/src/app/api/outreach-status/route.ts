@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
+import { enforceIpRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { notifyUsers, type UserNotification } from "../../../server/notify";
 
@@ -49,6 +50,10 @@ export interface OutreachStatusResponse {
 
 export async function POST(req: Request): Promise<Response> {
   try {
+    // First, ahead of validation and of authentication, so a flood is refused
+    // before this project spends anything on it. Counted once per request
+    // however many times it is called -- see server/rateLimit.ts.
+    enforceIpRateLimit(req);
     const caller = await authenticate(req);
     const body = Body.parse(await req.json());
     const admin = getSupabaseAdmin();

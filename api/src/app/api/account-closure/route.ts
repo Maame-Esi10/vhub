@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
+import { enforceIpRateLimit, enforceUserRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { destroyAsset, uploadTargetFor } from "../../../server/cloudinary";
 import { stopOrganisation, stopVolunteer } from "../../../server/accountStop";
@@ -61,12 +62,19 @@ const BAN_FOREVER = "876000h";
 
 export async function POST(req: Request): Promise<Response> {
   try {
+    // First, ahead of validation and of authentication, so a flood is refused
+    // before this project spends anything on it. Counted once per request
+    // however many times it is called -- see server/rateLimit.ts.
+    enforceIpRateLimit(req);
     const json = await req.json().catch(() => {
       throw Errors.badRequest("Request body must be valid JSON.");
     });
     Body.parse(json);
 
     const caller = await authenticate(req);
+    // Much tighter than the default: closing an account is irreversible and is
+    // done once in an account's lifetime. This allows for a retry, not a loop.
+    enforceUserRateLimit(caller.userId, "account_closure");
     const admin = getSupabaseAdmin();
 
     const { data: profile } = await admin

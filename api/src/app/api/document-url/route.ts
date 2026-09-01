@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { authenticate, type AuthedCaller } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
+import { enforceIpRateLimit, enforceUserRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { signedDownloadUrl, uploadTargetFor } from "../../../server/cloudinary";
 
@@ -76,12 +77,20 @@ async function organisationMayView(caller: AuthedCaller, volunteerId: string): P
 
 export async function POST(req: Request): Promise<Response> {
   try {
+    // First, ahead of validation and of authentication, so a flood is refused
+    // before this project spends anything on it. Counted once per request
+    // however many times it is called -- see server/rateLimit.ts.
+    enforceIpRateLimit(req);
     const json = await req.json().catch(() => {
       throw Errors.badRequest("Request body must be valid JSON.");
     });
     const body = DocumentUrlBody.parse(json);
 
     const caller = await authenticate(req);
+    // Tighter than the default: every call here mints a working link to
+    // somebody's identity document. Twenty a minute is far more than reviewing
+    // documents by hand needs, and far less than enumerating them would.
+    enforceUserRateLimit(caller.userId, "document_url");
     const admin = getSupabaseAdmin();
 
     if (body.kind === "organisation_document") {

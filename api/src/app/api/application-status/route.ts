@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
+import { enforceIpRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import {
   sendApplicationStatusEmails,
@@ -119,6 +120,10 @@ interface OutreachRow {
 
 export async function POST(req: Request): Promise<Response> {
   try {
+    // First, ahead of validation and of authentication, so a flood is refused
+    // before this project spends anything on it. Counted once per request
+    // however many times it is called -- see server/rateLimit.ts.
+    enforceIpRateLimit(req);
     const caller = await authenticate(req);
     const json = await req.json().catch(() => {
       throw Errors.badRequest("Request body must be valid JSON.");

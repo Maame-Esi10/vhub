@@ -6,6 +6,7 @@ import {
 } from "@/lib/attendance";
 import { authenticate, assertOwnsOutreach, type AuthedCaller } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
+import { enforceIpRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 
 export const runtime = "nodejs";
@@ -99,6 +100,10 @@ const CheckinRequestBody = z.discriminatedUnion("mode", [
 
 export async function POST(request: Request) {
   try {
+    // First, ahead of validation and of authentication, so a flood is refused
+    // before this project spends anything on it. Counted once per request
+    // however many times it is called -- see server/rateLimit.ts.
+    enforceIpRateLimit(request);
     const caller = await authenticate(request);
     const body = CheckinRequestBody.parse(await request.json());
 

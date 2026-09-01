@@ -3670,3 +3670,148 @@ become permanent documentation of a false claim is that the file asserted a
 number and the number disagreed.
 
 Write the check even when the reasoning feels airtight — especially then.
+
+## Rate limiting on the serverless API (2026-09-01)
+
+Queue item 5, and the last unmitigated security gap on the list. Every route in
+`api/` is a public URL: anyone who knows the address can send it a request, and
+the API will do work deciding whether to refuse them. Until now there was
+nothing anywhere that noticed the same caller doing that ten thousand times.
+
+### What the gap actually was
+
+Not stolen data. The access rules were already right, and none of them changed
+here. The gap was **cost**, and on a free tier cost is availability.
+
+Every endpoint's first act is to verify the caller's token, and that
+verification is itself a network call to Supabase Auth plus a `profiles` read.
+So a stranger with no account at all could make this project spend Supabase
+Auth requests and Vercel invocations just by sending a stream of POSTs carrying
+a junk token. Every one of them would be correctly refused, and every one of
+them would cost something. Past the free tier's ceiling the app stops working
+for the people it is for.
+
+Three endpoints are worse than the rest, for their own reasons: `/api/match`
+can spend Gemini's roughly 1,500-requests-a-day allowance, `/api/document-url`
+mints a working link to somebody's identity document, and `/api/vscore` writes
+reputation data and replays a volunteer's whole score history.
+
+### Three counters, doing three different jobs
+
+**Per IP address, 120 a minute, across every route.** Deliberately loose. A
+single real user of the app makes a handful of these calls a minute at most —
+nearly every data read goes straight to Supabase under RLS and never touches
+this API — but **dozens of real users in Ghana can share one carrier-grade NAT
+address**, so a tight limit here would lock out a whole neighbourhood for one
+person's behaviour. This one exists to stop a flood measured in thousands, not
+to shape normal traffic.
+
+**Per IP address, 20 a minute, counting only requests that FAILED
+authentication.** This is the counter that actually bites, and it can afford to
+be strict for a reason worth stating: a working client does not fail
+authentication. It holds a live session and refreshes it before calling. So
+repeated failures from one address mean a probe or a badly broken client, and
+neither needs more than twenty tries a minute. A signed-in user never enters
+this counter at all, which is what makes it safe to set low.
+
+**Per signed-in user, per endpoint.** 60 a minute by default, and tighter where
+one request costs real money or touches something sensitive: match 20,
+document-url 20, upload-signature 20, vscore 30, account-closure 5. These bound
+what a single compromised or looping account can spend. Both the default and
+the specific limit apply, and the tighter one bites first — the default is a
+backstop, not an allowance the specific rule replaces.
+
+### Where it is enforced, and why in three places
+
+- **First statement of every route handler**, ahead of reading the body.
+  Without that, a flood of *malformed* bodies would be thrown out by validation
+  before any limiter ran, and would never be counted at all.
+- **Again inside `authenticate()` and `assertCronSecret()`**, which between
+  them every route already calls. This is the belt-and-braces half: a route
+  added next month is covered even if whoever adds it forgets the first line.
+- Calling it twice in one request **counts once**. A `WeakMap` keyed on the
+  request object holds the decision, so the two call sites cannot silently
+  halve the limit. Without it, 120 a minute would really have been 60.
+
+The cron route is the one that never calls `authenticate()`, so
+`assertCronSecret()` carries the same two counters — otherwise
+`/api/cron/event-reminders` would have been the single public URL in this API
+with no limit on it whatsoever. A wrong cron secret counts as a failed
+authentication, for the same reason a bad token does: it is somebody guessing.
+
+### The honest limitation, which is written into the code
+
+**The counters live in memory, so they are per serverless instance.** Vercel
+keeps a warm instance between requests, so a sustained flood from one source is
+genuinely throttled — but instances are created and destroyed freely, several
+run at once under load, and a cold start begins with an empty count. An
+attacker spread across instances gets some multiple of these limits.
+
+This is a real mitigation, not a guarantee, and the module says so in those
+words rather than leaving a future reader to assume it is airtight.
+
+The durable version is a small Postgres table plus one atomic function, so
+every instance counts against the same row. That is a schema change, which is
+gated on the owner's approval, so it is deliberately not done here. It is also
+a one-function change when it is approved: the rules, the placement and the
+arithmetic all stay exactly as they are — only `hit()` learns to count
+somewhere else.
+
+The same limitation is why there are **no daily quotas**, only per-minute
+windows. An instance that will not live a day cannot honestly enforce a daily
+cap, so the module does not pretend to offer one.
+
+### Fixed windows, and the burst that allows
+
+A window opens on the first request and lasts a minute; the count resets when a
+request arrives after it has expired. The known property is a boundary burst: a
+caller who spends their whole allowance in the last second of one window and
+again in the first second of the next has made twice the limit in barely over a
+second. That is accepted on purpose. These limits exist to stop floods lasting
+minutes, and a doubled burst across one boundary is still the same order of
+magnitude. A sliding window would need the previous window kept and weighted —
+more state, more ways to be wrong, for a difference this app cannot feel.
+
+**A refused request still counts.** If refusals did not increment, a caller
+hammering the endpoint would sit at exactly the limit and the window would
+expire on schedule, which rewards the flood by letting it through as a steady
+trickle. Counting refusals means the pressure an attacker applies is the thing
+holding the door shut.
+
+### Reading the client's IP, and the header that must be read first
+
+`x-vercel-forwarded-for` is read before `x-forwarded-for`, and the order is the
+whole point. Vercel sets its own header and overwrites anything the client
+sent; `x-forwarded-for` can carry client-supplied entries. Preferring the
+spoofable one would let an attacker rotate a fake address and skip the limit
+entirely. When no header identifies the caller at all, everything falls into a
+single shared "unknown" bucket — unidentified traffic gets limited together
+rather than waved through individually, which is the safe direction to fail.
+
+### What the app does with a refusal
+
+A 429 comes back as an `ApiClientError` with `isRateLimited` true and
+`retryAfterSeconds` read from the `Retry-After` header, so a screen can say
+"wait a moment" rather than "that failed" — the request was valid and will work
+shortly, and those are different things to tell somebody.
+
+One specific case was worth handling: `pingApi()` deliberately sends an
+unauthenticated request to `/api/match` and treats the 401 as proof the
+deployment is reachable. It now treats a 429 the same way. Only our own limiter
+produces one, and it produces it before the handler runs — reporting
+"unreachable" would have sent somebody off to check DNS and their base URL over
+a limit that clears itself inside a minute.
+
+### The split, and why the arithmetic is tested separately
+
+`lib/rateLimit.ts` is pure: given the window a caller is inside, the rule and
+the time, it returns the decision and the window to store back. It reads no
+clock and holds no state. `api/src/server/rateLimit.ts` holds the counters, the
+IP extraction and the throwing. That is the same split `lib/roster.ts`,
+`lib/underSubscription.ts` and `lib/dayCoverage.ts` already follow.
+
+It earns its keep here because window arithmetic is exactly the kind of code
+that is wrong by one and looks right. Eleven unit tests pin the behaviour that
+would otherwise only be visible under load: that the limit allows exactly N,
+that a window does not reset one millisecond early, that `Retry-After` rounds
+up and is never zero, and that refusals keep the window open.

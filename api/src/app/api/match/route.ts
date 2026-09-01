@@ -11,6 +11,7 @@ import { computeRankingScore } from "@/lib/vscore";
 import { getReachableRegions } from "@/constants/ghana-locations";
 import { authenticate, assertOwnsOutreach, type AuthedCaller } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
+import { enforceIpRateLimit, enforceUserRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { toOutreachInput } from "../../../server/outreachInput";
 import { checkSkillEquivalences, type SkillPair } from "../../../server/gemini";
@@ -134,7 +135,15 @@ function toVolunteerInput(volunteer: ApplicantRow["volunteer"]): Layer1Volunteer
 
 export async function POST(req: Request): Promise<Response> {
   try {
+    // First, ahead of validation and of authentication, so a flood is refused
+    // before this project spends anything on it. Counted once per request
+    // however many times it is called -- see server/rateLimit.ts.
+    enforceIpRateLimit(req);
     const caller = await authenticate(req);
+    // Tighter than the default: every call here may spend Gemini quota, which
+    // is ~1,500 a DAY for the whole platform (Layer 2 falls back to Layer 1 when
+    // it runs out, so this protects match QUALITY, not availability).
+    enforceUserRateLimit(caller.userId, "match");
     const json = await req.json().catch(() => {
       throw Errors.badRequest("Request body must be valid JSON.");
     });

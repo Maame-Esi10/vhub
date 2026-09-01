@@ -1,4 +1,5 @@
 import { errorResponse } from "../../../../server/httpErrors";
+import { enforceIpRateLimit } from "../../../../server/rateLimit";
 import { assertCronSecret, sendEventReminders } from "../../../../server/eventReminders";
 import { sendCheckinReminders } from "../../../../server/checkinReminders";
 import { escalateUnderSubscribedOutreaches } from "../../../../server/underSubscription";
@@ -18,6 +19,10 @@ export const runtime = "nodejs";
  */
 export async function GET(req: Request): Promise<Response> {
   try {
+    // First, ahead of validation and of authentication, so a flood is refused
+    // before this project spends anything on it. Counted once per request
+    // however many times it is called -- see server/rateLimit.ts.
+    enforceIpRateLimit(req);
     assertCronSecret(req);
 
     // FIVE passes, one schedule, because Vercel's Hobby plan allows exactly

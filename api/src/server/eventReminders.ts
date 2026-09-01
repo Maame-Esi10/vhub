@@ -1,4 +1,5 @@
 import { Errors } from "./httpErrors";
+import { enforceAuthFailureRateLimit, enforceIpRateLimit } from "./rateLimit";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 import { notifyUsers } from "./notify";
 import { env } from "./env";
@@ -17,12 +18,20 @@ const REMINDER_WINDOW_END_HOURS = 36;
 
 /** Throws unless the caller presented `Authorization: Bearer <CRON_SECRET>`. */
 export function assertCronSecret(req: Request): void {
+  // The cron routes are the two that never call `authenticate()`, so the rate
+  // limiter has to be applied here instead -- otherwise /api/cron/event-reminders
+  // would be the one public URL in this API with no limit on it at all. A wrong
+  // secret counts as a failed authentication for the same reason a bad token
+  // does: it is somebody guessing.
+  enforceIpRateLimit(req);
+
   const configured = env.cronSecret;
   if (!configured) {
     throw Errors.internal("CRON_SECRET is not configured for this deployment.");
   }
   const header = req.headers.get("authorization");
   if (header !== `Bearer ${configured}`) {
+    enforceAuthFailureRateLimit(req);
     throw Errors.forbidden("Invalid cron credentials.");
   }
 }

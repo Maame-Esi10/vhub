@@ -14,13 +14,27 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: unknown;
+  /**
+   * Extra response headers this failure needs. Only 429 uses it today, for
+   * `Retry-After` -- a rate-limit refusal that does not say when to come back
+   * leaves a well-behaved client guessing, and guessing usually means
+   * retrying immediately.
+   */
+  readonly headers?: Readonly<Record<string, string>>;
 
-  constructor(status: number, code: string, message: string, details?: unknown) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: unknown,
+    headers?: Readonly<Record<string, string>>
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.details = details;
+    this.headers = headers;
   }
 }
 
@@ -32,6 +46,14 @@ export const Errors = {
   notFound: (message = "Resource not found.") => new ApiError(404, "not_found", message),
   conflict: (message: string, details?: unknown) => new ApiError(409, "conflict", message, details),
   badRequest: (message: string, details?: unknown) => new ApiError(400, "bad_request", message, details),
+  /**
+   * Too many requests. `retryAfterSeconds` becomes the `Retry-After` header,
+   * and the message names the wait in words because it is shown to a person.
+   */
+  tooManyRequests: (message: string, retryAfterSeconds: number) =>
+    new ApiError(429, "rate_limited", message, { retryAfterSeconds }, {
+      "Retry-After": String(Math.max(1, Math.ceil(retryAfterSeconds))),
+    }),
   internal: (message = "Something went wrong. Please try again.") =>
     new ApiError(500, "internal_error", message),
 };
@@ -46,7 +68,7 @@ export const Errors = {
 export function errorResponse(err: unknown): Response {
   if (err instanceof ApiError) {
     const body: ApiErrorBody = { error: { code: err.code, message: err.message, details: err.details } };
-    return Response.json(body, { status: err.status });
+    return Response.json(body, { status: err.status, headers: err.headers });
   }
 
   if (err instanceof ZodError) {

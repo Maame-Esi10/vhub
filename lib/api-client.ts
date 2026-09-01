@@ -84,13 +84,25 @@ export class ApiClientError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: unknown;
+  /**
+   * Whole seconds the API asked us to wait, from its `Retry-After` header.
+   * Only ever set on a 429. Undefined everywhere else.
+   */
+  readonly retryAfterSeconds?: number;
 
-  constructor(status: number, code: string, message: string, details?: unknown) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: unknown,
+    retryAfterSeconds?: number
+  ) {
     super(message);
     this.name = 'ApiClientError';
     this.status = status;
     this.code = code;
     this.details = details;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 
   /** True when the session was missing, expired, or rejected -- the caller should re-authenticate. */
@@ -102,6 +114,31 @@ export class ApiClientError extends Error {
   get isNetworkError(): boolean {
     return this.code === 'network_error';
   }
+
+  /**
+   * True when the API refused this request for coming too fast, not for being
+   * wrong. Worth distinguishing in the UI: the request was valid and will work
+   * shortly, so the honest thing to say is "wait a moment", never "that
+   * failed". `retryAfterSeconds` says how long.
+   */
+  get isRateLimited(): boolean {
+    return this.status === 429;
+  }
+}
+
+/**
+ * Reads the `Retry-After` header the API sends with a 429.
+ *
+ * Only the delta-seconds form is understood, because that is the only form
+ * this API sends. An HTTP-date is legal in the header and is deliberately not
+ * parsed: guessing at a format we never produce would turn a clear "no value"
+ * into a wrong number.
+ */
+function parseRetryAfter(response: Response): number | undefined {
+  const header = response.headers.get('Retry-After');
+  if (!header) return undefined;
+  const seconds = Number(header.trim());
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds) : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +216,8 @@ async function apiPost<TResponse>(
         response.status,
         payload.error.code,
         payload.error.message,
-        payload.error.details
+        payload.error.details,
+        parseRetryAfter(response)
       );
     }
     // Non-JSON failure -- e.g. a Vercel platform error page rather than one of
@@ -1158,6 +1196,13 @@ export async function pingApi(): Promise<ApiReachability> {
       return { reachable: false, baseUrl: API_BASE_URL, reason: err.message };
     }
     if (err.code === 'unauthenticated') {
+      return { reachable: true, authenticated: false, baseUrl: API_BASE_URL };
+    }
+    // A 429 is also proof the deployment is up and routing correctly -- only
+    // our own rate limiter produces it, and it produces it BEFORE the handler
+    // runs. Reporting "unreachable" here would send someone off to check DNS
+    // and their base URL over a limit that clears itself in under a minute.
+    if (err.isRateLimited) {
       return { reachable: true, authenticated: false, baseUrl: API_BASE_URL };
     }
     // Reached *something*, but not a response this API produces.
