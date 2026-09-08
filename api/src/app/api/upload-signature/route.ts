@@ -60,6 +60,6 @@ export async function POST(req: Request): Promise<Response> {
 
     return Response.json(signUpload(kind, caller.userId));
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }

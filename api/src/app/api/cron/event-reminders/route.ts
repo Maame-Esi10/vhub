@@ -87,6 +87,6 @@ export async function GET(req: Request): Promise<Response> {
       notificationRetention,
     });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }

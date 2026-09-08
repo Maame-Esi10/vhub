@@ -57,6 +57,6 @@ export async function POST(req: Request): Promise<Response> {
 
     return Response.json({ cancelled: true, email: currentEmail });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }

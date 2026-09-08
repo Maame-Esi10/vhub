@@ -5,6 +5,7 @@ import {
   enforceIpRateLimit,
   enforceUserRateLimit,
 } from "./rateLimit";
+import { rememberCaller } from "./errorMonitor";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 
 export interface AuthedCaller {
@@ -74,6 +75,12 @@ export async function authenticate(req: Request): Promise<AuthedCaller> {
     enforceAuthFailureRateLimit(req);
     throw Errors.unauthenticated("No profile found for this account.");
   }
+
+  // Recorded here, at the one point every authenticated request passes, so a
+  // failure anywhere further into the handler can be logged against a person
+  // without the error path having to be handed one. Never leaves the server
+  // log -- see server/errorMonitor.ts.
+  rememberCaller(req, profile.id as string);
 
   // The backstop every signed-in caller passes through. Endpoints that need
   // something tighter -- match, document-url, vscore, upload-signature,

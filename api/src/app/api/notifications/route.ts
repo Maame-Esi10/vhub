@@ -166,7 +166,7 @@ export async function POST(req: Request): Promise<Response> {
     }
     return Response.json(await testDispatch(caller.userId, body.title, body.body));
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }
 

@@ -151,6 +151,6 @@ export async function POST(req: Request): Promise<Response> {
       newScore: replay.score,
     });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }

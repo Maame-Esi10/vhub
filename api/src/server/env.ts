@@ -63,6 +63,21 @@ export const env = {
   get mailFrom(): string {
     return `"${this.mailFromName}" <${this.gmailUser}>`;
   },
+  /**
+   * Where an unexpected server failure is emailed, or null to send nothing.
+   *
+   * OPTIONAL ON PURPOSE, AND THE FEATURE SHIPS OFF. Whether an inbox should
+   * receive production alerts is an operational decision, not a repository one,
+   * and it can be changed in the Vercel dashboard without a deploy. Unset, the
+   * only effect of the monitoring is a structured log line.
+   *
+   * Sent through the same Gmail account as everything else and therefore
+   * against the same ~500/day allowance, which is why alerts are throttled to
+   * one per kind of failure per fifteen minutes -- see lib/errorMonitor.ts.
+   */
+  get alertEmail(): string | null {
+    return process.env.ALERT_EMAIL?.trim() || null;
+  },
   /** Null when unset -- Expo push works without it, just at a lower rate limit. */
   get expoAccessToken(): string | null {
     return process.env.EXPO_ACCESS_TOKEN?.trim() || null;

@@ -250,6 +250,6 @@ export async function POST(req: Request): Promise<Response> {
 
     return Response.json({ verificationState: nextState });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }

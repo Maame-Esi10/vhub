@@ -4309,3 +4309,120 @@ every day of the outreach" for the same reason: it had stopped being true.
   the native time picker opening inside the day list rather than beside the
   event's own time fields.
 - **Not built:** nothing from this item. Per-day hours are complete.
+
+## Error monitoring: knowing before the user tells you (2026-09-08)
+
+**Build-queue item 9.** An endpoint failing in production was invisible.
+`errorResponse()` — the one function every route's catch block ends in — reacted
+to an unexpected error with a single `console.error` string and nothing else. On
+Vercel's Hobby plan, runtime logs are a live tail with roughly an hour of
+retention and no alerting on them, so a route that started failing at two in the
+morning left no trace by breakfast. The way anybody found out was a volunteer
+saying the app did not work.
+
+**What was built.** `lib/errorMonitor.ts` (pure, 13 tests) holds the grouping and
+throttling; `api/src/server/errorMonitor.ts` holds the counters, writes the log
+line and sends the alert. No migration, no schema change, no new dependency, and
+no service signed up to.
+
+### It hangs off one function, and that is the whole design
+
+Every route handler in `api/` already ends with `return errorResponse(err)`.
+That makes it the complete set of places a failure becomes a response — so
+observing there means a route added next month is monitored without anybody
+remembering to add anything. The same argument put the rate limiter inside
+`authenticate()` rather than in twenty route files. The only change to the
+routes themselves is that each now passes its `req` along, so the record can
+name which endpoint failed.
+
+### It ships switched off, deliberately
+
+With no `ALERT_EMAIL` environment variable set, **nothing is sent**. The only
+difference in production is that the log line becomes structured JSON instead of
+prose. Turning alerting on is one variable in the Vercel dashboard and needs no
+deploy.
+
+This is not caution for its own sake. Whether an inbox should be receiving
+production alerts is an operational decision about a real mailbox, and it does
+not belong committed in a repository — nor should it wait on a code change when
+the answer changes.
+
+### Only 5xx alerts. Everything is logged
+
+A 400, 401, 403, 404, 409 or 429 is **the API working**: refusing a malformed
+body, an expired token, somebody else's document, a flood. Alerting on those
+would produce a steady trickle of mail about normal operation, and the one
+message that mattered would arrive in the middle of it and be ignored. A 5xx is
+the only class that means "this failed and it was our fault".
+
+Every status is still written to the log, though, because that is what makes
+"how often is this 403 actually happening?" a question with an answer. The line
+is one piece of JSON behind a `[api-error]` tag, so it can be filtered on a
+field rather than grepped for a substring.
+
+### The fingerprint is what makes the throttle work at all
+
+Alerts are throttled to one per kind of failure per fifteen minutes. That only
+means anything if two occurrences of one bug are recognised as the same kind —
+and raw messages are not, because they carry the row id, the port, the column
+name that differed on that request. So uuids, quoted values and bare numbers are
+normalised out before grouping.
+
+Without that step every occurrence is its own kind, the throttle never engages,
+and a broken endpoint still sends one email per request: hundreds of identical
+messages, straight through a Gmail allowance shared with the app's real mail,
+drowning the very notification they were meant to be.
+
+The suppressed count travels with the next alert ("14 more of the same since the
+last alert"), so throttling hides nothing. A first occurrence always alerts —
+the point is to hear about a new fault immediately, not after a window.
+
+### Where the line is drawn on what leaves the server
+
+**The user id goes in the log and never in the email.** The log stays inside
+Vercel, which is already the owner's; the email leaves for a third-party
+mailbox. An opaque uuid is not much, but "not much" is not a reason to send it
+somewhere it does not need to go — and it is only useful next to the database it
+resolves against anyway. `authenticate()` records the caller in a WeakMap keyed
+on the Request, the same arrangement `server/rateLimit.ts` already uses, so the
+entry disappears with the request and nothing has to clean it up.
+
+**A validation error's flattened detail is not recorded at all.** It echoes the
+request body back, and on these endpoints that body can contain a dispute
+statement or a rejection reason — somebody's own words, in a log they never
+agreed to be in. The alert email carries the route, the code and the message,
+and says in its own text that it carries nothing else on purpose.
+
+### Two failure modes it must not have, and does not
+
+**It must not take down what it observes.** `observeError` is called from inside
+the function that turns errors into responses, so an error there would replace a
+clean 500 with a crash. It cannot throw.
+
+**A failed alert must not become an alert.** If the email cannot be sent, that is
+one plain log line and nothing more — otherwise a mail outage becomes a loop of
+failures about failing to report failures.
+
+The send runs inside Next's `after()`, so a failing request is not also a slow
+one. A floating promise would not do: Vercel may freeze the instance the moment a
+response is returned, and the email would go out on some later request or never.
+
+### Known limitation, stated plainly
+
+**The counters are in memory and therefore per serverless instance** — the same
+limitation `server/rateLimit.ts` documents and accepts. Several warm instances
+mean a widespread fault can send one alert per instance rather than one in total.
+That is noisier than intended and never quieter, which is the right way round for
+something whose job is to tell you about a fault. The durable version is a
+Postgres table, which is a gated schema change and deliberately not taken.
+
+### Buckets
+
+- **Built and working:** structured logging on every failure, fingerprinting,
+  throttling, the alert email, the caller WeakMap, 13 unit tests. 523 tests / 18
+  suites green, both typechecks clean, `api` builds.
+- **Built but unproven in production:** the alert email itself, because it
+  requires `ALERT_EMAIL` to be set in Vercel and a real 5xx to occur. The
+  structured log line takes effect on the next deploy either way.
+- **Not built:** anything durable across instances, and any dashboard. Both need
+  either a dependency or a schema change, and both are gated.

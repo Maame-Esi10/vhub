@@ -117,7 +117,7 @@ export async function POST(req: Request): Promise<Response> {
     }
     return Response.json(await handleLateRelease(caller, body));
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }
 

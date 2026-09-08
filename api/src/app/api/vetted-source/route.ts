@@ -112,6 +112,6 @@ export async function POST(req: Request): Promise<Response> {
 
     return Response.json({ removed: true });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }

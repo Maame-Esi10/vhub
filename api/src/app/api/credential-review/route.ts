@@ -128,6 +128,6 @@ export async function POST(req: Request): Promise<Response> {
 
     return Response.json({ verificationStatus: nextStatus });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }

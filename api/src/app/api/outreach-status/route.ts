@@ -161,7 +161,7 @@ export async function POST(req: Request): Promise<Response> {
       notified: notifications.length,
     });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }
 

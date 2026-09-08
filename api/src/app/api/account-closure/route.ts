@@ -272,6 +272,6 @@ export async function POST(req: Request): Promise<Response> {
       ...consequences,
     });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }

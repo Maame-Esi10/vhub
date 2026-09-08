@@ -160,6 +160,6 @@ export async function POST(req: Request): Promise<Response> {
       isImage: /\.(png|jpe?g|webp|heic|heif)$/i.test(publicId),
     });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, req);
   }
 }

@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { callerOf, observeError } from "./errorMonitor";
 
 /** Typed error shape every endpoint returns on failure -- api-client.ts (mobile) parses this. */
 export interface ApiErrorBody {
@@ -60,14 +61,25 @@ export const Errors = {
 
 /**
  * Converts ANY thrown error into a typed JSON response. Never rethrows --
- * every route handler's catch block should end with `return errorResponse(err)`.
+ * every route handler's catch block should end with `return errorResponse(err, req)`.
  * Unexpected errors are logged server-side (message/name only, never a raw
  * error object that might carry a secret in its context) and reported to the
  * caller as a generic 500 -- internals are never leaked to the client.
+ *
+ * IT IS ALSO THE ONE PLACE ERROR MONITORING HANGS OFF. Every route already
+ * funnels its failures through here, so observing them here means a route added
+ * later is monitored without anybody remembering to add anything -- the same
+ * argument that put the rate limiter inside `authenticate()`. Pass `req` so the
+ * record can name the route and the caller; without it the failure is still
+ * recorded, just less usefully.
  */
-export function errorResponse(err: unknown): Response {
+export function errorResponse(err: unknown, req?: Request): Response {
   if (err instanceof ApiError) {
     const body: ApiErrorBody = { error: { code: err.code, message: err.message, details: err.details } };
+    // Deliberately observed for EVERY status, not only the ones that alert:
+    // the structured log line is what makes "how often is this 403 happening?"
+    // answerable. Only 5xx produces a notification -- see lib/errorMonitor.ts.
+    record(req, err.status, err.code, err.message);
     return Response.json(body, { status: err.status, headers: err.headers });
   }
 
@@ -79,12 +91,49 @@ export function errorResponse(err: unknown): Response {
         details: err.flatten(),
       },
     };
+    // The flattened detail is NOT recorded. It echoes the request body back,
+    // which on these endpoints can carry a dispute statement or a rejection
+    // reason -- somebody's words, in a log they never agreed to be in.
+    record(req, 400, "validation_error", "Request body failed validation.");
     return Response.json(body, { status: 400 });
   }
 
-  console.error("[api] unhandled error:", err instanceof Error ? `${err.name}: ${err.message}` : err);
+  record(
+    req,
+    500,
+    "internal_error",
+    err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+  );
   const body: ApiErrorBody = {
     error: { code: "internal_error", message: "Something went wrong. Please try again." },
   };
   return Response.json(body, { status: 500 });
+}
+
+/**
+ * The route this request was for, as a path.
+ *
+ * Query string stripped: it is not part of which endpoint failed, and on
+ * `/api/document-url` and friends it can carry an id. An unparsable URL falls
+ * back to a constant rather than throwing, because the failure being recorded
+ * matters more than the label on it.
+ */
+function routeOf(req: Request | undefined): string {
+  if (!req) return "<unknown route>";
+  try {
+    return new URL(req.url).pathname;
+  } catch {
+    return "<unknown route>";
+  }
+}
+
+function record(req: Request | undefined, status: number, code: string, message: string): void {
+  const userId = req ? callerOf(req) : undefined;
+  observeError({
+    route: routeOf(req),
+    status,
+    code,
+    message,
+    ...(userId ? { userId } : {}),
+  });
 }
