@@ -8,6 +8,7 @@ import { assertCronSecret, sendEventReminders } from "../../../server/eventRemin
 import { sendCheckinReminders } from "../../../server/checkinReminders";
 import { escalateUnderSubscribedOutreaches } from "../../../server/underSubscription";
 import { closeAndResolvePastOutreaches } from "../../../server/outreachLifecycle";
+import { sweepExpiredNotifications } from "../../../server/notificationRetention";
 
 export const runtime = "nodejs";
 
@@ -88,6 +89,24 @@ const CloseAndResolveAction = z.object({
   action: z.literal("close-past-outreaches"),
 });
 
+/**
+ * Runs the notification retention sweep on demand.
+ *
+ * The real window is six months, so on the live database this pass will find
+ * nothing to do until well into 2027 — which would leave a destructive job
+ * completely unexercised for months. `dryRun` (with an optional shorter
+ * `retentionDays`) is how it gets checked now: it reports exactly what it would
+ * remove and removes nothing. `retentionDays` is IGNORED unless `dryRun` is
+ * true, so this action can never be used to shorten the real window.
+ *
+ * Cron-secret protected like the passes above: it deletes other people's rows.
+ */
+const SweepNotificationsAction = z.object({
+  action: z.literal("sweep-notifications"),
+  dryRun: z.boolean().optional(),
+  retentionDays: z.number().int().min(0).max(3650).optional(),
+});
+
 const NotificationsRequestBody = z.discriminatedUnion("action", [
   RegisterAction,
   TestDispatchAction,
@@ -95,6 +114,7 @@ const NotificationsRequestBody = z.discriminatedUnion("action", [
   SendCheckinRemindersAction,
   EscalateUnderSubscribedAction,
   CloseAndResolveAction,
+  SweepNotificationsAction,
 ]);
 
 export async function POST(req: Request): Promise<Response> {
@@ -126,6 +146,16 @@ export async function POST(req: Request): Promise<Response> {
     if (body.action === "close-past-outreaches") {
       assertCronSecret(req);
       return Response.json(await closeAndResolvePastOutreaches());
+    }
+
+    if (body.action === "sweep-notifications") {
+      assertCronSecret(req);
+      return Response.json(
+        await sweepExpiredNotifications({
+          dryRun: body.dryRun,
+          retentionDays: body.retentionDays,
+        })
+      );
     }
 
     // "register" and "test-dispatch" are ordinary user actions.

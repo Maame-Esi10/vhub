@@ -4117,3 +4117,85 @@ and Supabase's alike - stops at that moment, and the failure looks like Supabase
 breaking rather than like a revoked credential. Recovery is generating a new app
 password and pasting it into both Supabase's SMTP settings and Vercel's
 `GMAIL_APP_PASSWORD`.
+
+## Notification retention: the table that only ever grew (2026-09-08)
+
+**Build-queue item 10.** `notifications` had no expiry, no delete policy and no
+cleanup of any kind. Every accepted application, every reminder, every
+escalation and every high-match scan wrote rows and nothing had ever removed
+one. The fan-out writers are what make that a real problem rather than an
+untidy one: a `new_match` scan writes one row *per matching volunteer per
+outreach*, and the under-subscription ladder does the same up to three times
+for a single event. The row count therefore grows with volunteers multiplied by
+outreaches, not with either on its own — and on a free-tier database that shows
+up as a bill and a slow Notifications screen, both of which arrive without
+announcing themselves.
+
+**What was built.** `lib/notificationRetention.ts` (pure, 9 tests) holds the
+window arithmetic and the safety filter; `api/src/server/notificationRetention.ts`
+does the queries; the sweep is now the **sixth pass of the existing nightly
+cron**. No migration, no schema change, no new dependency.
+
+**The retention window is 180 days.** Six months. The screen groups by day and
+is read by scrolling from the top, so nobody reaches back half a year — and
+nothing that matters is reachable *only* through a notification. An accepted
+application is in `applications`, a verification decision is in
+`volunteer_profiles`, a deduction is in `score_events`, and each has its own
+screen. The window is about the size of the table, not about hiding anything.
+
+**The trap, and it is the whole reason this needed care.** A row in
+`notifications` is two different things at once. It is a message somebody may
+want to read — and, for two of the cron passes, it is the *only* memory that a
+notification has already been sent. `sendCheckinReminders` and
+`escalateUnderSubscribedOutreaches` both dedupe by reading their own rows back
+(`data->>'stage'`, plus the outreach day id). Delete one of those while it is
+still doing that job and the pass sends the notification a second time — a bug
+that would surface as duplicate pushes to real volunteers, weeks after the
+deletion that caused it, with nothing on any screen connecting the two.
+
+**Two independent defences against it, not one.**
+
+1. **A row attached to an unfinished outreach is never deleted, whatever its
+   age.** "Unfinished" is decided by reading `outreach_days` for a day on or
+   after today — never `outreaches.date`, which is only the FIRST day and would
+   call a four-week campaign finished on the evening of day one. If that check
+   cannot be run at all, the sweep fails closed and protects everything: skipping
+   a night of cleanup costs nothing, and deleting a live marker pushes a
+   duplicate to a real person.
+2. **The sweep runs LAST in the cron**, after every pass that reads this table.
+
+The age test alone would very probably have been enough — a stage marker is
+written at most 7 days before the day it covers, and the window is 180. But
+"very probably" is the wrong standard for a destructive job that runs unattended
+every night against campaigns of unknown length.
+
+**It deletes by id in bounded batches rather than with one `where created_at <
+cutoff`.** The single-statement version is shorter and is wrong twice: it takes
+an unbounded lock inside a function that has five other passes to finish, and it
+has no way to express the protection rule above. 500 rows per batch, 20 batches
+per night; a table that is behind catches up over consecutive runs.
+
+**Pagination skips kept rows by offset, not by a `created_at` cursor**, and that
+is a deliberate correction of the obvious approach. `notifyUsers` writes a whole
+fan-out in ONE batched insert, so hundreds of rows share a timestamp to the
+microsecond — a strictly-greater cursor would step over the rest of that group
+and leave it permanently unswept. Deleted rows vanish, so after each batch the
+oldest remaining rows are exactly the ones that were protected; skipping that
+many is what stops the next batch re-reading them forever.
+
+**A dry run exists, and it is not decoration.** The real window is six months
+and this repository is younger than that, so on the live database this pass will
+find nothing to do until well into 2027. Without a way to exercise it, a
+destructive job would sit unverified for months and then run for the first time
+unattended. `POST /api/notifications { "action": "sweep-notifications",
+"dryRun": true, "retentionDays": 30 }` reports exactly what it would remove and
+removes nothing. **`retentionDays` is ignored unless `dryRun` is true** — so it
+is possible to ask what a shorter window would take without creating any way to
+actually take it. Cron-secret protected, like every other pass that writes other
+people's rows.
+
+**Known limitation, stated rather than left to be found.** The batch query
+(`created_at < cutoff`, ordered ascending) is not served by the existing
+`(user_id, created_at desc)` index, so it is a sequential scan. That is accepted:
+it runs once a day, off every user's request path, and nobody waits on it.
+Adding an index would be a gated schema change for a job with no reader.

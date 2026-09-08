@@ -5,6 +5,7 @@ import { sendCheckinReminders } from "../../../../server/checkinReminders";
 import { escalateUnderSubscribedOutreaches } from "../../../../server/underSubscription";
 import { closeAndResolvePastOutreaches } from "../../../../server/outreachLifecycle";
 import { sweepUnchargedLateReleases } from "../../../../server/lateReleaseSweep";
+import { sweepExpiredNotifications } from "../../../../server/notificationRetention";
 
 export const runtime = "nodejs";
 
@@ -25,13 +26,14 @@ export async function GET(req: Request): Promise<Response> {
     enforceIpRateLimit(req);
     assertCronSecret(req);
 
-    // FIVE passes, one schedule, because Vercel's Hobby plan allows exactly
+    // SIX passes, one schedule, because Vercel's Hobby plan allows exactly
     // one cron per day: the 24-hour "your event is tomorrow" reminder, the
     // morning-of "remember to scan the check-in code" reminder, the
     // under-subscription escalation at 7/3/1 days out, the lifecycle pass that
     // closes outreaches whose date has passed and resolves their unanswered
-    // applications, and the late-release sweep. Each targets a different day's
-    // outreaches and dedupes independently, so none can suppress another.
+    // applications, the late-release sweep, and the notification retention
+    // sweep. Each targets a different day's outreaches and dedupes
+    // independently, so none can suppress another.
     //
     // Sequential rather than concurrent: they all write through the same
     // service-role client and the job has all day to finish, so there is
@@ -61,7 +63,29 @@ export async function GET(req: Request): Promise<Response> {
     */
     const lateReleases = await sweepUnchargedLateReleases();
 
-    return Response.json({ ...upcoming, checkin, underSubscribed, lifecycle, lateReleases });
+    /*
+      LAST OF ALL, and the ordering is a correctness requirement rather than a
+      preference. `notifications` is not only the in-app feed — it is also the
+      memory two of the passes above use to know what they have already sent
+      (`checkinReminders` and `underSubscription` both dedupe by reading their
+      own rows back). Deleting rows before those passes run would, on the one
+      night a cutoff fell across a live marker, erase the evidence a reminder
+      had gone out and let the same run send it twice.
+
+      It also refuses to touch anything belonging to an outreach that has not
+      finished, whatever its age, so the ordering is a second line of defence
+      rather than the only one.
+    */
+    const notificationRetention = await sweepExpiredNotifications();
+
+    return Response.json({
+      ...upcoming,
+      checkin,
+      underSubscribed,
+      lifecycle,
+      lateReleases,
+      notificationRetention,
+    });
   } catch (err) {
     return errorResponse(err);
   }
