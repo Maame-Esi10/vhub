@@ -13,7 +13,7 @@ import { authenticate, assertOwnsOutreach, type AuthedCaller } from "../../../se
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { enforceIpRateLimit, enforceUserRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
-import { toOutreachInput } from "../../../server/outreachInput";
+import { fetchDaysByOutreach, toOutreachInput } from "../../../server/outreachInput";
 import { checkSkillEquivalences, type SkillPair } from "../../../server/gemini";
 import {
   dedupePairs,
@@ -260,7 +260,12 @@ async function scoreApplicants(outreach: Record<string, unknown>, volunteerIds?:
     return { outreachId: outreach.id, layer2Applied: true, results: [] as ScoredApplicant[] };
   }
 
-  const outreachInput = toOutreachInput(outreach);
+  // The day rows, for the availability component: it is now scored across
+  // every day the event runs on rather than against its first. A read that
+  // fails leaves the map empty and the scorer falls back to `date`, which is
+  // the behaviour availability had before this change.
+  const daysByOutreach = await fetchDaysByOutreach(admin, [outreach.id as string]);
+  const outreachInput = toOutreachInput(outreach, daysByOutreach.get(outreach.id as string));
 
   // Roles, if this is a multi-role outreach. Empty means single-role mode and
   // computeMultiRoleMatchScore delegates to the original scorer unchanged.
@@ -409,7 +414,8 @@ async function scoreMyApplication(caller: AuthedCaller, outreachId: string) {
   if (!application) throw Errors.notFound("You have not applied to this outreach.");
 
   const applicant = application as unknown as ApplicantRow;
-  const outreachInput = toOutreachInput(outreach);
+  const daysByOutreach = await fetchDaysByOutreach(admin, [outreachId]);
+  const outreachInput = toOutreachInput(outreach, daysByOutreach.get(outreachId));
   const volunteerInput = toVolunteerInput(applicant.volunteer);
 
   // Scored against the role the volunteer actually applied for, when they
@@ -624,17 +630,22 @@ async function rankFeed(caller: AuthedCaller, body: z.infer<typeof RankFeedBody>
     return { volunteerId: caller.userId, layer2Applied: true, results: [] as RankedOutreach[] };
   }
 
+  const candidateIds = outreaches.map((outreach) => outreach.id as string);
+
+  // Days for every candidate, in ONE batched query, for the same reason the
+  // roles below are batched: the feed scores every open outreach in a region,
+  // so a query per row would turn one request into dozens.
+  const daysByOutreach = await fetchDaysByOutreach(admin, candidateIds);
+
   const inputs = new Map<string, Layer1OutreachInput>();
   for (const outreach of outreaches) {
-    inputs.set(outreach.id as string, toOutreachInput(outreach));
+    const id = outreach.id as string;
+    inputs.set(id, toOutreachInput(outreach, daysByOutreach.get(id)));
   }
 
   // Roles for every candidate, in ONE batched query, so the ranked feed stays
   // a fixed number of round trips regardless of how many are multi-role.
-  const rolesByOutreach = await fetchRolesByOutreach(
-    admin,
-    outreaches.map((outreach) => outreach.id as string)
-  );
+  const rolesByOutreach = await fetchRolesByOutreach(admin, candidateIds);
 
   // Layer 1 first, always -- the ranking that survives any Layer 2 failure.
   const layer1Results = new Map<string, Layer1MatchResult & { bestRoleId: string | null }>();
@@ -873,7 +884,8 @@ async function notifyCandidates(outreach: Record<string, unknown>) {
   if (error) throw Errors.internal("Could not load candidate volunteers.");
 
   const candidates = (data ?? []) as unknown as CandidateRow[];
-  const outreachInput = toOutreachInput(outreach);
+  const daysByOutreach = await fetchDaysByOutreach(admin, [outreachId]);
+  const outreachInput = toOutreachInput(outreach, daysByOutreach.get(outreachId));
   const threshold = env.notifyMatchThreshold;
 
   const pending: UserNotification[] = [];

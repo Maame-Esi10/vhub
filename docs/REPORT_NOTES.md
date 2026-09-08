@@ -4426,3 +4426,151 @@ Postgres table, which is a gated schema change and deliberately not taken.
   structured log line takes effect on the next deploy either way.
 - **Not built:** anything durable across instances, and any dashboard. Both need
   either a dependency or a schema change, and both are gated.
+
+## Continuous availability: the matcher stops judging a campaign by its first day (2026-09-08)
+
+**Build-queue item 8, owner-approved.** The availability component of the match
+score was all-or-nothing, and worse than that description suggests. It read
+`outreaches.date` — the FIRST day of the event — and nothing else.
+
+**What that actually meant on a multi-day event.** A twenty-day campaign starting
+on a Monday: a volunteer free on Mondays scored the full 15 availability points
+regardless of the other nineteen days, and a volunteer free for days two through
+twenty scored ZERO. Neither number described anything real about either person.
+The whole multi-day subsystem — day rows, per-day commitment, per-day attendance,
+per-day release — had been built around the fact that people take part in some
+days and not others, and the matcher was still asking a yes-or-no question about
+one date.
+
+### The rule
+
+The availability component is now **the share of the outreach's days the
+volunteer is free for**, scaled so that covering half of them or more scores a
+full 1.0. Below that it is proportional: 1 day of 4 scores 0.5, 3 days of 20
+scores 0.3.
+
+A day counts as covered on the same test as before — the volunteer holds a
+`"{weekday}_{slot}"` token whose weekday matches that day and whose slot overlaps
+that day's hours. What changed is that the question is now asked once per day and
+the answers are averaged, rather than being asked once about the first day.
+
+**Neither extreme was acceptable, and this is why the shape has a cap in it.**
+Requiring every day would exclude precisely the Saturday-only nursing student
+this platform exists to include. Accepting any single day would score 1-of-20
+identically to 20-of-20, which is the thing the change was asked for. And an
+*uncapped* fraction would be wrong in a third way: a volunteer who can give ten
+days of a twenty-day campaign would get half marks for a substantial, real
+commitment — a statement about how long the event is, not about the volunteer.
+That is the same error the V-Score avoided when it decided to compute an outcome
+once per event rather than once per day.
+
+**Why half, specifically.** It has to be high enough that covering more days
+genuinely helps, or the change achieves nothing. It has to be low enough that
+somebody giving a serious share of a long campaign is not filed as a partial
+candidate. And a half is the value that needs no argument about which side of it
+anybody falls on: covering most of an event is full availability, covering a
+minority is scored on the share. The constant is `AVAILABILITY_FULL_COVERAGE` and
+a test pins it, so changing it has to be a deliberate act rather than a silent
+re-ranking of every multi-day feed in the app.
+
+### The property that made this safe to ship
+
+**No score on a single-day outreach moves, at all.** With one day the coverage is
+1 or 0, and the scaling leaves both values exactly where they were. That is not a
+happy accident of the arithmetic — it is the reason this could be a pure code
+change with no recompute, no migration and no backfill, and there is a test
+asserting it. All 89 pre-existing matcher tests passed unchanged.
+
+The same property protects a caller that has not loaded the day rows. An omitted
+or empty day list means **"not loaded", never "this event has no days"** — every
+outreach structurally has at least one row, so an empty list can only mean a read
+that did not happen. The scorer then falls back to `date` as the single day,
+which is precisely the old behaviour. A failed day query therefore degrades to
+what the app did yesterday, rather than scoring everybody at zero.
+
+### Two decisions inside it worth naming
+
+**Each day is judged against its own hours.** This is the reader that the per-day
+hours work needed. A campaign whose Saturday runs 5pm–9pm while the rest of the
+week runs 9am–3pm is a genuinely different question for a Saturday-morning
+volunteer than for a Saturday-evening one, and a single event-wide time window
+could not express that at all.
+
+**A day whose date cannot be parsed is excluded from the denominator, not counted
+as unavailable.** If the date is malformed we cannot tell which weekday token to
+look for, so it is a day we cannot judge — and treating a number we do not have
+as a bad one is exactly the mistake the removed `DEFAULT_MISSING_SUBSCORE`
+constant made in the V-Score. Charging a volunteer availability points for the
+organisation's typo would be that error again. If no day at all is judgeable the
+function still fails closed at 0, which is the long-standing behaviour for an
+outreach with no usable date.
+
+### Where the days come from
+
+`fetchDaysByOutreach` in `api/src/server/outreachInput.ts`, beside the existing
+`toOutreachInput` mapper and for the same stated reason: five call sites need it,
+and five copies of a query is five places for one to fall quietly behind. (That
+mapper's own comment records a real bug of exactly that kind — an earlier copy
+omitted `role_type` and silently disabled the support-role category override.)
+
+It is **one batched query per set, never one per outreach** — the ranked feed
+scores every open outreach in a region, so a per-row query would turn one request
+into dozens. A failure logs and returns an empty map, which degrades each affected
+outreach to first-day scoring; the same call `fetchRolesByOutreach` already makes
+for roles, on the same reasoning that a feed with slightly coarser scores beats no
+feed.
+
+Wired into all four `/api/match` paths (applicant scoring, the single-application
+explanation, the ranked feed, and the new-match notification scan) and into the
+under-subscription escalation. That last one matters more than most: an escalation
+happens precisely because a long event is short of people, and judging every
+volunteer on its first day alone is what made a Saturday-only student invisible to
+a campaign with three Saturdays in it.
+
+### One duplication, deliberate and cross-referenced
+
+The day-hours inheritance rule (`day.start_time ?? outreach.start_time`) is
+restated inside `layer1.ts` rather than imported from `lib/outreachDays.ts`, where
+it canonically lives. `layer1.ts` deliberately imports nothing but types and one
+constant — it is consumed by the serverless API — and importing `outreachDays`
+would pull a `components/` path into that bundle for a single `??`. Both sites say
+so and name each other, so if the rule ever changes it cannot be changed in one
+place only.
+
+### Two documentation claims that had gone stale
+
+The prompt asked me to fix a contradiction in CLAUDE.md and to check for others.
+Both found:
+
+1. **The one reported.** One line called continuous availability "still gated and
+   NOT built"; the very next paragraph called it "gated, approved, not yet
+   implemented". Both were true when written and neither was updated when the
+   other changed. Replaced with a single accurate paragraph, plus a standing note
+   that when a gate opens or closes, every mention of it in the file has to be
+   searched for — a stale second statement is worse than none, because it makes
+   the reader stop and work out which line to trust.
+2. **A second, of the same kind.** The admin-role section still said "the review
+   queues are packages B onwards and are NOT built" — while the same file carries
+   nine section headings reading "package B ... built 2026-08-25" through
+   "package J ... built 2026-08-26". Corrected.
+
+**And one claim in the app itself.** The Info Hub told volunteers they get "full
+points when the event falls in a day and time slot you marked yourself free for" —
+which stopped being true for multi-day events the moment this shipped. It now
+explains the share and the half-way cap in plain words, and says that being free
+for some of a long event is always worth more than none. Package H's rule is that
+a claim which stops describing the code is the bug, and that applies to the copy
+explaining the matcher as much as to the privacy policy.
+
+### Buckets
+
+- **Built and working:** the continuous availability rule, per-day hours in
+  scoring, the batched day loader, all five call sites, the CLAUDE.md and Info Hub
+  corrections. 11 new tests; 534 tests / 18 suites green, both typechecks clean,
+  `api` builds. The 89 pre-existing matcher tests pass untouched, which is the
+  evidence that single-day scoring did not move.
+- **Built but unproven against real data:** whether multi-day feed rankings *look*
+  sensible to a person, which needs the device round being held. Nothing about the
+  weights or the other four components changed, so any movement is confined to
+  multi-day events.
+- **Not built:** nothing from this item.

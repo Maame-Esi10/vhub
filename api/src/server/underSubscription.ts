@@ -1,7 +1,7 @@
 import { Errors } from "./httpErrors";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 import { notifyUsers, type UserNotification } from "./notify";
-import { toOutreachInput } from "./outreachInput";
+import { fetchDaysByOutreach, toOutreachInput } from "./outreachInput";
 import { env } from "./env";
 import { computeLayer1MatchScore, type Layer1VolunteerInput } from "@/lib/matching/layer1";
 import { getReachableRegions } from "@/constants/ghana-locations";
@@ -316,7 +316,13 @@ async function notifyNearbyVolunteers(
   const { data, error } = await query;
   if (error) return 0;
 
-  const outreachInput = toOutreachInput(outreach);
+  // Availability is scored across every day the outreach runs on, so the day
+  // rows come with it. This pass matters more than most for that: an
+  // escalation exists precisely because a long event is short of people, and
+  // judging every volunteer on its first day alone is what made a
+  // Saturday-only student invisible to a campaign with three Saturdays in it.
+  const daysByOutreach = await fetchDaysByOutreach(admin, [outreach.id]);
+  const outreachInput = toOutreachInput(outreach, daysByOutreach.get(outreach.id));
   const threshold = env.notifyMatchThreshold;
   const pending: UserNotification[] = [];
 

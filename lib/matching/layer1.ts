@@ -291,14 +291,85 @@ function parseAvailabilityToken(token: string): { day: DayAbbrev; slot: Slot } |
 }
 
 /**
- * Availability component: 1.0 if the volunteer's `availability_slots`
- * contains at least one "{day}_{slot}" token whose day matches the
- * outreach's weekday AND whose slot overlaps the outreach's time window;
- * else 0. Unknown/malformed tokens (bad weekday spelling, missing
- * underscore, unrecognised slot name, stray whitespace/case) are silently
+ * One day of an outreach, as the scorer needs it.
+ *
+ * `start_time`/`end_time` are that DAY's own hours, and null means it runs to
+ * the event's -- exactly what `outreach_days` stores. The canonical statement
+ * of that inheritance rule is `dayStartTime`/`dayEndTime` in
+ * `lib/outreachDays.ts`; it is restated here as a single `??` rather than
+ * imported, because this module deliberately imports nothing but types and one
+ * constant, and `lib/outreachDays` would drag a `components/` path into the
+ * serverless API's bundle. If the rule ever changes, both must move together.
+ */
+export interface Layer1OutreachDay {
+  day: string;
+  start_time?: string | null;
+  end_time?: string | null;
+}
+
+/**
+ * The share of an event's days a volunteer must be free for to score full
+ * availability. Half.
+ *
+ * WHY THERE IS A CAP AT ALL. Without one, availability would be the raw
+ * fraction, and a volunteer who can give ten days of a twenty-day campaign
+ * would score 0.5 -- half marks for a real and substantial commitment. That is
+ * a statement about the event's length rather than about the volunteer, and it
+ * is the same error the V-Score avoided by computing an outcome once per event
+ * instead of once per day.
+ *
+ * WHY A HALF, RATHER THAN SOMETHING LOWER. It has to be high enough that
+ * covering more days genuinely helps -- the whole point of the change is that
+ * 1-of-20 must not score like 20-of-20 -- and low enough that somebody giving a
+ * serious share of a long campaign is not treated as a partial candidate. A
+ * half is also the value that needs no argument about which side of it a given
+ * volunteer falls on: covering most of an event is full availability, covering
+ * a minority is scored on the share delivered.
+ */
+export const AVAILABILITY_FULL_COVERAGE = 0.5;
+
+/**
+ * Availability component, 0-1: the SHARE of the outreach's days the volunteer
+ * is free for, scaled so that covering `AVAILABILITY_FULL_COVERAGE` of them or
+ * more scores a full 1.0.
+ *
+ * A day counts as covered when `availability_slots` holds a "{day}_{slot}"
+ * token whose weekday matches that day AND whose slot overlaps that day's
+ * hours. Each day is judged against ITS OWN hours, falling back to the event's
+ * -- a campaign whose Saturday runs in the evening is a different question for
+ * a Saturday-morning volunteer than the rest of the week is.
+ *
+ * WHY IT IS NO LONGER ALL-OR-NOTHING (owner-approved 2026-09-08). It used to
+ * return 1 or 0 by looking at `outreaches.date` alone -- the FIRST day. On a
+ * twenty-day campaign that meant a volunteer free on day one scored full marks
+ * regardless of the other nineteen, and a volunteer free for days two to twenty
+ * scored ZERO. Neither number described anything real. The two obvious repairs
+ * are both wrong in opposite directions: requiring every day excludes precisely
+ * the Saturday-only student this platform exists to include, and accepting any
+ * single day scores 1-of-20 identically to 20-of-20.
+ *
+ * It also brings matching into line with attendance, which has been measured
+ * against the days a volunteer actually committed to since the multi-day work.
+ * Partial participation is something this product already understands
+ * everywhere else; availability was the last place still treating it as binary.
+ *
+ * SINGLE-DAY OUTREACHES ARE UNCHANGED, exactly. One day is covered or it is
+ * not, so the coverage is 1 or 0 and the scaled result is 1 or 0 -- the same
+ * two values this function has always returned for them. No existing score on
+ * a one-day event moves.
+ *
+ * A DAY WHOSE DATE CANNOT BE PARSED IS EXCLUDED FROM THE DENOMINATOR, not
+ * counted as unavailable. We cannot tell which weekday token to look for, so it
+ * is a day we cannot judge -- and reading a number we do not have as a bad one
+ * is the mistake `DEFAULT_MISSING_SUBSCORE` made in the V-Score. Charging a
+ * volunteer for the organisation's malformed date would be that error again. If
+ * NO day is judgeable the function fails closed at 0, which is the long-
+ * standing behaviour for an outreach with no usable date.
+ *
+ * Unknown or malformed availability tokens (bad weekday spelling, missing
+ * underscore, unrecognised slot name, stray whitespace or case) are silently
  * ignored rather than thrown on, so one bad token in a volunteer's array
- * can't crash matching for the whole app -- see the "unknown weekday
- * strings" test cases.
+ * cannot crash matching for the whole app.
  */
 export function availabilityScore(
   availabilitySlots: readonly string[] | null | undefined,
@@ -306,18 +377,48 @@ export function availabilityScore(
     date?: string | null;
     start_time?: string | null;
     end_time?: string | null;
+    /**
+     * Every day the outreach runs on. OMITTED OR EMPTY means fall back to
+     * `date` as the single day -- which is what every caller did before days
+     * existed, and what a caller that has not loaded the day rows should get
+     * rather than a zero.
+     */
+    days?: readonly Layer1OutreachDay[] | null;
   }
-): 0 | 1 {
-  const weekday = weekdayFromDate(outreach.date);
-  if (!weekday) return 0;
+): number {
+  const days: readonly Layer1OutreachDay[] =
+    outreach.days && outreach.days.length > 0
+      ? outreach.days
+      : [{ day: outreach.date ?? '', start_time: outreach.start_time, end_time: outreach.end_time }];
 
-  const slots = overlappingSlots(outreach.start_time, outreach.end_time);
+  let judgeable = 0;
+  let covered = 0;
 
-  for (const token of availabilitySlots ?? []) {
-    const parsed = parseAvailabilityToken(token);
-    if (parsed && parsed.day === weekday && slots.has(parsed.slot)) return 1;
+  for (const day of days) {
+    const weekday = weekdayFromDate(day.day);
+    if (!weekday) continue;
+    judgeable += 1;
+
+    // The day's own hours, or the event's where it sets none. See
+    // Layer1OutreachDay on why this rule is restated rather than imported.
+    const slots = overlappingSlots(
+      day.start_time ?? outreach.start_time,
+      day.end_time ?? outreach.end_time
+    );
+
+    for (const token of availabilitySlots ?? []) {
+      const parsed = parseAvailabilityToken(token);
+      if (parsed && parsed.day === weekday && slots.has(parsed.slot)) {
+        covered += 1;
+        break;
+      }
+    }
   }
-  return 0;
+
+  if (judgeable === 0) return 0;
+
+  const coverage = covered / judgeable;
+  return Math.min(1, coverage / AVAILABILITY_FULL_COVERAGE);
 }
 
 // ---------------------------------------------------------------------------
@@ -365,9 +466,21 @@ export interface Layer1OutreachInput {
   role_type?: OutreachRoleType | null;
   region?: string | null;
   district?: string | null;
+  /**
+   * The FIRST day. Still here, still what every date-based query reads, and
+   * still the fallback when `days` has not been loaded.
+   */
   date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
+  /**
+   * Every day the outreach runs on, for the availability component.
+   *
+   * OPTIONAL, and its absence means "score against `date` alone" rather than
+   * "this event has no days" -- so a caller that has not loaded the day rows
+   * gets exactly the behaviour it had before this field existed, not a zero.
+   */
+  days?: readonly Layer1OutreachDay[] | null;
 }
 
 export interface Layer1ComponentBreakdown {

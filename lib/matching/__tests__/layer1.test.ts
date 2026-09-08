@@ -1,4 +1,5 @@
 import {
+  AVAILABILITY_FULL_COVERAGE,
   LAYER1_WEIGHTS,
   availabilityScore,
   categoryScore,
@@ -651,5 +652,173 @@ describe('golden cases', () => {
   test.each(goldenCases)('$name -> $expectedTotal', ({ volunteer, outreach, expectedTotal }) => {
     const result = computeLayer1MatchScore(volunteer, outreach);
     expect(result.total).toBe(expectedTotal);
+  });
+});
+
+describe('availabilityScore across an outreach that runs on several days', () => {
+  /*
+    Every date below is real and checked: 2026-09-12 is a Saturday, and the
+    four consecutive days from 2026-09-14 are Monday to Thursday. A test whose
+    weekdays are wrong passes for the wrong reason, and this function derives
+    its whole answer from the weekday.
+  */
+  const week = {
+    sat: '2026-09-12',
+    mon: '2026-09-14',
+    tue: '2026-09-15',
+    wed: '2026-09-16',
+    thu: '2026-09-17',
+  };
+
+  const hours = { start_time: '09:00', end_time: '15:00' };
+
+  it('is unchanged for a one-day outreach, which is nearly every outreach', () => {
+    // The property that made this change safe to ship: with one day the
+    // coverage is 1 or 0, and the scaling leaves both untouched. No score on
+    // an existing one-day event moves by so much as a rounding error.
+    const oneDay = { date: week.sat, ...hours, days: [{ day: week.sat }] };
+    expect(availabilityScore(['sat_morning'], oneDay)).toBe(1);
+    expect(availabilityScore(['sun_morning'], oneDay)).toBe(0);
+  });
+
+  it('gives full marks for covering half the days or more', () => {
+    // Mon-Thu; a Monday-and-Tuesday volunteer covers 2 of 4.
+    const fourDays = {
+      date: week.mon,
+      ...hours,
+      days: [{ day: week.mon }, { day: week.tue }, { day: week.wed }, { day: week.thu }],
+    };
+    expect(availabilityScore(['mon_morning', 'tue_morning'], fourDays)).toBe(1);
+    expect(
+      availabilityScore(['mon_morning', 'tue_morning', 'wed_morning', 'thu_morning'], fourDays)
+    ).toBe(1);
+  });
+
+  it('scores a minority of the days on the share delivered', () => {
+    const fourDays = {
+      date: week.mon,
+      ...hours,
+      days: [{ day: week.mon }, { day: week.tue }, { day: week.wed }, { day: week.thu }],
+    };
+    // 1 of 4 = 0.25 coverage, half that threshold, so half the marks.
+    expect(availabilityScore(['mon_morning'], fourDays)).toBeCloseTo(0.5, 10);
+  });
+
+  it('no longer scores 1-of-20 the same as 20-of-20, which is the whole point', () => {
+    // Built by real calendar arithmetic rather than by incrementing the day
+    // number in the string: 2026-09-14 + 19 runs past the end of September, and
+    // "2026-09-33" is a date `weekdayFromDate` refuses -- which would silently
+    // drop those days from the denominator and make this pass for a reason
+    // that has nothing to do with what it claims to test.
+    const days = Array.from({ length: 20 }, (_unused, index) => {
+      const date = new Date(Date.UTC(2026, 8, 14 + index));
+      return { day: date.toISOString().slice(0, 10) };
+    });
+    const campaign = { date: week.mon, ...hours, days };
+
+    // The span 2026-09-14 to 2026-10-03 contains three Saturdays, so a
+    // Saturday-only volunteer covers 3 of these 20 -- well under the half
+    // needed for full marks, and well above nothing.
+    const saturdayOnly = availabilityScore(['sat_morning'], campaign);
+    const everyDay = availabilityScore(
+      ['mon_morning', 'tue_morning', 'wed_morning', 'thu_morning', 'fri_morning', 'sat_morning', 'sun_morning'],
+      campaign
+    );
+
+    expect(everyDay).toBe(1);
+    expect(saturdayOnly).toBeGreaterThan(0);
+    expect(saturdayOnly).toBeLessThan(everyDay);
+    // Stated exactly, so the numbers behind the claim are visible: 3 of 20 is
+    // 0.15 coverage, which against a 0.5 threshold is 0.3.
+    expect(saturdayOnly).toBeCloseTo(0.3, 10);
+  });
+
+  it('still gives nothing to a volunteer who can cover no day at all', () => {
+    const fourDays = {
+      date: week.mon,
+      ...hours,
+      days: [{ day: week.mon }, { day: week.tue }, { day: week.wed }, { day: week.thu }],
+    };
+    expect(availabilityScore(['sun_morning'], fourDays)).toBe(0);
+  });
+
+  it("judges each day against ITS OWN hours, not the event's", () => {
+    // The reader for the per-day hours feature. Monday runs 09:00-15:00 like
+    // the event; Tuesday overrides to the evening. A morning-only volunteer
+    // covers Monday and not Tuesday, and an evening-only volunteer covers
+    // Tuesday and not Monday -- which a single event-wide window could not
+    // express at all.
+    const mixed = {
+      date: week.mon,
+      ...hours,
+      days: [
+        { day: week.mon },
+        { day: week.tue, start_time: '17:00', end_time: '21:00' },
+      ],
+    };
+    expect(availabilityScore(['mon_morning'], mixed)).toBeCloseTo(1, 10);
+    expect(availabilityScore(['tue_evening'], mixed)).toBeCloseTo(1, 10);
+    // Tuesday morning covers nothing: the event runs that evening.
+    expect(availabilityScore(['tue_morning'], mixed)).toBe(0);
+  });
+
+  it('excludes an unparseable day from the denominator rather than counting it against anyone', () => {
+    // Reading a number we do not have as a bad one is the mistake
+    // DEFAULT_MISSING_SUBSCORE made. A malformed date is the organisation's
+    // data problem and must not cost a volunteer availability points.
+    const withRubbish = {
+      date: week.mon,
+      ...hours,
+      days: [{ day: week.mon }, { day: 'not-a-date' }, { day: '2026-02-30' }],
+    };
+    // One judgeable day, covered, so full marks -- not 1-of-3.
+    expect(availabilityScore(['mon_morning'], withRubbish)).toBe(1);
+  });
+
+  it('fails closed at 0 when no day can be judged at all', () => {
+    expect(
+      availabilityScore(['mon_morning'], {
+        date: null,
+        ...hours,
+        days: [{ day: 'not-a-date' }],
+      })
+    ).toBe(0);
+  });
+
+  it('falls back to the outreach date when the days have not been loaded', () => {
+    // An omitted or empty list means "not loaded", never "no days" -- every
+    // outreach structurally has at least one row. A caller whose read failed
+    // must get the old behaviour, not a zero for everybody.
+    const sameHours = { date: week.sat, ...hours };
+    expect(availabilityScore(['sat_morning'], sameHours)).toBe(1);
+    expect(availabilityScore(['sat_morning'], { ...sameHours, days: [] })).toBe(1);
+    expect(availabilityScore(['sat_morning'], { ...sameHours, days: null })).toBe(1);
+  });
+
+  it('never exceeds 1, so availability can never be worth more than its 15 points', () => {
+    const days = [{ day: week.mon }, { day: week.tue }];
+    const score = availabilityScore(['mon_morning', 'tue_morning'], {
+      date: week.mon,
+      ...hours,
+      days,
+    });
+    expect(score).toBe(1);
+    expect(score * LAYER1_WEIGHTS.availability).toBe(15);
+  });
+
+  it('has a threshold of a half, and the scaling follows from it', () => {
+    // Pinned so a change to the constant has to change this test too, rather
+    // than silently re-ranking every multi-day feed in the app.
+    expect(AVAILABILITY_FULL_COVERAGE).toBe(0.5);
+
+    const fourDays = {
+      date: week.mon,
+      ...hours,
+      days: [{ day: week.mon }, { day: week.tue }, { day: week.wed }, { day: week.thu }],
+    };
+    expect(availabilityScore(['mon_morning'], fourDays)).toBeCloseTo(
+      0.25 / AVAILABILITY_FULL_COVERAGE,
+      10
+    );
   });
 });
