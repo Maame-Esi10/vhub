@@ -94,10 +94,29 @@ function Header({ count }: { count: number | null }) {
   );
 }
 
+/**
+ * Whole days between a submission and now, or null when there is no date.
+ *
+ * ONE definition, because the card needs the number twice: once as words and
+ * once to decide whether the wait is overdue. Those were two separate copies of
+ * the same arithmetic, and two copies of a rule are two chances for one of them
+ * to disagree -- an "overdue" badge beside the words "Submitted today" would be
+ * the visible result.
+ *
+ * It reads the clock, so it is not idempotent: called twice across two renders
+ * it can return different numbers. That is inherent to "how long has this been
+ * waiting?" and is accepted here, which is why it lives outside the component
+ * rather than being computed in its body -- a re-render mid-day changing a 6
+ * to a 7 is the answer being right, not the component being unstable.
+ */
+function daysWaiting(submittedAt: string | null): number | null {
+  if (!submittedAt) return null;
+  return Math.floor((Date.now() - new Date(submittedAt).getTime()) / 86_400_000);
+}
+
 /** "3 days ago", in the one place it is needed. Precise enough to spot a backlog. */
-function waitingFor(submittedAt: string | null): string {
-  if (!submittedAt) return 'Submission date not recorded';
-  const days = Math.floor((Date.now() - new Date(submittedAt).getTime()) / 86_400_000);
+function waitingFor(days: number | null): string {
+  if (days === null) return 'Submission date not recorded';
   if (days <= 0) return 'Submitted today';
   if (days === 1) return 'Waiting 1 day';
   return `Waiting ${days} days`;
@@ -106,10 +125,8 @@ function waitingFor(submittedAt: string | null): string {
 function QueueCard({ row, onPress }: { row: VerificationQueueRow; onPress: () => void }) {
   // Anything past a week is called out rather than left for the reader to work
   // out from a date. A queue is only fair if the wait is visible.
-  const days = row.verification_submitted_at
-    ? Math.floor((Date.now() - new Date(row.verification_submitted_at).getTime()) / 86_400_000)
-    : 0;
-  const overdue = days >= 7;
+  const days = daysWaiting(row.verification_submitted_at);
+  const overdue = days !== null && days >= 7;
 
   return (
     <Pressable
@@ -137,7 +154,7 @@ function QueueCard({ row, onPress }: { row: VerificationQueueRow; onPress: () =>
       ) : null}
 
       <Text style={[styles.waiting, overdue && styles.waitingOverdue]}>
-        {waitingFor(row.verification_submitted_at)}
+        {waitingFor(days)}
       </Text>
     </Pressable>
   );

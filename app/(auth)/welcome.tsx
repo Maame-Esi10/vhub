@@ -139,7 +139,9 @@ export default function Welcome() {
   // the previous version held the active index in React state, so every slide
   // change re-rendered all three full-screen slides mid-animation, which is
   // what made both swiping and auto-advance stutter.
-  const scrollX = useRef(new Animated.Value(0)).current;
+  // Lazy `useState` rather than `useRef(...).current`: same single
+  // construction and same stable instance, without reading a ref during render.
+  const [scrollX] = useState(() => new Animated.Value(0));
   const activeIndexRef = useRef(0);
   const autoplayTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   /** True between onScrollBeginDrag and onMomentumScrollEnd — i.e. this scroll came from a finger, not from autoplay. */

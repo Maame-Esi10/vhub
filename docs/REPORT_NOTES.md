@@ -4574,3 +4574,135 @@ explaining the matcher as much as to the privacy policy.
   weights or the other four components changed, so any movement is confined to
   multi-day events.
 - **Not built:** nothing from this item.
+
+## Lint cleanup, and the real bug hiding in it (2026-09-08)
+
+**Build-queue item 13, deliberately last** because it touches many files and
+doing it earlier would have guaranteed merge noise against everything above it.
+The app went from **47 errors and 7 warnings to zero**, and `api/` — which had
+never been part of the tracked baseline — from 2 errors and 14 warnings to zero.
+
+Nothing here was expected to change behaviour. One finding did, and it was a
+genuine crash waiting to happen.
+
+### The one that was not cosmetic: three hooks called after an early return
+
+`app/(volunteer)/outreach/[id].tsx` called `useApplicationDays`,
+`useMyLateReleaseCount` and `useReleaseCommittedDay` **below** its
+`if (outreachQuery.isLoading) return ...` and `if (outreachQuery.isError) return
+...` blocks.
+
+**Why that is a bug rather than untidiness.** React identifies hooks purely by
+the ORDER they are called in. While the outreach was loading, the component
+returned early and those three hooks were never reached; on the render after the
+query resolved, they suddenly were. React then sees a component that called three
+more hooks than it did last time, which is the "rendered more hooks than during
+the previous render" crash — and the near misses, where it does not throw, are
+state read from the wrong hook entirely.
+
+It only ever appeared to work because the early return happened to unmount the
+subtree before React compared the two lists. This is the volunteer's outreach
+detail screen: the one every application is made from.
+
+**The fix was a move, not a rewrite.** Nothing in those three lines depends on
+`outreach` — only on `application`, which is resolved well above the early
+returns. They now sit there, with a comment saying why they must stay and what
+happens if anyone moves them back down. `canChangeDays` genuinely does read
+`outreach`, and it stays below.
+
+### `useRef(new Animated.Value(0)).current` — 18 of the 27 ref errors
+
+The long-standing React Native idiom for an animated value reads `.current`
+during render, which React's current rules refuse outright. Replaced throughout
+with `useState(() => new Animated.Value(0))`: the lazy initialiser constructs the
+value exactly once and the instance is stable for the life of the component,
+which is the entire guarantee an `Animated.Value` needs. No ref is read during
+render and nothing about the animations changed. Toast, ListSkeleton,
+FlyerBackground and the welcome carousel.
+
+### The remaining ref errors: a handler factory called during render
+
+Create Outreach measured each field's position with
+`onLayout={captureFieldTop('title')}` — a function **called during render** whose
+body writes a ref. React's rule is that refs may be touched in event handlers but
+not during render, and from the outside those two are indistinguishable here: the
+call happens in render even though the write happens later on layout.
+
+`captureFieldTop` now takes the field *and* the event, and each of the nine sites
+passes an inline arrow. The ref write is now unambiguously inside the handler,
+which is where it always actually ran.
+
+### `Date.now()` in a component body, and a duplicated rule
+
+The admin organisation queue computed "how many days has this been waiting" twice
+from the same date: once as words, once to decide whether to show an overdue
+badge. Two copies of one rule are two chances for them to disagree — an "overdue"
+badge beside the words "Submitted today" would have been the visible result.
+
+Now one `daysWaiting()` helper feeds both. It still reads the clock, and that is
+inherent to the question; it lives outside the component with a note saying that
+a re-render turning a 6 into a 7 is the answer being right, not the component
+being unstable.
+
+### Where I suppressed instead of refactoring, and why
+
+Twelve `react-hooks/set-state-in-effect` errors remained, and they are all the
+same legitimate shape: **local state seeded or reset from something outside
+React** — a resolved query, a route parameter, a `visible` prop — where the
+user's own edits must survive afterwards.
+
+React's suggested alternative is to adjust state during render behind a sentinel
+value. That is a real refactor of each of the twelve, and each of these effects is
+already tuned against a specific failure that its own comment names: *"a plain
+'set it every time days changes' would snap the organiser back to today every
+time the query refetched, mid-way through marking day two."*
+
+**Rewriting twelve carefully-tuned state-seeding effects across the organisation
+screens, while the device test round is on hold and none of it can be checked by
+hand, is exactly the wrong trade for a cleanup whose whole premise is that
+behaviour does not change.** So the rule is disabled **at each site with its own
+one-line reason**, never in the config. A new, accidental setState-in-effect
+anywhere else in the codebase still fails the lint — the signal is kept, only the
+twelve known-deliberate cases are exempt.
+
+They are listed here so the decision is revisitable rather than buried: the
+applicants outreach picker (twice), the attendance day picker, the organisation
+profile form, the created/saved route flags on the outreach screen, the reviews
+outreach picker, the verification resubmission prefill, the volunteer's day
+tick-list, the review sheet's reset-on-open, the category checklist's initial
+expansion, and the document viewer's zoom reset.
+
+### `api/` was never in the tracked baseline
+
+Running the lint over `api/src` for the first time turned up 16 findings,
+including one that was purely a configuration artefact.
+
+**`api/` has no ESLint config of its own.** It is a separate Next.js project
+inside the repository, and it was being linted by the repository root's *Expo*
+config — which does not load Next's plugin. So the perfectly correct
+`{/* eslint-disable-next-line @next/next/no-img-element */}` directive on the
+confirmation page's logo was itself reported as an error: *"Definition for rule
+'@next/next/no-img-element' was not found."* The directive is gone and the reason
+for the plain `<img>` (a fixed-size logo that would otherwise go through Vercel's
+metered image optimiser for nothing) is now stated in prose, with a note to put
+the directive back if Next's own lint config is ever added here.
+
+The other 13 were `Array<T>` where the project's style is `T[]`, auto-fixed. One
+unused import in the under-subscription pass. And the confirmation page's own
+effect, which reads the URL fragment — an external system that genuinely does not
+exist during render, because the page is prerendered — suppressed with that
+reason.
+
+### Buckets
+
+- **Built and working:** app lint 47 errors / 7 warnings → **0/0**; `api/` lint
+  2 errors / 14 warnings → **0/0**. 534 tests / 18 suites green, both typechecks
+  clean, `api` builds. The hook-ordering bug on the volunteer outreach screen is
+  fixed.
+- **Built but untested on a device:** nothing new, but the four animation
+  components (Toast, ListSkeleton, FlyerBackground, the welcome carousel) had
+  their animated values reconstructed a different way. The guarantee is
+  identical and there is no behavioural difference to look for, but they are
+  worth a glance whenever the device round happens.
+- **Not built:** the twelve set-state-in-effect sites are suppressed, not
+  rewritten — see above for the reasoning and the full list.

@@ -103,6 +103,7 @@ export default function OrganisationVerification() {
   // evidence when nothing changed.
   useEffect(() => {
     if (!submission) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- prefills a resubmission from the previous one and every setter here preserves what has been typed
     setContactPerson((current) => current || submission.profile.contact_person || '');
     setOfficialEmail((current) => current || submission.profile.official_email || '');
     setPhysicalAddress((current) => current || submission.profile.physical_address || '');

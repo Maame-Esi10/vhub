@@ -55,7 +55,7 @@ export default function OnboardingComplete() {
           <Text style={styles.heroBadgeText}>V-HUB COMMUNITY</Text>
         </View>
         <View style={styles.heroSpacer} />
-        <Text style={styles.heroTitle}>You're Ready!</Text>
+        <Text style={styles.heroTitle}>You&apos;re Ready!</Text>
         <Text style={styles.heroSubtitle}>
           Welcome to the team, <Text style={styles.heroName}>{firstName}!</Text>
         </Text>
@@ -64,7 +64,7 @@ export default function OnboardingComplete() {
 
       <View style={styles.body}>
         <Text style={styles.bodyText}>
-          You're now part of a collective mission to transform healthcare through volunteerism.
+          You&apos;re now part of a collective mission to transform healthcare through volunteerism.
         </Text>
 
         {offerDocumentUpload ? (

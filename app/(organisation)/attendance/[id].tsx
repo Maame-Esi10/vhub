@@ -92,6 +92,7 @@ export default function OrganisationAttendance() {
     // which covers both the first render and arriving from another event. A
     // plain "set it every time days changes" would snap the organiser back to
     // today every time the query refetched, mid-way through marking day two.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- seeds from the day rows and deliberately keeps a selection the organiser has already made
     setSelectedDayId((current) => {
       if (current && days.some((day) => day.id === current)) return current;
       const runningToday = days.find((day) => day.day === todayIso());

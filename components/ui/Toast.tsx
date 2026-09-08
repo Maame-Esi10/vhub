@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -32,8 +32,15 @@ export interface ToastProps {
  * never covers a control the organisation might be reaching for.
  */
 export function Toast({ message, tone = 'success', onDismiss, durationMs = 3200 }: ToastProps) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const lift = useRef(new Animated.Value(16)).current;
+  /*
+    `useState` with a lazy initialiser, NOT `useRef(new Animated.Value(0)).current`.
+    Both construct the value exactly once and keep the same instance for the life
+    of the component, which is all an Animated.Value needs -- but the ref form
+    reads `.current` during render, which React now refuses outright, and the
+    driver mutates this value on every frame without React ever knowing.
+  */
+  const [opacity] = useState(() => new Animated.Value(0));
+  const [lift] = useState(() => new Animated.Value(16));
 
   useEffect(() => {
     if (!message) return;

@@ -7,7 +7,6 @@ import { computeLayer1MatchScore, type Layer1VolunteerInput } from "@/lib/matchi
 import { getReachableRegions } from "@/constants/ghana-locations";
 import {
   UNDER_SUBSCRIPTION_STAGES,
-  isUnderSubscribed,
   organisationShortfallMessage,
   volunteerShortfallMessage,
   type UnderSubscriptionStage,
@@ -66,7 +65,7 @@ interface CandidateRow {
   profile: {
     region: string | null;
     district: string | null;
-    push_tokens: Array<{ expo_push_token: string }> | null;
+    push_tokens: { expo_push_token: string }[] | null;
   } | null;
 }
 

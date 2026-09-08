@@ -124,10 +124,20 @@ export default function CreateOutreach() {
   const scrollRef = useRef<ScrollView>(null);
   const fieldTops = useRef<Partial<Record<keyof WizardFieldError, number>>>({});
 
-  function captureFieldTop(field: keyof WizardFieldError) {
-    return (event: LayoutChangeEvent) => {
-      fieldTops.current[field] = event.nativeEvent.layout.y;
-    };
+  /*
+    Takes the field AND the event, rather than being a factory that returns a
+    handler.
+
+    The factory form read `onLayout={captureFieldTop('title')}` -- a function
+    CALLED during render whose body writes a ref. React's own rule is that refs
+    may be touched in event handlers and not during render, and from the outside
+    those two are indistinguishable here: the call happens in render, even though
+    the write happens later on layout. Taking the event directly and letting each
+    site pass an inline arrow puts the ref write unambiguously inside the
+    handler, which is where it has always actually run.
+  */
+  function captureFieldTop(field: keyof WizardFieldError, event: LayoutChangeEvent) {
+    fieldTops.current[field] = event.nativeEvent.layout.y;
   }
 
   function revealFirstError(fieldErrors: WizardFieldError, onStep: number) {
@@ -450,7 +460,7 @@ export default function CreateOutreach() {
 
           {step === 1 ? (
             <View style={styles.fieldGroup}>
-              <View onLayout={captureFieldTop('title')}>
+              <View onLayout={(event) => captureFieldTop('title', event)}>
                 <Input
                   label="Campaign Title"
                   required
@@ -461,7 +471,7 @@ export default function CreateOutreach() {
                   accessibilityLabel="Campaign title"
                 />
               </View>
-              <View onLayout={captureFieldTop('description')}>
+              <View onLayout={(event) => captureFieldTop('description', event)}>
                 <Input
                   label="Program Description"
                   required
@@ -533,7 +543,7 @@ export default function CreateOutreach() {
 
           {step === 2 ? (
             <View style={styles.fieldGroup}>
-              <View onLayout={captureFieldTop('region')}>
+              <View onLayout={(event) => captureFieldTop('region', event)}>
                 <SelectField
                   label="Region"
                   required
@@ -547,7 +557,7 @@ export default function CreateOutreach() {
                   }
                 />
               </View>
-              <View onLayout={captureFieldTop('district')}>
+              <View onLayout={(event) => captureFieldTop('district', event)}>
                 <SelectField
                   label="District"
                   required
@@ -561,7 +571,7 @@ export default function CreateOutreach() {
                   onSelect={(value) => update('district', value)}
                 />
               </View>
-              <View onLayout={captureFieldTop('locationName')}>
+              <View onLayout={(event) => captureFieldTop('locationName', event)}>
                 <Input
                   label="Location Name"
                   required
@@ -584,7 +594,7 @@ export default function CreateOutreach() {
                 so there is no mode to choose and nothing changes for the
                 organisation running an ordinary one-day clinic.
               */}
-              <View style={styles.daysSection} onLayout={captureFieldTop('date')}>
+              <View style={styles.daysSection} onLayout={(event) => captureFieldTop('date', event)}>
                 <DayScheduleField
                   days={state.days}
                   onChange={(next) => update('days', next)}
@@ -597,7 +607,7 @@ export default function CreateOutreach() {
                 These are the hours for every day, unless you set different ones on a day above.
               </Text>
               <View style={styles.timeRow}>
-                <View style={styles.timeField} onLayout={captureFieldTop('startTime')}>
+                <View style={styles.timeField} onLayout={(event) => captureFieldTop('startTime', event)}>
                   <DateTimeField
                     label="Start Time"
                     required
@@ -608,7 +618,7 @@ export default function CreateOutreach() {
                     accessibilityLabel="Start time"
                   />
                 </View>
-                <View style={styles.timeField} onLayout={captureFieldTop('endTime')}>
+                <View style={styles.timeField} onLayout={(event) => captureFieldTop('endTime', event)}>
                   <DateTimeField
                     label="End Time"
                     required
@@ -625,7 +635,7 @@ export default function CreateOutreach() {
 
           {step === 3 ? (
             <View style={styles.fieldGroup}>
-              <View onLayout={captureFieldTop('requiredSkills')}>
+              <View onLayout={(event) => captureFieldTop('requiredSkills', event)}>
                 <MultiSelectField
                   label="Required Skills"
                   required

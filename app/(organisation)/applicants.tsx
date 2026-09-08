@@ -27,7 +27,6 @@ import type { ApplicationWithVolunteer, OrganisationApplicationDecision } from '
 import {
   groupApplicantsByRole,
   planBatchAccept,
-  rankApplicants,
   skillCoverage,
   waitlistPositions,
 } from '@/lib/roster';
@@ -68,7 +67,11 @@ export default function Applicants() {
   const organisationId = useAuthStore((s) => s.user)?.id;
 
   const outreachesQuery = useOrganisationOutreaches(organisationId);
-  const outreaches = outreachesQuery.data ?? [];
+  // Memoised, not `?? []` inline: the fallback builds a NEW empty array on every
+  // render, so an effect or memo depending on `outreaches` would see a changed
+  // dependency every time and re-run forever. Same treatment the day lists on
+  // the other screens already get.
+  const outreaches = useMemo(() => outreachesQuery.data ?? [], [outreachesQuery.data]);
 
   const routeOutreachId = params.outreachId ? params.outreachId : undefined;
 
@@ -102,6 +105,7 @@ export default function Applicants() {
   // wouldn't fire, and the tab would open on the wrong outreach.
   useEffect(() => {
     if (routeOutreachId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- seeding from a route param, which is outside React
       setSelectedOutreachId(routeOutreachId);
       setEnteredFromEvent(true);
       router.setParams({ outreachId: '' });
@@ -120,6 +124,7 @@ export default function Applicants() {
 
   useEffect(() => {
     if (!selectedOutreachId && outreaches.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- first-load default from a resolved query; the organiser's own pick wins after
       setSelectedOutreachId(outreaches[0]?.id);
     }
   }, [selectedOutreachId, outreaches]);
@@ -127,7 +132,9 @@ export default function Applicants() {
   const selectedOutreach = outreaches.find((o) => o.id === selectedOutreachId);
 
   const applicationsQuery = useOutreachApplications(selectedOutreachId);
-  const applications = applicationsQuery.data ?? [];
+  // Memoised for the same reason as `outreaches` above: this one feeds the
+  // `rankable` memo, which feeds the ranking and the waitlist positions.
+  const applications = useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
 
   const updateStatus = useUpdateApplicationStatus();
   const activeApplicationId = updateStatus.variables?.applicationId;
@@ -195,14 +202,9 @@ export default function Applicants() {
     [applications]
   );
 
-  // Re-sorted here rather than in the query: the query orders by raw
-  // match_score, but ranking applies the reliability multiplier on top of it,
-  // and that needs the volunteer's V-Score from the embed.
-  const rankedApplications = useMemo(
-    () => rankApplicants(rankable).map((entry) => entry.application),
-    [rankable]
-  );
-
+  // Ranking is done per role inside `sections` below, which is the only place
+  // that needs it -- a flat ranked list across every role would put a nurse and
+  // a student in one order when they are not competing for the same places.
   const positions = useMemo(() => waitlistPositions(rankable), [rankable]);
 
 

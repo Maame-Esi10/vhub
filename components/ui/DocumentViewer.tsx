@@ -68,6 +68,7 @@ export function DocumentViewer({
   // Reopening always starts fitted. Carrying the previous zoom over means the
   // next document opens mid-way into a corner of itself for no reason.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets zoom on open, so the next document does not start mid-way into a corner of itself
     if (visible) setZoomIndex(0);
   }, [visible]);
 

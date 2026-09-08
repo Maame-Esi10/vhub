@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -15,7 +15,6 @@ import {
   formatEventDate,
   formatEventTimeRange,
   hasEventEnded,
-  isUpcomingEvent,
 } from '@/components/ui';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -89,12 +88,14 @@ export default function OrganisationOutreachDetail() {
   const [createdFor, setCreatedFor] = useState<string | null>(created ?? null);
   useEffect(() => {
     if (!created) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads a one-shot route param and clears it, so it cannot be resurrected from the URL
     setCreatedFor(created);
     router.setParams({ created: '' });
   }, [created, router]);
 
   useEffect(() => {
     if (!saved || saved === '1') return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads a one-shot route param and clears it, so it cannot be resurrected from the URL
     setSavedFor(saved);
     // Cleared immediately so a re-render, a refetch or a later visit cannot
     // resurrect it from the URL.

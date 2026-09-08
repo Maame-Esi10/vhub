@@ -80,7 +80,7 @@ export async function fetchDaysByOutreach(
     return byOutreach;
   }
 
-  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
     const outreachId = row.outreach_id as string;
     byOutreach.set(outreachId, [
       ...(byOutreach.get(outreachId) ?? []),

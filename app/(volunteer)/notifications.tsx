@@ -16,7 +16,7 @@ import {
 } from '@/hooks/useNotifications';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 
-const TABS: Array<{ value: NotificationFilter; label: string }> = [
+const TABS: { value: NotificationFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'matches', label: 'Matches' },
   { value: 'updates', label: 'Updates' },

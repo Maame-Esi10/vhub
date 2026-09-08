@@ -76,7 +76,7 @@ export default function OnboardingAvailability() {
 
         <Text style={styles.heading}>Precision Preferences</Text>
         <Text style={styles.subtext}>
-          Set your service region and district, then tap the grid to mark exactly when you're
+          Set your service region and district, then tap the grid to mark exactly when you&apos;re
           free each week.
         </Text>
 
@@ -111,7 +111,7 @@ export default function OnboardingAvailability() {
         </View>
 
         <Text style={[styles.sectionLabel, styles.gridLabel]}>WEEKLY SCHEDULE</Text>
-        <Text style={styles.gridHint}>Tap blocks to select the times you're available.</Text>
+        <Text style={styles.gridHint}>Tap blocks to select the times you&apos;re available.</Text>
 
         <View style={styles.grid}>
           <View style={styles.gridHeaderRow}>

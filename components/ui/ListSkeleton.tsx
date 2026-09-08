@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@/constants/theme';
 
@@ -11,7 +11,9 @@ export interface ListSkeletonProps {
 
 /** Pulsing placeholder rows shown while a list query is loading. */
 export function ListSkeleton({ rows = 3, rowHeight = 96 }: ListSkeletonProps) {
-  const pulse = useRef(new Animated.Value(0.4)).current;
+  // Lazy `useState` rather than `useRef(...).current`: same single
+  // construction and same stable instance, without reading a ref during render.
+  const [pulse] = useState(() => new Animated.Value(0.4));
 
   useEffect(() => {
     const loop = Animated.loop(

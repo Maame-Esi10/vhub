@@ -79,6 +79,7 @@ export default function EditOrganisationProfile() {
   const org = orgQuery.data;
   useEffect(() => {
     if (org) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- seeds the form once the organisation row resolves; there is nothing to seed from before that
       setOrgName(org.org_name ?? '');
       setOrgType(org.org_type ?? null);
       setDescription(org.description ?? '');

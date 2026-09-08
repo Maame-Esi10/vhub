@@ -79,6 +79,11 @@ export default function ConfirmationPage() {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   useEffect(() => {
+    // Reads the URL fragment, which is an external system and unavailable during
+    // render -- this page is prerendered, so the location does not exist on the
+    // server pass. Synchronising with something outside React is what an effect
+    // is for, which is why this is suppressed rather than restructured.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOutcome(readOutcome());
 
     // A SUCCESSFUL confirmation arrives with the new session's access and
@@ -119,7 +124,18 @@ export default function ConfirmationPage() {
         {/* No disc behind it: the mark is coral on transparent and the app's own
             brand strip shows it plain on a light ground. Width and height are
             set so the card does not reflow when the image arrives. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {/*
+          A plain <img>, not next/image, and deliberately: this is one fixed-size
+          logo on a prerendered page, and next/image would put it through
+          Vercel's metered image optimiser for no benefit.
+
+          There is no `@next/next/no-img-element` disable directive here on
+          purpose. This project has no ESLint config of its own -- it is linted
+          by the repository root's Expo config, which does not load Next's
+          plugin -- so the directive was itself reported as an error ("Definition
+          for rule ... was not found"). Put it back if Next's own lint config is
+          ever added here.
+        */}
         <img
           src={logo.src}
           alt="V-HUB"

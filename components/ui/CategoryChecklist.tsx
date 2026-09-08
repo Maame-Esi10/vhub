@@ -52,6 +52,7 @@ export function CategoryChecklist({
   // for nothing.
   useEffect(() => {
     if (sections.length === 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- opens the sections that already hold a choice, once the sections are known
       setExpanded(new Set(sections.map((section) => section.title)));
       return;
     }

@@ -95,6 +95,7 @@ export default function OutreachDetail() {
   // volunteer has touched it.
   useEffect(() => {
     if (days.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- seeds the day tick-list from the day rows and keeps a selection the volunteer has already made
     setCommittedDayIds((current) => {
       if (current && current.every((dayId) => days.some((day) => day.id === dayId))) {
         return current;
@@ -125,6 +126,41 @@ export default function OutreachDetail() {
 
   const outreach = outreachQuery.data;
   const application = myApplicationQuery.data ?? null;
+
+  /*
+    CHANGING WHICH DAYS YOU ARE ON, once you have already applied.
+
+    Only for an event that runs more than one day, and only while the
+    application is live. On a one-day event there is nothing to change that
+    withdrawing does not already cover.
+
+    Read separately from `committedDayIds` above, which is the pre-application
+    tick list. What has been PROMISED is a database fact; what is ticked on the
+    way in is form state, and conflating the two would let a stale form
+    overwrite a commitment.
+
+    THESE THREE HOOKS MUST STAY ABOVE THE LOADING AND ERROR RETURNS BELOW, and
+    that is a correctness requirement rather than tidiness. They used to sit
+    further down, after `if (outreachQuery.isLoading) return ...` -- so on the
+    first render they were never reached, and on the render after the query
+    resolved they suddenly were. React identifies hooks by call ORDER, so a
+    component that calls three more of them than it did last time is the
+    "rendered more hooks than during the previous render" crash, and the near
+    misses in between are state read from the wrong hook. It only ever appeared
+    to work because the early return happened to unmount before React compared
+    the two lists.
+
+    Nothing here depends on `outreach`, which is why hoisting them is a move
+    rather than a rewrite. `canChangeDays` genuinely does, and stays below.
+  */
+  const applicationActive =
+    application !== null &&
+    (application.status === 'pending' ||
+      application.status === 'accepted' ||
+      application.status === 'waitlisted');
+  const myCommittedDays = useApplicationDays(applicationActive ? application.id : undefined);
+  const lateReleaseCount = useMyLateReleaseCount(applicationActive ? volunteerId : undefined);
+  const releaseDay = useReleaseCommittedDay();
   // Only for the logo. The outreach embed already carries the name, type and
   // verified flag; the avatar is the one public field it cannot reach.
   const organisationProfileQuery = usePublicOrganisationProfile(outreach?.organisation?.id);
@@ -265,26 +301,9 @@ export default function OutreachDetail() {
       application.status === 'accepted' ||
       application.status === 'waitlisted') &&
     isUpcomingEvent(outreach.date, outreach.start_time);
-  /*
-    CHANGING WHICH DAYS YOU ARE ON, once you have already applied.
-
-    Only for an event that runs more than one day, and only while the
-    application is live. On a one-day event there is nothing to change that
-    withdrawing does not already cover.
-
-    Read separately from `committedDayIds` above, which is the pre-application
-    tick list. What has been PROMISED is a database fact; what is ticked on the
-    way in is form state, and conflating the two would let a stale form
-    overwrite a commitment.
-  */
-  const applicationActive =
-    application !== null &&
-    (application.status === 'pending' ||
-      application.status === 'accepted' ||
-      application.status === 'waitlisted');
-  const myCommittedDays = useApplicationDays(applicationActive ? application.id : undefined);
-  const lateReleaseCount = useMyLateReleaseCount(applicationActive ? volunteerId : undefined);
-  const releaseDay = useReleaseCommittedDay();
+  // `applicationActive` and the three hooks it feeds are declared ABOVE the
+  // loading and error returns -- see the note there. Only this last line, which
+  // reads `outreach`, can live down here.
   const canChangeDays = applicationActive && days.length > 1 && outreach.status !== 'cancelled';
 
   const organisation = outreach.organisation;

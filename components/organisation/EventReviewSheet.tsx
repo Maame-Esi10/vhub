@@ -76,6 +76,7 @@ export function EventReviewSheet({
   // differently — the two screens would then disagree about the same event.
   useEffect(() => {
     if (!visible) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the sheet each time it opens, which is the point: a stale answer from the last volunteer would be filed against this one
     setAttended(existingReview?.attended ?? markedAbsent !== true);
     setReliability(existingReview?.reliability_score ?? null);
     setClinical(existingReview?.clinical_score ?? null);

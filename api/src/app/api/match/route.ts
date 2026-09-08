@@ -208,7 +208,7 @@ async function fetchRolesByOutreach(
     return byOutreach;
   }
 
-  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
     const outreachId = row.outreach_id as string;
     byOutreach.set(outreachId, [
       ...(byOutreach.get(outreachId) ?? []),
@@ -502,7 +502,7 @@ interface RankedOutreach {
  * `has_open_slots` column, which is a schema change and not worth one for a
  * predicate this cheap.
  */
-function withOpenSlots(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+function withOpenSlots(rows: Record<string, unknown>[]): Record<string, unknown>[] {
   return rows.filter((row) => {
     const filled = Number(row.slots_filled ?? 0);
     const total = Number(row.slots_total ?? 0);
@@ -548,7 +548,7 @@ async function fetchFeedCandidates(
     .limit(body.limit ?? FEED_DEFAULT_LIMIT);
   if (error) throw Errors.internal("Could not load open outreaches.");
 
-  return withOpenSlots((data ?? []) as Array<Record<string, unknown>>);
+  return withOpenSlots((data ?? []) as Record<string, unknown>[]);
 }
 
 /**
@@ -837,7 +837,7 @@ interface CandidateRow {
   profile: {
     region: string | null;
     district: string | null;
-    push_tokens: Array<{ expo_push_token: string }> | null;
+    push_tokens: { expo_push_token: string }[] | null;
   } | null;
 }
 

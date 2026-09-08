@@ -67,17 +67,17 @@ export async function closeAndResolvePastOutreaches(): Promise<OutreachLifecycle
   let resolved = 0;
   const notifications: UserNotification[] = [];
 
-  for (const row of (pendingOutreaches ?? []) as Array<{ outreach_id: string }>) {
+  for (const row of (pendingOutreaches ?? []) as { outreach_id: string }[]) {
     const { data: resolvedRows, error: resolveError } = await admin.rpc(
       "resolve_unsuccessful_applications",
       { p_outreach_id: row.outreach_id }
     );
     if (resolveError) continue;
 
-    const applications = (resolvedRows ?? []) as Array<{
+    const applications = (resolvedRows ?? []) as {
       application_id: string;
       volunteer_id: string;
-    }>;
+    }[];
     if (applications.length === 0) continue;
 
     resolved += applications.length;

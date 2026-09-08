@@ -50,6 +50,7 @@ export default function Reviews() {
 
   useEffect(() => {
     if (!selectedOutreachId && reviewableOutreaches.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- first-load default from a resolved query; the organiser's own pick wins after
       setSelectedOutreachId(reviewableOutreaches[0]?.id);
     }
   }, [selectedOutreachId, reviewableOutreaches]);

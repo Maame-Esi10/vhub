@@ -53,7 +53,7 @@ export async function lookupSkillCache(
   if (error || !data) return result; // Cache read failure -- treat as "nothing cached", never throw.
 
   const wanted = new Set(pairs.map(pairKey));
-  for (const row of data as Array<{ skill_a: string; skill_b: string; is_match: boolean }>) {
+  for (const row of data as { skill_a: string; skill_b: string; is_match: boolean }[]) {
     const key = `${row.skill_a}::${row.skill_b}`;
     if (wanted.has(key)) result.set(key, row.is_match);
   }
@@ -67,7 +67,7 @@ export async function lookupSkillCache(
  */
 export async function upsertSkillCacheResults(
   admin: SupabaseClient,
-  results: ReadonlyArray<OrderedSkillPair & { isMatch: boolean }>
+  results: readonly (OrderedSkillPair & { isMatch: boolean })[]
 ): Promise<void> {
   if (results.length === 0) return;
   try {

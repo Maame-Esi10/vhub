@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Animated, Image, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/theme';
@@ -41,7 +41,9 @@ export interface FlyerBackgroundProps {
  * shipped before flyers existed.
  */
 export function FlyerBackground({ uri, style, children }: FlyerBackgroundProps) {
-  const fade = useRef(new Animated.Value(0)).current;
+  // Lazy `useState` rather than `useRef(...).current`: same single
+  // construction and same stable instance, without reading a ref during render.
+  const [fade] = useState(() => new Animated.Value(0));
   const [failed, setFailed] = useState(false);
   const showImage = !!uri && !failed;
 
