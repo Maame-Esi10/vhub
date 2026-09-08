@@ -17,13 +17,23 @@ import {
   wizardStateFromOutreach,
 } from '../outreachWizard';
 import type { OutreachWizardState, RoleDraft } from '../outreachWizard';
+import { dayStringsOf, inheritedDay, type OutreachDayDraft } from '@/lib/outreachDays';
 
 /** A date comfortably in the past, so it can never drift into being valid. */
 const PAST_DATE = '2020-03-01';
 const FUTURE_DATE = '2099-06-15';
 
+/**
+ * Days as the form holds them: a date with no hours of its own, which is the
+ * ordinary case and the only one these rules care about — validation is about
+ * WHICH days an outreach runs on, never what time each one starts.
+ */
+function days(...dates: string[]): OutreachDayDraft[] {
+  return dates.map(inheritedDay);
+}
+
 function stateWith(overrides: Partial<OutreachWizardState>): OutreachWizardState {
-  return { ...INITIAL_WIZARD_STATE, title: 'Screening day', days: [FUTURE_DATE], ...overrides };
+  return { ...INITIAL_WIZARD_STATE, title: 'Screening day', days: days(FUTURE_DATE), ...overrides };
 }
 
 describe('required skills are not optional', () => {
@@ -41,14 +51,14 @@ describe('required skills are not optional', () => {
   });
 
   it('applies when EDITING too, so an outreach posted before this rule gets repaired', () => {
-    const state = stateWith({ requiredSkills: [], days: [PAST_DATE] });
+    const state = stateWith({ requiredSkills: [], days: days(PAST_DATE) });
     expect(validateOutreachEdit(state, [PAST_DATE]).requiredSkills).toBeDefined();
   });
 });
 
 describe('validateOutreachEdit', () => {
   it('allows an outreach that already happened to be saved unchanged', () => {
-    const state = stateWith({ days: [PAST_DATE] });
+    const state = stateWith({ days: days(PAST_DATE) });
 
     // The wizard refuses this date, which is right when creating an event...
     expect(validateWizard(state).date).toBeDefined();
@@ -59,7 +69,7 @@ describe('validateOutreachEdit', () => {
   });
 
   it('still refuses to reschedule an event into the past', () => {
-    const state = stateWith({ days: [PAST_DATE] });
+    const state = stateWith({ days: days(PAST_DATE) });
 
     expect(validateOutreachEdit(state, [FUTURE_DATE]).date).toBeDefined();
   });
@@ -73,7 +83,7 @@ describe('validateOutreachEdit', () => {
   it('leaves every other rule intact', () => {
     const state = stateWith({ title: '   ', startTime: '14:00', endTime: '09:00' });
 
-    const errors = validateOutreachEdit(state, state.days);
+    const errors = validateOutreachEdit(state, dayStringsOf(state.days));
 
     expect(errors.title).toBeDefined();
     expect(errors.endTime).toBeDefined();
@@ -83,7 +93,7 @@ describe('validateOutreachEdit', () => {
 describe('firstDay', () => {
   it('is the earliest day, whatever order they were added in', () => {
     // outreaches.date is this value, and everything date-based still reads it.
-    expect(firstDay(stateWith({ days: ['2099-06-17', '2099-06-15', '2099-06-16'] }))).toBe(
+    expect(firstDay(stateWith({ days: days('2099-06-17', '2099-06-15', '2099-06-16') }))).toBe(
       '2099-06-15'
     );
   });
@@ -423,14 +433,30 @@ describe('wizardStateFromOutreach — days', () => {
       { day: '2026-09-02' },
     ]);
 
-    expect(state.days).toEqual(['2026-09-01', '2026-09-02', '2026-09-03']);
+    expect(dayStringsOf(state.days)).toEqual(['2026-09-01', '2026-09-02', '2026-09-03']);
+  });
+
+  it("carries each day's own hours, and keeps null meaning the event's hours", () => {
+    // Null is not "unset" here, it is the stored value for "runs to the same
+    // hours as the event". Turning it into an empty string would make every
+    // ordinary day look like an override that had been cleared.
+    const state = wizardStateFromOutreach(row, [], [
+      { day: '2026-09-01', start_time: null, end_time: null },
+      { day: '2026-09-02', start_time: '14:00:00', end_time: '19:30:00' },
+    ]);
+
+    expect(state.days[0]).toEqual({ day: '2026-09-01', startTime: null, endTime: null });
+    // Seconds trimmed, because that is what the time picker reads and writes.
+    expect(state.days[1]).toEqual({ day: '2026-09-02', startTime: '14:00', endTime: '19:30' });
   });
 
   it('falls back to the outreach date when the day rows have not loaded', () => {
     // Every outreach has at least one day row, so an empty list here means the
     // read failed rather than that the event has no days. Hydrating an empty
     // list would let a save wipe the real ones.
-    expect(wizardStateFromOutreach(row, [], []).days).toEqual(['2026-09-01']);
+    expect(wizardStateFromOutreach(row, [], []).days).toEqual([
+      { day: '2026-09-01', startTime: null, endTime: null },
+    ]);
   });
 });
 
@@ -444,7 +470,7 @@ describe('every field a published outreach needs is guarded', () => {
       region: 'Greater Accra',
       district: 'Ayawaso West',
       locationName: 'Korle Bu',
-      days: [FUTURE_DATE],
+      days: days(FUTURE_DATE),
       startTime: '09:00',
       endTime: '15:00',
       requiredSkills: ['Vital Signs'],

@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Badge, FlyerBackground, formatEventTimeRange } from '@/components/ui';
-import { formatDaySpan } from '@/lib/outreachDays';
+import { formatDaySpan, dayStringsOf } from '@/lib/outreachDays';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { ROLE_TYPES, VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import type { OutreachWizardState } from '@/components/organisation/outreachWizard';
@@ -97,7 +97,7 @@ export function OutreachPreviewCard({ state }: OutreachPreviewCardProps) {
             will.
           */}
           <Text style={styles.metaText}>
-            {state.days.length > 0 ? formatDaySpan(state.days) : 'No date set'}
+            {state.days.length > 0 ? formatDaySpan(dayStringsOf(state.days)) : 'No date set'}
             {timeRange ? ` · ${timeRange}` : ''}
           </Text>
         </View>

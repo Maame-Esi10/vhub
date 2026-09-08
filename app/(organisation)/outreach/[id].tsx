@@ -26,7 +26,7 @@ import {
   useOutreachApplications,
   useOutreachDays,
 } from '@/hooks';
-import { formatDaySpan, hasFirstDayArrived, lastDay } from '@/lib/outreachDays';
+import { formatDaySpan, hasFirstDayArrived, hoursVaryByDay, lastDay } from '@/lib/outreachDays';
 import { isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachStatus } from '@/types/database';
@@ -327,7 +327,18 @@ export default function OrganisationOutreachDetail() {
             }
           >
             {formatDaySpan(eventDayStrings) || formatEventDate(outreach.date)}
-            {timeRange ? ` · ${timeRange}` : ''}
+            {/*
+              The event's hours only where every day actually runs to them. A
+              day may have its own, and printing one range beside a four-day
+              span would then be wrong for one of those days. The organisation
+              set those hours themselves, so the honest summary names the
+              variation and the editor shows which day.
+            */}
+            {hoursVaryByDay(daysQuery.data ?? [], outreach)
+              ? ' · Hours vary by day'
+              : timeRange
+                ? ` · ${timeRange}`
+                : ''}
           </DetailRow>
           {place ? (
             <DetailRow

@@ -39,7 +39,7 @@ import {
   usePublicOrganisationProfile,
   useReleaseCommittedDay,
 } from '@/hooks';
-import { formatDaySpan } from '@/lib/outreachDays';
+import { formatDaySpan, hoursVaryByDay } from '@/lib/outreachDays';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
 
@@ -342,11 +342,24 @@ export default function OutreachDetail() {
                 // Oct 24" for the rest. It falls back to the outreach's own
                 // date if the day rows have not arrived yet, so this row is
                 // never blank.
+                //
+                // ONE RANGE ONLY WHEN THERE IS ONE. A day may run to hours of
+                // its own, and printing the event's beside a four-day span
+                // would then be a confident statement that is wrong for one of
+                // those days. Where they differ this says so and leaves the
+                // detail to the day list below, which reads each day's actual
+                // hours through dayStartTime/dayEndTime.
                 value: `${
                   days.length > 0
                     ? formatDaySpan(days.map((day) => day.day))
                     : formatEventDate(outreach.date)
-                }${timeRange ? ` · ${timeRange}` : ''}`,
+                }${
+                  hoursVaryByDay(days, outreach)
+                    ? ' · Hours vary by day'
+                    : timeRange
+                      ? ` · ${timeRange}`
+                      : ''
+                }`,
               },
               {
                 icon: 'account-multiple-outline',

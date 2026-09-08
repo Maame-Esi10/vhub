@@ -63,6 +63,110 @@ export function dayEndTime(day: DayLike, outreach: OutreachTimesLike): string | 
   return day.end_time ?? outreach.end_time;
 }
 
+/**
+ * One day as the organisation's FORM holds it, before it is a row.
+ *
+ * ONE STRUCTURE, NOT TWO. The obvious alternative was to keep the form's
+ * `days: string[]` and hang a separate `Record<day, hours>` beside it — and it
+ * is the same mistake this codebase refuses everywhere else (there is no
+ * `is_multi_role` boolean, no `is_multi_day` flag): two things that must agree
+ * eventually disagree, and here the disagreement would be a day removed from
+ * the list leaving its hours behind to be silently re-applied to a different
+ * day added later.
+ *
+ * `startTime`/`endTime` are NULL for the ordinary case, which is every day of
+ * almost every outreach: NULL means "the same hours as the event", exactly as
+ * the column does. They are only ever set when an organisation deliberately
+ * says one day runs differently.
+ */
+export interface OutreachDayDraft {
+  day: string;
+  startTime: string | null;
+  endTime: string | null;
+}
+
+/** Just the dates, chronological — for the validators and comparisons that only care which days. */
+export function dayStringsOf(days: readonly OutreachDayDraft[]): string[] {
+  return sortDayStrings(days.map((d) => d.day));
+}
+
+/** Chronological order for drafts. */
+export function sortDayDrafts(days: readonly OutreachDayDraft[]): OutreachDayDraft[] {
+  return [...days].sort((a, b) => a.day.localeCompare(b.day));
+}
+
+/** A day with no hours of its own — what adding a day to the form produces. */
+export function inheritedDay(day: string): OutreachDayDraft {
+  return { day, startTime: null, endTime: null };
+}
+
+/** True when this day runs to hours of its own rather than the event's. */
+export function hasOwnHours(draft: OutreachDayDraft): boolean {
+  return draft.startTime !== null || draft.endTime !== null;
+}
+
+/** Turns stored `outreach_days` rows into form drafts. */
+export function dayDraftsFromRows(rows: readonly DayLike[]): OutreachDayDraft[] {
+  return sortDayDrafts(
+    rows.map((row) => ({
+      day: row.day,
+      startTime: row.start_time ?? null,
+      endTime: row.end_time ?? null,
+    }))
+  );
+}
+
+/**
+ * The days whose hours differ from what is stored — the only ones that need
+ * writing back.
+ *
+ * Compares by DATE, not by row id, because the form does not carry ids and a
+ * day that survives an edit keeps its own row anyway. A day present in `next`
+ * but absent from `stored` is included whenever it has hours of its own: it is
+ * about to be inserted, and on the create path the first day is inserted by a
+ * trigger with no hours at all, so it always needs the follow-up write.
+ *
+ * A day whose override was CLEARED is included too, with nulls — otherwise
+ * removing an override would appear to work in the form and change nothing in
+ * the database.
+ */
+export function changedDayHours(
+  stored: readonly OutreachDayDraft[],
+  next: readonly OutreachDayDraft[]
+): OutreachDayDraft[] {
+  const before = new Map(stored.map((d) => [d.day, d]));
+  return sortDayDrafts(
+    next.filter((draft) => {
+      const previous = before.get(draft.day);
+      if (!previous) return hasOwnHours(draft);
+      return previous.startTime !== draft.startTime || previous.endTime !== draft.endTime;
+    })
+  );
+}
+
+/**
+ * True when the days do NOT all run to the same hours.
+ *
+ * The reader that has to exist because per-day hours can now be set. A summary
+ * line saying "Oct 3 - Oct 6 · 9:00 AM - 3:00 PM" is a statement about all four
+ * days, and it becomes a false one the moment a day overrides. Screens ask this
+ * before printing a single range, and say the hours vary instead.
+ *
+ * Compares the RESOLVED pair, not whether an override exists: a day that
+ * overrides with exactly the event's own hours varies from nothing, and
+ * announcing a variation nobody can see would be worse than saying nothing.
+ */
+export function hoursVaryByDay(
+  days: readonly DayLike[],
+  outreach: OutreachTimesLike
+): boolean {
+  if (days.length < 2) return false;
+  const pairs = new Set(
+    days.map((day) => `${dayStartTime(day, outreach) ?? ''}|${dayEndTime(day, outreach) ?? ''}`)
+  );
+  return pairs.size > 1;
+}
+
 /** Chronological order. Returns a new array; ISO dates sort correctly as strings. */
 export function sortDays<T extends DayLike>(days: readonly T[]): T[] {
   return [...days].sort((a, b) => a.day.localeCompare(b.day));

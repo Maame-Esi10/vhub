@@ -1,6 +1,14 @@
 import {
   MAX_OUTREACH_DAYS,
   addCalendarDays,
+  changedDayHours,
+  dayDraftsFromRows,
+  dayStringsOf,
+  hasOwnHours,
+  hoursVaryByDay,
+  inheritedDay,
+  sortDayDrafts,
+  type OutreachDayDraft,
   attendedRatio,
   calendarRange,
   isAnyDayToday,
@@ -392,5 +400,143 @@ describe('late-release standing escalates rather than punishing at once', () => 
   it('counts the release being made, not the ones behind it', () => {
     // Someone with one already behind them is about to make their second.
     expect(lateReleaseWarning(1)).toContain('2nd');
+  });
+});
+
+
+describe("day drafts — the form's shape for a day and its own hours", () => {
+  it('adds a day with no hours of its own, which is the ordinary case', () => {
+    expect(inheritedDay('2026-09-12')).toEqual({
+      day: '2026-09-12',
+      startTime: null,
+      endTime: null,
+    });
+    expect(hasOwnHours(inheritedDay('2026-09-12'))).toBe(false);
+  });
+
+  it('counts a day with only ONE of the two hours set as having its own', () => {
+    // A clinic that starts early and finishes when the event does is a real
+    // thing to describe, and it must not read as "no override" or the start
+    // would never be written.
+    expect(hasOwnHours({ day: '2026-09-12', startTime: '07:00', endTime: null })).toBe(true);
+    expect(hasOwnHours({ day: '2026-09-12', startTime: null, endTime: '21:00' })).toBe(true);
+  });
+
+  it('reads stored rows into drafts, chronologically, nulls preserved', () => {
+    expect(
+      dayDraftsFromRows([
+        { day: '2026-09-13', start_time: '14:00:00', end_time: null },
+        { day: '2026-09-12' },
+      ])
+    ).toEqual([
+      { day: '2026-09-12', startTime: null, endTime: null },
+      { day: '2026-09-13', startTime: '14:00:00', endTime: null },
+    ]);
+  });
+
+  it('pulls just the dates out, sorted, for the validators that only care which days', () => {
+    expect(
+      dayStringsOf([
+        inheritedDay('2026-09-13'),
+        { day: '2026-09-11', startTime: '08:00', endTime: '12:00' },
+      ])
+    ).toEqual(['2026-09-11', '2026-09-13']);
+  });
+
+  it('sorts drafts chronologically without disturbing their hours', () => {
+    const sorted = sortDayDrafts([
+      { day: '2026-09-13', startTime: '14:00', endTime: null },
+      { day: '2026-09-12', startTime: null, endTime: null },
+    ]);
+    expect(sorted.map((d) => d.day)).toEqual(['2026-09-12', '2026-09-13']);
+    expect(sorted.map((d) => d.startTime)).toEqual([null, '14:00']);
+  });
+});
+
+describe('changedDayHours — which days actually need writing back', () => {
+  const plainDay: OutreachDayDraft = { day: '2026-09-12', startTime: null, endTime: null };
+  const timedDay: OutreachDayDraft = { day: '2026-09-13', startTime: '14:00', endTime: '19:00' };
+  const stored: OutreachDayDraft[] = [plainDay, timedDay];
+
+  it('returns nothing when no day was re-timed', () => {
+    expect(changedDayHours(stored, stored)).toEqual([]);
+  });
+
+  it('returns a day whose hours were set', () => {
+    expect(
+      changedDayHours(stored, [
+        { day: '2026-09-12', startTime: '07:00', endTime: null },
+        timedDay,
+      ])
+    ).toEqual([{ day: '2026-09-12', startTime: '07:00', endTime: null }]);
+  });
+
+  it('returns a day whose override was CLEARED, carrying the nulls', () => {
+    // The case that would silently do nothing if cleared days were filtered
+    // out for having no hours: removing an override has to be written, or it
+    // works in the form and changes nothing in the database.
+    expect(changedDayHours(stored, [plainDay, inheritedDay('2026-09-13')])).toEqual([
+      { day: '2026-09-13', startTime: null, endTime: null },
+    ]);
+  });
+
+  it('includes a BRAND NEW day only when it has hours of its own', () => {
+    // A new day with no override needs no follow-up write: it is inserted with
+    // null hours, which is what inheriting means.
+    expect(changedDayHours(stored, [...stored, inheritedDay('2026-09-14')])).toEqual([]);
+    expect(
+      changedDayHours(stored, [...stored, { day: '2026-09-14', startTime: '09:00', endTime: null }])
+    ).toEqual([{ day: '2026-09-14', startTime: '09:00', endTime: null }]);
+  });
+
+  it('ignores a day that has been removed from the list', () => {
+    // Removal is the day set changing, which save_outreach owns. Sending hours
+    // for a day about to be deleted would be a write against nothing.
+    expect(changedDayHours(stored, [plainDay])).toEqual([]);
+  });
+
+  it('covers the create path, where nothing is stored yet', () => {
+    expect(
+      changedDayHours([], [
+        inheritedDay('2026-09-12'),
+        { day: '2026-09-13', startTime: '14:00', endTime: '19:00' },
+      ])
+    ).toEqual([{ day: '2026-09-13', startTime: '14:00', endTime: '19:00' }]);
+  });
+});
+
+describe('hoursVaryByDay — when one summary range would be a lie', () => {
+  const outreach = { start_time: '09:00:00', end_time: '15:00:00' };
+
+  it('is false for a single day, whatever it says', () => {
+    // One day cannot vary from anything, and its own hours ARE the summary.
+    expect(hoursVaryByDay([{ day: '2026-09-12', start_time: '07:00:00' }], outreach)).toBe(false);
+  });
+
+  it('is false when every day inherits', () => {
+    expect(hoursVaryByDay([{ day: '2026-09-12' }, { day: '2026-09-13' }], outreach)).toBe(false);
+  });
+
+  it('is true when one day overrides', () => {
+    expect(
+      hoursVaryByDay(
+        [{ day: '2026-09-12' }, { day: '2026-09-13', start_time: '13:00:00' }],
+        outreach
+      )
+    ).toBe(true);
+  });
+
+  it('compares the RESOLVED hours, so an override matching the event varies from nothing', () => {
+    // Otherwise a screen would announce a variation nobody could see, which is
+    // worse than saying nothing at all.
+    expect(
+      hoursVaryByDay(
+        [
+          { day: '2026-09-12' },
+          { day: '2026-09-13', start_time: '09:00:00', end_time: '15:00:00' },
+        ],
+        outreach
+      )
+    ).toBe(false);
   });
 });

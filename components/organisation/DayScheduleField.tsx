@@ -3,14 +3,19 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { parseCalendarDate } from '@/components/ui/dateUtils';
+import { formatEventTimeRange, parseCalendarDate } from '@/components/ui/dateUtils';
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import {
   MAX_OUTREACH_DAYS,
+  dayStringsOf,
   formatDayShort,
   formatDaySpan,
+  hasOwnHours,
+  inheritedDay,
   nextDayAfter,
-  sortDayStrings,
+  sortDayDrafts,
   todayIso,
+  type OutreachDayDraft,
 } from '@/lib/outreachDays';
 
 /**
@@ -26,9 +31,15 @@ import {
  */
 
 export interface DayScheduleFieldProps {
-  /** Every day the outreach runs on, `YYYY-MM-DD`. May be empty while the form is new. */
-  days: string[];
-  onChange: (next: string[]) => void;
+  /** Every day the outreach runs on, each with its own hours. May be empty while the form is new. */
+  days: OutreachDayDraft[];
+  onChange: (next: OutreachDayDraft[]) => void;
+  /**
+   * The event's own hours, 'HH:MM', shown as what a day inherits when it sets
+   * none of its own. Empty while the organisation has not chosen them yet.
+   */
+  eventStartTime?: string;
+  eventEndTime?: string;
   error?: string;
   /**
    * False when EDITING, where a day already in the past is an ordinary thing to
@@ -61,40 +72,62 @@ export interface DayScheduleFieldProps {
  * day in between, which is wrong for the scattered case and is the more common
  * of the two here.
  *
- * There is no per-day time control. `outreach_days.start_time`/`end_time` exist
- * and mean "override the event's hours", but nothing yet needs them and a
- * per-day time picker on a 20-row list would be a screen of its own. Left NULL,
- * every day inherits the outreach's hours, which is what an organisation
- * running the same clinic each morning means.
+ * PER-DAY HOURS ARE OPT-IN AND HIDDEN UNTIL ASKED FOR. `outreach_days`
+ * .start_time/.end_time have always meant "override the event's hours", with
+ * NULL meaning inherit; until now nothing could set them. The obvious build —
+ * a start and an end picker on every chip — was rejected: on a twenty-day
+ * campaign it is forty controls for a case that almost never arises, and it
+ * pushes every organisation to fill in hours they had no intention of varying.
+ *
+ * So a day is a chip until it is tapped, and tapping one opens a single panel
+ * for that day alone. The panel names the hours it will inherit, so the
+ * ordinary answer is visible without being editable by accident, and clearing
+ * an override is one button rather than blanking two fields.
  */
 export function DayScheduleField({
   days,
   onChange,
+  eventStartTime = '',
+  eventEndTime = '',
   error,
   minimumToday = true,
   lockedDays = [],
 }: DayScheduleFieldProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [duplicate, setDuplicate] = useState<string | null>(null);
+  /** Which day's hours panel is open, by date. Null when none is. */
+  const [openDay, setOpenDay] = useState<string | null>(null);
 
-  const sorted = sortDayStrings(days);
+  const sorted = sortDayDrafts(days);
+  const dayStrings = dayStringsOf(days);
   const atCap = sorted.length >= MAX_OUTREACH_DAYS;
-  const nextDay = nextDayAfter(sorted);
+  const nextDay = nextDayAfter(dayStrings);
+  const editing = sorted.find((draft) => draft.day === openDay) ?? null;
 
   function addDay(day: string) {
-    if (sorted.includes(day)) {
+    if (dayStrings.includes(day)) {
       // Named rather than silently ignored: pressing "add" and seeing nothing
       // happen reads as a broken button.
       setDuplicate(day);
       return;
     }
     setDuplicate(null);
-    onChange(sortDayStrings([...sorted, day]));
+    onChange(sortDayDrafts([...sorted, inheritedDay(day)]));
   }
 
   function removeDay(day: string) {
     setDuplicate(null);
-    onChange(sorted.filter((existing) => existing !== day));
+    // The panel closes with the day it belongs to, or it would go on editing
+    // hours for a day that is no longer on the list.
+    if (openDay === day) setOpenDay(null);
+    onChange(sorted.filter((existing) => existing.day !== day));
+  }
+
+  /** Replaces one day's hours in place, leaving every other day untouched. */
+  function setHours(day: string, startTime: string | null, endTime: string | null) {
+    onChange(
+      sorted.map((draft) => (draft.day === day ? { day, startTime, endTime } : draft))
+    );
   }
 
   function handlePicked(event: DateTimePickerEvent, picked?: Date) {
@@ -118,12 +151,48 @@ export function DayScheduleField({
 
       {sorted.length > 0 ? (
         <View style={styles.chips}>
-          {sorted.map((day, index) => {
+          {sorted.map((draft, index) => {
+            const day = draft.day;
             const locked = lockedDays.includes(day);
+            const own = hasOwnHours(draft);
+            const isOpen = openDay === day;
             return (
-              <View key={day} style={[styles.chip, locked && styles.chipLocked]}>
+              <View
+                key={day}
+                style={[
+                  styles.chip,
+                  locked && styles.chipLocked,
+                  isOpen && styles.chipOpen,
+                ]}
+              >
                 <Text style={styles.chipIndex}>{index + 1}</Text>
-                <Text style={styles.chipLabel}>{formatDayShort(day)}</Text>
+                {/*
+                  The label itself is the control that opens the hours panel.
+                  Deliberately NOT the whole chip: the remove cross sits inside
+                  it, and a parent Pressable wrapping a child Pressable makes a
+                  mis-tap on the cross open the panel instead of removing the
+                  day.
+                */}
+                <Pressable
+                  onPress={() => setOpenDay(isOpen ? null : day)}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isOpen
+                      ? `Close hours for ${formatDayShort(day)}`
+                      : `Set hours for ${formatDayShort(day)}`
+                  }
+                  style={styles.chipLabelPress}
+                >
+                  <Text style={styles.chipLabel}>{formatDayShort(day)}</Text>
+                  {own ? (
+                    <MaterialCommunityIcons
+                      name="clock-outline"
+                      size={13}
+                      color={colors.primary}
+                    />
+                  ) : null}
+                </Pressable>
                 {locked ? (
                   <MaterialCommunityIcons name="lock-outline" size={14} color={colors.textSecondary} />
                 ) : (
@@ -143,6 +212,74 @@ export function DayScheduleField({
       ) : (
         <Text style={styles.empty}>No days picked yet.</Text>
       )}
+
+      {sorted.length > 0 && !editing ? (
+        <Text style={styles.hoursHint}>
+          Every day runs to the event&apos;s hours. Tap a day if one of them runs to different
+          ones.
+        </Text>
+      ) : null}
+
+      {editing ? (
+        <View style={styles.hoursPanel}>
+          <View style={styles.hoursHeader}>
+            <Text style={styles.hoursTitle}>{formatDayShort(editing.day)}</Text>
+            <Pressable
+              onPress={() => setOpenDay(null)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <MaterialCommunityIcons name="close" size={18} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+
+          <Text style={styles.hoursInherited}>
+            {hasOwnHours(editing)
+              ? 'This day runs to its own hours.'
+              : `This day runs to the event's hours${
+                  inheritedLabel(eventStartTime, eventEndTime)
+                    ? ` — ${inheritedLabel(eventStartTime, eventEndTime)}`
+                    : ''
+                }. Set a start or an end below only if it differs.`}
+          </Text>
+
+          <View style={styles.hoursFields}>
+            <View style={styles.hoursField}>
+              <DateTimeField
+                label="Starts"
+                mode="time"
+                value={editing.startTime ?? ''}
+                onChange={(next) => setHours(editing.day, next || null, editing.endTime)}
+                placeholder={eventStartTime ? formatEventTimeRange(eventStartTime, null) ?? 'Event hours' : 'Event hours'}
+                accessibilityLabel={`Start time for ${formatDayShort(editing.day)}`}
+              />
+            </View>
+            <View style={styles.hoursField}>
+              <DateTimeField
+                label="Ends"
+                mode="time"
+                value={editing.endTime ?? ''}
+                onChange={(next) => setHours(editing.day, editing.startTime, next || null)}
+                placeholder={eventEndTime ? formatEventTimeRange(eventEndTime, null) ?? 'Event hours' : 'Event hours'}
+                accessibilityLabel={`End time for ${formatDayShort(editing.day)}`}
+              />
+            </View>
+          </View>
+
+          {hasOwnHours(editing) ? (
+            <Pressable
+              onPress={() => setHours(editing.day, null, null)}
+              accessibilityRole="button"
+              accessibilityLabel={`Use the event's hours for ${formatDayShort(editing.day)}`}
+              style={styles.hoursClear}
+            >
+              <MaterialCommunityIcons name="undo-variant" size={15} color={colors.textPrimary} />
+              <Text style={styles.hoursClearLabel}>Use the event&apos;s hours</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.actions}>
         <Pressable
@@ -175,7 +312,7 @@ export function DayScheduleField({
         ) : null}
       </View>
 
-      {sorted.length > 1 ? <Text style={styles.summary}>{formatDaySpan(sorted)}</Text> : null}
+      {sorted.length > 1 ? <Text style={styles.summary}>{formatDaySpan(dayStrings)}</Text> : null}
 
       {lockedDays.length > 0 ? (
         <Text style={styles.lockedNote}>
@@ -201,6 +338,18 @@ export function DayScheduleField({
       ) : null}
     </View>
   );
+}
+
+/**
+ * The event's own hours as one readable range, or empty when it has none yet.
+ *
+ * Empty is an ordinary state on the create form, where the days are picked
+ * before the times. The panel then simply does not name what would be
+ * inherited, rather than saying "inherits —".
+ */
+function inheritedLabel(start: string, end: string): string {
+  if (!start && !end) return '';
+  return formatEventTimeRange(start || null, end || null) ?? '';
 }
 
 /** Local calendar fields, never toISOString() — that would shift the day in +/- UTC zones. */
@@ -254,6 +403,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
   },
+  chipOpen: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  chipLabelPress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   chipLocked: {
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
@@ -274,6 +432,63 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     marginTop: spacing.xs,
+  },
+  hoursHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  hoursPanel: {
+    marginTop: spacing.base,
+    marginBottom: spacing.xs,
+    padding: spacing.base,
+    gap: spacing.base,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  hoursHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  hoursTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  hoursInherited: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
+  },
+  hoursFields: {
+    flexDirection: 'row',
+    gap: spacing.base,
+  },
+  hoursField: {
+    flex: 1,
+  },
+  hoursClear: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: spacing.xs,
+    minHeight: 40,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  hoursClearLabel: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textPrimary,
   },
   actions: {
     flexDirection: 'row',

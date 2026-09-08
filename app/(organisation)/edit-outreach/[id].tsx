@@ -54,12 +54,13 @@ import {
   useOutreachApplications,
   useOutreachCommitments,
   useOutreachDays,
+  useSetOutreachDayHours,
   useOutreachImages,
   useOutreachRoles,
   useReorderOutreachImages,
   useSaveOutreach,
 } from '@/hooks';
-import { sortDayStrings } from '@/lib/outreachDays';
+import { changedDayHours, dayDraftsFromRows, dayStringsOf } from '@/lib/outreachDays';
 // Direct import, not the hooks barrel: this reaches the native picker
 // modules. See the note in lib/cloudinary.ts.
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
@@ -95,6 +96,7 @@ export default function EditOutreach() {
   const commitmentsQuery = useOutreachCommitments(outreachId);
   const applicationsQuery = useOutreachApplications(outreachId);
   const saveOutreach = useSaveOutreach();
+  const setDayHours = useSetOutreachDayHours();
   const flyerUpload = useFlyerUpload();
 
   /*
@@ -159,6 +161,9 @@ export default function EditOutreach() {
   const storedRoles = useMemo(() => rolesQuery.data ?? [], [rolesQuery.data]);
   const storedDays = useMemo(() => daysQuery.data ?? [], [daysQuery.data]);
   const storedDayStrings = useMemo(() => storedDays.map((day) => day.day), [storedDays]);
+  // The same rows as form drafts, so a day's stored hours can be compared with
+  // what the organisation has just set without re-reading the column shape.
+  const storedDayDrafts = useMemo(() => dayDraftsFromRows(storedDays), [storedDays]);
 
   // Recomputed every render once Save has been attempted, so correcting a field
   // clears its message immediately instead of at the next tap of Save.
@@ -401,7 +406,15 @@ export default function EditOutreach() {
   // one role and a database holding none are in agreement, not conflict.
   const payload = toStoragePayload(state);
   const roleListChanged = rolesChanged(storedRoleDrafts, payload.roles);
-  const dayListChanged = !!state && daysChanged(storedDayStrings, state.days);
+  const dayListChanged = !!state && daysChanged(storedDayStrings, dayStringsOf(state.days));
+  /**
+   * The days whose OWN hours changed — a different question from whether the
+   * day set changed, and answered separately because the two are written by
+   * different statements. Re-timing Saturday touches no day but Saturday, and
+   * must not drag the whole day set through a delete-and-reinsert that
+   * `application_days` cascades from.
+   */
+  const dayHourChanges = state ? changedDayHours(storedDayDrafts, state.days) : [];
 
   /**
    * Places can never fall below the volunteers already accepted — the database
@@ -531,8 +544,40 @@ export default function EditOutreach() {
         // common save. Sending an unchanged list would delete and re-insert
         // rows for no reason — and `application_days` cascades from them, so
         // that would destroy every commitment on the event.
-        days: dayListChanged ? sortDayStrings(state.days) : null,
+        days: dayListChanged ? dayStringsOf(state.days) : null,
       });
+
+      /*
+        Per-day hours, AFTER the transaction and only for the days that changed.
+
+        Not folded into `save_outreach()`, and that is the same call the gallery
+        makes: the function is one transaction because `role_type` and
+        `slots_total` are DERIVED from the role rows, so a half-applied role
+        write leaves an outreach enforcing a requirement it no longer states.
+        Nothing on `outreaches` is derived from a day's hours — they are an
+        override, read through `dayStartTime`/`dayEndTime` — so a failure here
+        leaves the days inheriting the event's hours, which is visible on the
+        screen and is what they did a moment ago. Widening the RPC's signature
+        to carry them would be a migration, and a gated one, for a write with
+        nothing to keep in step.
+
+        It runs after the save rather than before because a day added in this
+        very edit does not exist until `save_outreach` has inserted it.
+
+        Surfaced, not swallowed: the organisation set those hours deliberately.
+      */
+      if (dayHourChanges.length > 0) {
+        try {
+          await setDayHours.mutateAsync({ outreachId: outreach.id, days: dayHourChanges });
+        } catch (error) {
+          setSaveError(
+            error instanceof Error
+              ? error.message
+              : 'Your changes saved, but the hours for individual days did not. Try setting them again.'
+          );
+          return;
+        }
+      }
 
       // Confirmation belongs on the destination, not here: the organisation
       // asked to be returned to the event, and a message on the screen they
@@ -699,12 +744,16 @@ export default function EditOutreach() {
               <DayScheduleField
                 days={state.days}
                 onChange={(next) => update('days', next)}
+                eventStartTime={state.startTime}
+                eventEndTime={state.endTime}
                 error={errors.date}
                 minimumToday={false}
                 lockedDays={committedDayDates}
               />
             </View>
-            <Text style={styles.timesHint}>These hours apply to every day of the outreach.</Text>
+            <Text style={styles.timesHint}>
+              These are the hours for every day, unless you set different ones on a day above.
+            </Text>
             <View style={styles.timeRow}>
               <View style={styles.timeField}>
                 <DateTimeField

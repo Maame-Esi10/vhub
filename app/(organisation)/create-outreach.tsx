@@ -49,11 +49,12 @@ import { SKILL_CATEGORIES } from '@/constants/skills';
 import {
   MAX_GALLERY_IMAGES,
   useAddOutreachDays,
+  useSetOutreachDayHours,
   useAddOutreachImages,
   useCreateOutreach,
   useReplaceOutreachRoles,
 } from '@/hooks';
-import { sortDayStrings } from '@/lib/outreachDays';
+import { hasOwnHours, sortDayDrafts } from '@/lib/outreachDays';
 // Direct import, not the hooks barrel: this reaches the native picker
 // modules. See the note in lib/cloudinary.ts.
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
@@ -74,6 +75,7 @@ export default function CreateOutreach() {
   const organisationId = useAuthStore((s) => s.user)?.id;
   const createOutreach = useCreateOutreach();
   const addDays = useAddOutreachDays();
+  const setDayHours = useSetOutreachDayHours();
   const replaceRoles = useReplaceOutreachRoles();
   const flyerUpload = useFlyerUpload();
   const galleryUpload = useGalleryImageUpload();
@@ -250,7 +252,7 @@ export default function CreateOutreach() {
     // `outreaches.date` is the FIRST day and nothing else. The remaining days
     // are written below, once the outreach has an id to hang them on, and the
     // database re-derives this column from them by trigger.
-    const days = sortDayStrings(state.days);
+    const days = sortDayDrafts(state.days);
 
     createOutreach.mutate(
       {
@@ -290,6 +292,41 @@ export default function CreateOutreach() {
               );
               setRoleError(
                 'The outreach was saved, but only its first day was. Open it from the dashboard and add the other days again.'
+              );
+              return;
+            }
+          }
+
+          /*
+            Per-day hours, for the days the organisation gave their own.
+
+            Written for EVERY overridden day, including days 2..n whose hours
+            already went in with the insert above — re-stating them is a no-op
+            update and means there is one place that owns this, rather than a
+            rule about which day was created by which path. Day ONE genuinely
+            needs it: `trg_outreaches_default_day` writes that row inside the
+            outreach's own transaction and always with null hours, so it is the
+            one day an override cannot ride along with.
+
+            Nearly always an empty list, and therefore no request at all.
+
+            Best-effort with a message rather than a block: nothing on the
+            outreach is derived from a day's hours, so a failure here leaves
+            every day inheriting the event's — which is visible on the screen,
+            fixable in the editor, and is the state the outreach was in a moment
+            before.
+          */
+          const ownHours = days.filter(hasOwnHours);
+          if (ownHours.length > 0) {
+            try {
+              await setDayHours.mutateAsync({ outreachId: outreach.id, days: ownHours });
+            } catch (error) {
+              console.warn(
+                '[create-outreach] outreach saved but its per-day hours did not:',
+                error instanceof Error ? error.message : error
+              );
+              setRoleError(
+                "The outreach was saved, but the hours you set for individual days were not. Open it from the dashboard and set them again — every day is currently running to the event's hours."
               );
               return;
             }
@@ -551,11 +588,13 @@ export default function CreateOutreach() {
                 <DayScheduleField
                   days={state.days}
                   onChange={(next) => update('days', next)}
+                  eventStartTime={state.startTime}
+                  eventEndTime={state.endTime}
                   error={errors.date}
                 />
               </View>
               <Text style={styles.timesHint}>
-                These hours apply to every day of the outreach.
+                These are the hours for every day, unless you set different ones on a day above.
               </Text>
               <View style={styles.timeRow}>
                 <View style={styles.timeField} onLayout={captureFieldTop('startTime')}>

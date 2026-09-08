@@ -3,7 +3,13 @@ import type { ExperienceLevel, OutreachRoleType, VolunteerCategory } from '@/typ
 // with no UI in it, and the barrel's first export pulls in React Native — which
 // made the module unloadable in Jest, whose config here has no RN preset.
 import { isTimeAfter, parseClockTime } from '@/components/ui/dateUtils';
-import { sortDayStrings, validateDays } from '@/lib/outreachDays';
+import {
+  dayDraftsFromRows,
+  dayStringsOf,
+  sortDayStrings,
+  validateDays,
+  type OutreachDayDraft,
+} from '@/lib/outreachDays';
 
 /**
  * One role the outreach is asking for, as the form holds it.
@@ -60,8 +66,15 @@ export interface OutreachWizardState {
    * under-subscription stages and the lifecycle close all still work untouched.
    * The form never writes that column's value itself beyond sending the first
    * day; see `firstDay`.
+   *
+   * Each entry carries its OWN hours as well as its date, null meaning "the
+   * same hours as the event" exactly as `outreach_days.start_time` does. They
+   * live on the day rather than in a map beside the list for the reason stated
+   * on `OutreachDayDraft`: two structures that must agree eventually will not,
+   * and here the failure would be a removed day's hours quietly re-attaching
+   * themselves to a different day added later.
    */
-  days: string[];
+  days: OutreachDayDraft[];
   startTime: string;
   endTime: string;
   region: string | null;
@@ -148,7 +161,7 @@ export type WizardFieldError = Partial<
  * them.
  */
 export function firstDay(state: OutreachWizardState): string {
-  return sortDayStrings(state.days)[0] ?? '';
+  return dayStringsOf(state.days)[0] ?? '';
 }
 
 /** Validates the fields the spec calls out explicitly: title, days, time ordering, slots. */
@@ -162,7 +175,7 @@ export function validateWizard(state: OutreachWizardState): WizardFieldError {
   // One rule for the whole day list rather than one for a scalar date: an
   // outreach with no days, a duplicate day or a day in the past are all the
   // same class of mistake and are named by `validateDays`.
-  const dayError = validateDays(state.days, { requireFuture: true });
+  const dayError = validateDays(dayStringsOf(state.days), { requireFuture: true });
   if (dayError) {
     errors.date = dayError;
   }
@@ -410,8 +423,8 @@ export function validateOutreachEdit(
   // set is untouched. A list that is still malformed — empty, duplicated,
   // unparsable — is an error whatever its history, so it is re-checked without
   // the future rule rather than simply dropped.
-  if (errors.date && !daysChanged(originalDays, state.days)) {
-    const stillWrong = validateDays(state.days, { requireFuture: false });
+  if (errors.date && !daysChanged(originalDays, dayStringsOf(state.days))) {
+    const stillWrong = validateDays(dayStringsOf(state.days), { requireFuture: false });
     if (stillWrong) {
       errors.date = stillWrong;
     } else {
@@ -468,12 +481,22 @@ export function wizardStateFromOutreach(
    * which case the outreach's own `date` stands in, which is the one day it is
    * guaranteed to have.
    */
-  days: { day: string }[] = []
+  days: { day: string; start_time?: string | null; end_time?: string | null }[] = []
 ): OutreachWizardState {
   return {
     title: outreach.title,
     description: outreach.description ?? '',
-    days: days.length > 0 ? sortDayStrings(days.map((row) => row.day)) : [outreach.date],
+    // A day's own hours come through as they are stored, seconds trimmed to
+    // match what the time picker reads and writes -- the same correction
+    // `startTime`/`endTime` below have always needed.
+    days:
+      days.length > 0
+        ? dayDraftsFromRows(days).map((draft) => ({
+            day: draft.day,
+            startTime: trimClockSecondsOrNull(draft.startTime),
+            endTime: trimClockSecondsOrNull(draft.endTime),
+          }))
+        : [{ day: outreach.date, startTime: null, endTime: null }],
     // The pickers read and write 'HH:MM'; Postgres `time` comes back as
     // 'HH:MM:SS', and the extra seconds would fail parseClockTime on save.
     startTime: trimClockSeconds(outreach.start_time),
@@ -594,6 +617,18 @@ export function toStoragePayload(state: OutreachWizardState): OutreachStoragePay
 
 function trimClockSeconds(time: string | null): string {
   if (!time) return '';
+  return time.slice(0, 5);
+}
+
+/**
+ * The same trim for a day's OWN hours, where the absence of a value is
+ * meaningful and must stay null rather than becoming an empty string. On the
+ * outreach itself an empty string is the form's "not set"; on a day, null is
+ * the database's "inherit the event's hours", and collapsing the two would make
+ * every ordinary day look like a cleared override.
+ */
+function trimClockSecondsOrNull(time: string | null): string | null {
+  if (!time) return null;
   return time.slice(0, 5);
 }
 

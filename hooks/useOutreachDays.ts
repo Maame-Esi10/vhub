@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { outreachKeys } from '@/hooks/useOutreaches';
 import { scoreEventKeys } from '@/hooks/useScoreEvents';
 import { recordLateRelease } from '@/lib/api-client';
-import { sortDayStrings, sortDays } from '@/lib/outreachDays';
+import { sortDayStrings, sortDays, type OutreachDayDraft } from '@/lib/outreachDays';
 import type { OutreachDay } from '@/types/database';
 
 export const outreachDayKeys = {
@@ -80,8 +80,11 @@ export function useOutreachDaysForMany(outreachIds: readonly string[]) {
 
 export interface AddOutreachDaysParams {
   outreachId: string;
-  /** Every day the outreach runs on, first day included. Already-present days are skipped. */
-  days: string[];
+  /**
+   * Every day the outreach runs on, first day included, each with its own
+   * hours. Already-present days are skipped.
+   */
+  days: OutreachDayDraft[];
 }
 
 /**
@@ -106,8 +109,22 @@ export function useAddOutreachDays() {
     mutationFn: async (params: AddOutreachDaysParams): Promise<void> => {
       if (params.days.length === 0) return;
 
+      // Hours ride along on the INSERT, so a day that runs to its own goes in
+      // complete. `start_time` and `end_time` are both in the INSERT grant list
+      // (see 20260818_multi_day_app_support.sql), and null is the ordinary
+      // value -- it is what "inherit the event's hours" is stored as.
+      //
+      // This does NOT cover the FIRST day. That row is written by
+      // `trg_outreaches_default_day` in the same transaction as the outreach
+      // itself, always with null hours, so an override on day one is applied
+      // afterwards by `useSetOutreachDayHours`.
       const { error } = await supabase.from('outreach_days').upsert(
-        params.days.map((day) => ({ outreach_id: params.outreachId, day })),
+        params.days.map((draft) => ({
+          outreach_id: params.outreachId,
+          day: draft.day,
+          start_time: draft.startTime,
+          end_time: draft.endTime,
+        })),
         { onConflict: 'outreach_id,day', ignoreDuplicates: true }
       );
 
@@ -120,6 +137,67 @@ export function useAddOutreachDays() {
       // `outreaches.date` is re-derived as the first day by trigger, so every
       // list and card that shows a date moves with this write.
       queryClient.invalidateQueries({ queryKey: outreachKeys.all });
+    },
+  });
+}
+
+export interface SetOutreachDayHoursParams {
+  outreachId: string;
+  /**
+   * Only the days whose hours have actually changed — `changedDayHours()`
+   * produces exactly this list. Null on either field means "inherit the
+   * event's hours", and clearing an override is sending nulls, not omitting
+   * the day.
+   */
+  days: OutreachDayDraft[];
+}
+
+/**
+ * Writes a day's own hours, for the days that have any.
+ *
+ * WHY IT IS A SEPARATE WRITE FROM `save_outreach()`, and why that is acceptable
+ * here when it was not for the roles. `save_outreach` exists because
+ * `outreaches.role_type` and `slots_total` are DERIVED from the role rows, so a
+ * role write that failed after the details had been saved left an outreach
+ * describing a requirement it no longer enforced. Nothing on `outreaches` is
+ * derived from a day's hours: they are an override read through `dayStartTime`
+ * / `dayEndTime`, and a write that fails leaves every day inheriting the
+ * event's hours — which is visible on the screen and is exactly the state the
+ * outreach was in a moment earlier. The same argument the gallery makes.
+ *
+ * ONE UPDATE PER DAY, NOT AN UPSERT. `.upsert(..., { onConflict:
+ * 'outreach_id,day' })` compiles to `ON CONFLICT DO UPDATE SET` over every
+ * payload column, the conflict columns included — and `outreach_id` is
+ * deliberately absent from `outreach_days`' UPDATE grant list, because a day
+ * may be re-timed but never moved to another event. The upsert would therefore
+ * fail with `permission denied for table outreach_days` on a call that looks
+ * entirely reasonable. See the `.upsert()` rule in CLAUDE.md.
+ *
+ * The loop is bounded by how many days an organisation actually re-timed, which
+ * is nearly always none and never more than MAX_OUTREACH_DAYS.
+ */
+export function useSetOutreachDayHours() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: SetOutreachDayHoursParams): Promise<void> => {
+      for (const draft of params.days) {
+        const { error } = await supabase
+          .from('outreach_days')
+          .update({ start_time: draft.startTime, end_time: draft.endTime })
+          .eq('outreach_id', params.outreachId)
+          .eq('day', draft.day);
+
+        if (error) {
+          throw new Error(error.message || 'Could not save the hours for one of the days.');
+        }
+      }
+    },
+    onSuccess: (_result, params) => {
+      queryClient.invalidateQueries({ queryKey: outreachDayKeys.byOutreach(params.outreachId) });
+      // Nothing on `outreaches` moves with this, but the detail and feed cards
+      // read the day rows to show a span and its hours.
+      queryClient.invalidateQueries({ queryKey: outreachDayKeys.all });
     },
   });
 }

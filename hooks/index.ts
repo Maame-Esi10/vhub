@@ -142,6 +142,7 @@ export {
   useOutreachDaysForMany,
   useDayCoverageForMany,
   useAddOutreachDays,
+  useSetOutreachDayHours,
   useApplicationDays,
   useApplicationDaysForMany,
   useMyLateReleaseCount,

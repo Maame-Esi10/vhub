@@ -4199,3 +4199,113 @@ people's rows.
 `(user_id, created_at desc)` index, so it is a sequential scan. That is accepted:
 it runs once a day, off every user's request path, and nobody waits on it.
 Adding an index would be a gated schema change for a job with no reader.
+
+## Per-day hours: the columns that had never had a writer (2026-09-08)
+
+**Build-queue item 11.** `outreach_days.start_time` and `end_time` have existed
+since the multi-day migration in August, and have always meant "this day runs to
+its own hours" with NULL meaning "the same as the event". `dayStartTime()` and
+`dayEndTime()` have always read them, and the day picker and the day-release
+sheet have always displayed them. **Nothing in the app could ever set them.** A
+campaign whose Saturday ran a half day could describe every day as running the
+same hours or say nothing at all.
+
+**No migration.** The columns exist, and both are already in `outreach_days`'
+INSERT and UPDATE grant lists (`20260818_multi_day_app_support.sql`). This is
+entirely app-side work: `lib/outreachDays.ts`, the day field, the two
+organisation forms, one new hook, and two detail screens.
+
+### The one design decision that mattered: one structure, not two
+
+The form used to hold `days: string[]`. The obvious way to add hours was to
+leave that alone and hang a `Record<day, hours>` beside it. **That is the same
+mistake this project refuses everywhere else** — there is no `is_multi_role`
+boolean, no `is_multi_day` flag, for exactly this reason: two things that must
+agree will eventually disagree. Here the disagreement has a specific and nasty
+shape. Remove a day from the list and its hours stay behind in the map; add a
+different day later and, depending on how the map is keyed, those orphaned hours
+silently apply to it. Nobody would connect the two actions.
+
+So a day in the form is now one object — `OutreachDayDraft { day, startTime,
+endTime }`. Removing the day removes its hours because they are the same value.
+
+**NULL is not "unset" and must never become an empty string.** On the outreach
+itself, `''` is the form's way of saying no time has been chosen. On a day, NULL
+is the database's way of saying "run to the event's hours" — the ordinary state
+of every day of almost every outreach. Flattening one into the other would make
+every normal day look like an override that had been deliberately cleared.
+`trimClockSecondsOrNull` exists solely to keep them apart.
+
+### Why the control is hidden until it is asked for
+
+The straightforward build is a start and an end picker on every day chip. On a
+twenty-day campaign that is forty controls, for a case that almost never arises,
+and — worse — it invites every organisation to fill in hours they had no
+intention of varying. A day is therefore a chip until it is tapped, and tapping
+one opens a panel for that day alone. The panel names the hours the day will
+inherit, so the ordinary answer is visible without being editable by accident,
+and clearing an override is one button rather than blanking two fields.
+
+The label inside the chip is the control that opens the panel, not the whole
+chip. The remove cross lives inside the chip too, and a Pressable wrapping
+another Pressable turns a mis-tap on the cross into "open the hours panel".
+
+### Why the write is separate from `save_outreach()`
+
+`save_outreach()` is one transaction because `outreaches.role_type` and
+`slots_total` are DERIVED from the role rows: a role write that failed after the
+details had been saved left an outreach enforcing a requirement it no longer
+stated. **Nothing on `outreaches` is derived from a day's hours.** They are an
+override, read through `dayStartTime`/`dayEndTime`, and a write that fails
+leaves every day inheriting the event's hours — which is visible on the screen,
+fixable in the editor, and is exactly the state the outreach was in a moment
+earlier. This is the same call the event gallery makes, and it avoids widening
+the RPC's signature, which would be a gated migration for a write with nothing
+to keep in step.
+
+**`useSetOutreachDayHours` does one UPDATE per changed day and deliberately not
+an upsert.** `.upsert(payload, { onConflict: 'outreach_id,day' })` compiles to
+`ON CONFLICT DO UPDATE SET` over every payload column including the conflict
+columns — and `outreach_id` is deliberately absent from `outreach_days`' UPDATE
+grant list, because a day may be re-timed but never moved to another event. The
+upsert would fail with `permission denied for table outreach_days` on a call
+that reads perfectly reasonably. This is the `.upsert()` rule in CLAUDE.md
+biting for the second time.
+
+**Day one always needs a follow-up write.** `trg_outreaches_default_day` creates
+that row inside the outreach's own transaction and always with null hours, so an
+override on day one cannot ride along with an insert the way days 2..n can. On
+the create screen the hours are therefore written for every overridden day, day
+one included; re-stating days 2..n is a no-op update and means one place owns
+this rather than a rule about which day came from which path.
+
+**Clearing an override is a write of NULLs, not an omission.** `changedDayHours`
+returns cleared days carrying nulls. Filtering them out for "having no hours"
+would make removing an override work in the form and change nothing in the
+database — the failure that looks like the feature working.
+
+### The reader that had to exist with the writer
+
+Building the setter alone would have left the app contradicting itself. The
+volunteer's outreach detail printed `Oct 3 – Oct 6 · 9:00 AM – 3:00 PM`, and
+that middle dot is a claim about all four days. The moment one day overrides,
+it is a confident false statement on the screen a volunteer decides from.
+
+Both detail screens now ask `hoursVaryByDay()` before printing a range, and say
+**"Hours vary by day"** where they differ; the per-day detail is in the day
+picker and the release sheet, which have read the real per-day hours all along.
+The helper compares the RESOLVED hours rather than merely checking whether an
+override exists — a day that overrides with exactly the event's own hours varies
+from nothing, and announcing a variation nobody can see is worse than silence.
+The hint under the time pickers on both forms changed from "These hours apply to
+every day of the outreach" for the same reason: it had stopped being true.
+
+### Buckets
+
+- **Built and working:** the day-draft model, the per-day hours panel, both
+  write paths (create and edit), the "Hours vary by day" summaries, 22 new unit
+  tests. 510 tests / 17 suites green, both typechecks clean.
+- **Built but untested on a device:** the panel's layout on a narrow phone, and
+  the native time picker opening inside the day list rather than beside the
+  event's own time fields.
+- **Not built:** nothing from this item. Per-day hours are complete.
