@@ -4706,3 +4706,182 @@ reason.
   worth a glance whenever the device round happens.
 - **Not built:** the twelve set-state-in-effect sites are suppressed, not
   rewritten — see above for the reasoning and the full list.
+
+## New brand mark, and a reproducible icon pipeline (2026-09-10)
+
+The owner supplied a redrawn V-HUB mark in two forms — the mark on nothing, and
+the same mark centred on a white square — and asked for it everywhere, with the
+white version used for the icon that appears on the phone's home screen.
+
+**One master, six derived files, one script.** The app draws its brand mark from
+six PNGs: `assets/logo.png` (every in-app placement, sized through
+`getLogoSize()`), `assets/icon.png` (the iOS launcher icon and Expo's fallback
+elsewhere), `assets/favicon.png` (the web tab), and the three halves of the
+Android adaptive icon (`android-icon-foreground.png`,
+`android-icon-background.png`, `android-icon-monochrome.png`). Cropping and
+resizing six files by hand in an image editor is how a set like that drifts: the
+mark ends up a slightly different size in each, and nobody can tell afterwards
+which file was regenerated and which was left behind. `scripts/generate-icons.js`
+builds all six from the transparent master, so the fill ratios written in that
+file *are* the specification.
+
+**The fill ratios were measured off the old files, not chosen.** 0.86 of the
+canvas for the in-app mark, 0.54 for the launcher icon, 0.66 for the favicon,
+0.42 for the Android adaptive icon. Reusing the previous artwork's geometry is
+what kept every placement in the app at the same optical weight while the
+drawing underneath it changed — nothing needed re-tuning after the swap.
+
+**No new dependency.** `scripts/lib/png.js` is a small PNG reader and writer
+built on node's own `zlib`. The conventional answer would have been `sharp`;
+that was rejected because dependencies are a gated change under CLAUDE.md, and
+installing a native-binary image library for six files that change roughly never
+is a poor trade.
+
+**Alpha is premultiplied before downscaling, and this is not optional.** The
+transparent regions of the master are stored as `(0, 0, 0, 0)` — transparent
+*black*. Averaging raw RGB when shrinking 1203px of artwork down to 96px would
+blend that black into every edge of the mark and leave a visible dark halo all
+the way round it. The resizer premultiplies by alpha, averages, then undoes it.
+
+**The knockouts are transparent, so they take the colour behind them.** The ECG
+line through the heart, and the gap between the heart and the V, are not painted
+white in the artwork — they are holes. On the white launcher icon they read
+white; on the near-black splash (`#0B0B0F`) they read near-black. That is the
+same behaviour the previous mark had and it looks deliberate in both places, but
+it is why `assets/android-icon-background.png` and
+`android.adaptiveIcon.backgroundColor` in `app.json` must always agree: they now
+both say white, and if one is changed without the other, the holes in the mark
+show the wrong colour on Android.
+
+**The masters live in `design-refs/`, which is gitignored.** That is where this
+project already keeps every piece of source artwork, the Figma exports included,
+and none of it is committed. So the script runs on the design machine and not on
+a bare clone; it exits with an explanatory message rather than a stack trace when
+the master is absent. The six generated files *are* committed, which is what a
+build actually needs.
+
+**Onboarding slide 3 was replaced with a supplied photograph**, kept as JPEG
+(`assets/images/onboarding-3.jpg`, 132KB) rather than converted to PNG to match
+its two neighbours. A photograph has no flat colour for PNG's lossless
+compression to exploit, so the conversion would have cost roughly a megabyte for
+an identical picture — and every byte of a carousel slide is fetched and decoded
+before the carousel is allowed to appear.
+
+- **Built and working:** all six icons regenerate from the master and are
+  committed; `app.json`'s adaptive-icon background is white to match; slide 3
+  points at the new JPEG. Type-check, both lint passes and all 534 tests are
+  clean.
+- **Built but untested on a device:** how the launcher icon actually looks once
+  a real Android launcher masks it (circle, squircle, teardrop) and once iOS
+  rounds its corners, and how the themed monochrome icon tints on Android 13+.
+  Both need an EAS build to see — a Metro reload will not change an app icon.
+- **Known, not a defect:** the new photograph is 2:3 where the other two slides
+  are nearly 1:2.3, so `resizeMode="cover"` crops roughly 15% off each side of
+  it on a tall phone. The centre of the action sits in the middle and survives
+  the crop, but it is a tighter framing than slides 1 and 2 get.
+- **Resolved the next day**, see the carousel entry below: slides 1 and 2 are
+  JPEG now too and the three together are ~530KB instead of 4.65MB.
+
+## The onboarding carousel finally glides (2026-09-11)
+
+The owner had reported four times that the intro carousel "jumps between slides
+instead of gliding", and three previous attempts had not fixed it. She asked,
+before any more code was written, for three specific answers: is the slide change
+driven by a state index or by scroll position, is anything animating and is it on
+the native driver, and are the images preloaded. **All three came back clean** —
+which is precisely why the previous fixes did not work. They had each made the
+*dots* smoother. The dots were never the problem.
+
+### What was actually wrong
+
+**A fixed duration for a variable distance.** Autoplay chose its next slide with
+`(activeIndex + 1) % SLIDES.length`, so going from the last slide it returned to
+the first — a journey of TWO screen widths. It was handed to
+`scrollTo({ animated: true })`, which is a built-in native scroll of roughly
+250ms on Android and 300ms on iOS, **fixed, taking no duration argument**. Two
+widths in the time of one is double speed: the middle slide flashes past and the
+whole thing reads as a snap back to the beginning. On a four-second interval
+that is a visible jerk **every twelve seconds, forever** — which fits "it still
+jumps" exactly.
+
+**And even a normal advance was too fast.** A quarter of a second to move a
+full-screen photograph is abrupt no matter how smoothly it is drawn. A swipe
+feels like a glide because a finger is controlling it. There is no prop that
+slows `scrollTo` down; the only way to own the timing is to stop using it.
+
+### The fix
+
+**The offset is now driven by an `Animated.timing` we control** — 650ms with
+`Easing.inOut(Easing.cubic)` — whose listener pushes each frame's value into the
+scroll view with `scrollTo({ animated: false })`. The duration scales with the
+distance actually travelled (capped at 1.6×), so SKIP's two-slide move stretches
+in time rather than doubling in speed.
+
+**A SECOND `Animated.Value`, not `scrollX`.** `scrollX` is attached to the scroll
+view's own `onScroll` through the native driver, so the native side writes it
+every frame; animating it from JS as well would be two writers fighting over one
+value. The new `glideX` is purely an output. `scrollX` still reports back what
+actually happened, so **the dots are untouched and stay on the native thread.**
+
+**`useNativeDriver: false` on the glide, and it cannot be otherwise.** The native
+driver only writes style properties, and this value is not a style — its listener
+calls a method. A native-driven value does not fire JS listeners at all, so the
+carousel would simply sit still. The cost is one `scrollTo` per frame on the JS
+thread; the slides are completely static and nothing re-renders during a move,
+so there is nothing for it to contend with. The genuinely native alternative is
+Reanimated's `useAnimatedScrollHandler` + a `scrollTo` worklet, which is a gated
+dependency and disproportionate here.
+
+**Autoplay reverses at each end** (1, 2, 3, 2, 1, 2 …) instead of rewinding.
+Every move is then exactly one slide wide, which is what makes a constant speed
+possible at all. A true infinite loop was considered and rejected: it means
+cloning the first and last slides and silently teleporting the offset when they
+scroll into view — a lot of machinery, and one more thing to get wrong, for three
+slides a user sees once.
+
+**A second, unrelated bug went with it.** Autoplay was paused on
+`onScrollBeginDrag` and restarted ONLY by `onMomentumScrollEnd`. A slow drag
+released with no velocity does not reliably produce a momentum phase — and when
+it did not, **autoplay was paused for the rest of the session** with nothing on
+screen to explain why. `onScrollEndDrag` is now a second restart path.
+
+**`flex: 1` came off the slide style.** A slide's width is set inline from the
+window width, and `flex: 1` also sets `flexBasis: 0` on the main axis — which
+inside a horizontal scroll view *is* the width. Two rules arguing over the size
+of a paging slide is how a page boundary ends up a pixel or two off. Not believed
+to have been causing anything; removed because it is ambiguous.
+
+### The images, which were the other half
+
+Slides 1 and 2 were photographs stored as **PNG — 2.3MB and 2.2MB**. PNG is
+lossless and has no flat colour to exploit in a photograph, so it was storing
+camera sensor noise byte for byte. Under Metro (`--dev-client`, which is how this
+is tested) `require()`d assets resolve to an http URL on the dev server and are
+fetched over the network, and 4.5MB does not arrive inside the 1500ms
+`PREFETCH_TIMEOUT_MS` on a phone-to-laptop connection. **So the carousel was
+being released while its own images were still downloading** — the prefetch gate
+was working exactly as designed and still letting through a half-loaded screen.
+
+Re-encoded to JPEG at quality 82: **204KB and 205KB**, with slide 3 at 129KB, so
+all three together are ~530KB against 4.65MB. Inspected at full size before and
+after; no visible artefacts, including in slide 2's large smooth skin and
+background gradients, which is where JPEG banding would show first.
+
+**No dependency was added to do it.** `jimp-compact` is already present in
+`node_modules` as a transitive dependency of `@expo/image-utils`. It was used
+once, from a throwaway script outside the repository, and the *output* is what is
+committed — nothing in `package.json` changed and nothing new ships in the app.
+A committed script would have been the wrong call here: it would make the build
+depend on a package this project does not actually declare.
+
+- **Built and working:** type-check clean, both lint passes clean, all 534 tests
+  pass. The logic is verifiable by reading — reversing direction, distance-scaled
+  duration, both autoplay restart paths.
+- **Built but untested on a device:** the thing that actually matters, which is
+  whether 650ms with a cubic in-out *feels* right in the hand. That is a taste
+  judgement and needs a phone. `SLIDE_GLIDE_MS` is a single constant at the top
+  of the file if it wants to be slower or faster.
+- **Known, not a defect:** autoplay now ping-pongs, so the dots travel back as
+  well as forward. That is honest about what the carousel is doing and is what
+  makes the constant speed possible; it is a deliberate change in behaviour
+  rather than a side effect.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Easing,
   Image,
   ImageSourcePropType,
   NativeScrollEvent,
@@ -49,13 +50,21 @@ const SLIDES: Slide[] = [
   },
 ];
 
-// Each key must have a matching file at assets/images/onboarding-{1,2,3}.png
-// (see docs/REPORT_NOTES.md / project owner instructions) — require() paths
+// Each key must have a matching file under assets/images/ — require() paths
 // are static, so the app will fail to bundle until all three exist.
+//
+// ALL THREE ARE JPEG, AND THAT IS PART OF THE SMOOTHNESS FIX, NOT HOUSEKEEPING.
+// Slides 1 and 2 were photographs saved as PNG, 2.3MB and 2.2MB. PNG is
+// lossless and has no flat colour to exploit in a photograph, so it was storing
+// camera noise byte for byte. Under Metro these are fetched from the dev server
+// over the network before the carousel is allowed to appear, and 4.5MB does not
+// arrive inside PREFETCH_TIMEOUT_MS on a phone-to-laptop connection — so the
+// carousel was released while its own images were still downloading. The three
+// together are now ~530KB.
 const SLIDE_IMAGES: Record<string, ImageSourcePropType> = {
-  'onboarding-1': require('../../assets/images/onboarding-1.png'),
-  'onboarding-2': require('../../assets/images/onboarding-2.png'),
-  'onboarding-3': require('../../assets/images/onboarding-3.png'),
+  'onboarding-1': require('../../assets/images/onboarding-1.jpg'),
+  'onboarding-2': require('../../assets/images/onboarding-2.jpg'),
+  'onboarding-3': require('../../assets/images/onboarding-3.jpg'),
 };
 
 const LOGO = require('../../assets/logo.png');
@@ -64,6 +73,28 @@ type RegisterRole = 'volunteer' | 'organisation';
 
 /** Auto-advance interval for the intro carousel; manual swipes reset this timer. */
 const AUTOPLAY_INTERVAL_MS = 4000;
+
+/**
+ * How long one slide takes to travel one screen width under its own steam.
+ *
+ * THIS NUMBER ONLY EXISTS BECAUSE WE STOPPED USING scrollTo({ animated: true }).
+ * That built-in call takes no duration and no easing — it is roughly 250ms on
+ * Android and 300ms on iOS, fixed, with the platform's own interpolator. A
+ * quarter of a second to move a full-screen photograph is abrupt however
+ * smoothly it is drawn: a finger swipe feels like a glide because the finger
+ * controls it, and nothing about a 250ms machine-driven jump reads the same
+ * way. There is no prop that slows it down, which is why this is now driven by
+ * an Animated.timing whose offset we push into the scroll view frame by frame.
+ */
+const SLIDE_GLIDE_MS = 650;
+
+/**
+ * Ceiling on how much longer a multi-slide move may take than a single-slide
+ * one. SKIP travels two widths; without a cap it would either take twice as
+ * long (sluggish for a control whose whole point is "get me out of here") or,
+ * at a fixed duration, move at double speed — which is the bug being fixed.
+ */
+const MAX_GLIDE_STRETCH = 1.6;
 
 /**
  * Longest we will hold the carousel back waiting for image prefetch. Prefetch
@@ -144,8 +175,96 @@ export default function Welcome() {
   const [scrollX] = useState(() => new Animated.Value(0));
   const activeIndexRef = useRef(0);
   const autoplayTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  /** True between onScrollBeginDrag and onMomentumScrollEnd — i.e. this scroll came from a finger, not from autoplay. */
+  /** True between onScrollBeginDrag and the end of that gesture — i.e. this scroll came from a finger, not from autoplay. */
   const userDraggingRef = useRef(false);
+
+  /**
+   * The offset we are driving the scroll view to, and the animation driving it.
+   *
+   * A SECOND Animated.Value, deliberately not `scrollX`. `scrollX` is attached
+   * to the scroll view's own onScroll event through the native driver, so it is
+   * written by the native side every frame; animating it from JS at the same
+   * time would have two writers fighting over one value. This one is purely an
+   * output — JS drives it, its listener pushes the number into the scroll view,
+   * and `scrollX` then reports back what actually happened. The dots therefore
+   * still track the real offset and stay on the native thread exactly as before.
+   */
+  const [glideX] = useState(() => new Animated.Value(0));
+  const glideAnim = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    const id = glideX.addListener(({ value }) => {
+      // `animated: false` — the easing IS the animation; asking the platform to
+      // animate to each intermediate point as well would fight this one.
+      scrollRef.current?.scrollTo({ x: value, animated: false });
+    });
+    return () => glideX.removeListener(id);
+  }, [glideX]);
+
+  /** Abandon any glide in progress. A finger on the screen always wins. */
+  const stopGlide = useCallback(() => {
+    glideAnim.current?.stop();
+    glideAnim.current = null;
+  }, []);
+
+  /**
+   * Move to `index` over a duration proportional to how far it actually is,
+   * so every transition travels at roughly the same speed on screen.
+   *
+   * A FIXED DURATION WAS THE BUG. The old autoplay wrapped from the last slide
+   * to the first with `(i + 1) % length`, which is a two-screen journey given
+   * the same ~250ms as a one-screen one — double speed, slide 2 flashing past,
+   * reading as a snap back to the start. It happened every twelve seconds.
+   */
+  const glideTo = useCallback(
+    (index: number) => {
+      if (width <= 0) return;
+      stopGlide();
+
+      // Start from where the carousel ACTUALLY is, not from wherever the last
+      // glide finished. A paging scroll view always comes to rest on a page
+      // boundary, and handleMomentumScrollEnd writes the page a swipe landed
+      // on, so this is the true current offset. Without it, a swipe followed by
+      // an auto-advance would jump back to the old position and set off again.
+      const from = activeIndexRef.current * width;
+      glideX.setValue(from);
+
+      const target = index * width;
+      const distance = Math.abs(target - from);
+      activeIndexRef.current = index;
+
+      const stretch = Math.min(MAX_GLIDE_STRETCH, Math.max(1, distance / width));
+      const animation = Animated.timing(glideX, {
+        toValue: target,
+        duration: SLIDE_GLIDE_MS * stretch,
+        easing: Easing.inOut(Easing.cubic),
+        // Cannot be native: the native driver only writes style props, and this
+        // value is not a style — its listener calls scrollTo(). A native-driven
+        // value does not fire JS listeners at all, so the carousel would sit
+        // still. The slides are completely static and nothing re-renders during
+        // the move, so the JS thread has only this one call per frame to make.
+        useNativeDriver: false,
+      });
+      glideAnim.current = animation;
+      animation.start(() => {
+        glideAnim.current = null;
+      });
+    },
+    [glideX, stopGlide, width]
+  );
+
+  /**
+   * Direction of travel for autoplay: +1 forward, -1 back.
+   *
+   * The carousel now REVERSES at each end (1, 2, 3, 2, 1, 2, ...) instead of
+   * rewinding to the start. Every move is then exactly one slide wide, which is
+   * what makes a constant, readable speed possible at all. The alternative —
+   * a true infinite loop — means cloning the first and last slides and silently
+   * teleporting the offset when they come into view, which is a lot of
+   * machinery and one more thing to get wrong, for three slides that the user
+   * sees once.
+   */
+  const directionRef = useRef(1);
 
   const pauseAutoplay = useCallback(() => {
     if (autoplayTimer.current) {
@@ -157,11 +276,14 @@ export default function Welcome() {
   const startAutoplay = useCallback(() => {
     pauseAutoplay();
     autoplayTimer.current = setInterval(() => {
-      const nextIndex = (activeIndexRef.current + 1) % SLIDES.length;
-      activeIndexRef.current = nextIndex;
-      scrollRef.current?.scrollTo({ x: nextIndex * width, animated: true });
+      let next = activeIndexRef.current + directionRef.current;
+      if (next >= SLIDES.length || next < 0) {
+        directionRef.current *= -1;
+        next = activeIndexRef.current + directionRef.current;
+      }
+      glideTo(next);
     }, AUTOPLAY_INTERVAL_MS);
-  }, [pauseAutoplay, width]);
+  }, [pauseAutoplay, glideTo]);
 
   // Autoplay only starts once the images are actually in cache. Starting it
   // during prefetch would burn the first slide's screen time on a blank frame.
@@ -173,12 +295,47 @@ export default function Welcome() {
 
   const handleScrollBeginDrag = useCallback(() => {
     userDraggingRef.current = true;
+    stopGlide();
     pauseAutoplay();
-  }, [pauseAutoplay]);
+  }, [pauseAutoplay, stopGlide]);
+
+  /** Where the swipe left us, and whose turn it is to move next. */
+  const settleAt = useCallback(
+    (offsetX: number) => {
+      if (width <= 0) return;
+      const index = Math.round(offsetX / width);
+      activeIndexRef.current = index;
+      // Carry on AWAY from whichever end the user landed on, rather than
+      // marching them straight back into the wall they just swiped up against.
+      if (index >= SLIDES.length - 1) directionRef.current = -1;
+      else if (index <= 0) directionRef.current = 1;
+    },
+    [width]
+  );
+
+  /**
+   * A drag that ends without a fling.
+   *
+   * THIS HANDLER IS THE SECOND HALF OF A REAL BUG. Autoplay was paused on drag
+   * begin and restarted ONLY by onMomentumScrollEnd — and a slow drag released
+   * with no velocity does not always produce a momentum phase. When it did not,
+   * autoplay was paused for good and the carousel simply stopped for the rest
+   * of the session, with nothing to suggest why. Restarting here too costs
+   * nothing when momentum does follow: startAutoplay clears the old timer
+   * first, and onMomentumScrollEnd then corrects the index a moment later.
+   */
+  const handleScrollEndDrag = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      settleAt(event.nativeEvent.contentOffset.x);
+      userDraggingRef.current = false;
+      startAutoplay();
+    },
+    [settleAt, startAutoplay]
+  );
 
   const handleMomentumScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      activeIndexRef.current = Math.round(event.nativeEvent.contentOffset.x / width);
+      settleAt(event.nativeEvent.contentOffset.x);
       // Only a real swipe restarts the countdown. Restarting it after an
       // autoplay-driven scroll too would add the animation's duration to
       // every interval, so the carousel drifted slower and slower.
@@ -187,15 +344,17 @@ export default function Welcome() {
         startAutoplay();
       }
     },
-    [width, startAutoplay]
+    [settleAt, startAutoplay]
   );
 
   const handleSkip = useCallback(() => {
     const lastIndex = SLIDES.length - 1;
-    activeIndexRef.current = lastIndex;
-    scrollRef.current?.scrollTo({ x: lastIndex * width, animated: true });
+    // Two slides in one move, so glideTo stretches the duration rather than
+    // doubling the speed. Arriving at the end, the only way on is back.
+    directionRef.current = -1;
+    glideTo(lastIndex);
     startAutoplay();
-  }, [startAutoplay, width]);
+  }, [glideTo, startAutoplay]);
 
   const goToRegister = useCallback(
     (role: RegisterRole) => {
@@ -269,6 +428,7 @@ export default function Welcome() {
         scrollEventThrottle={16}
         onScroll={onScroll}
         onScrollBeginDrag={handleScrollBeginDrag}
+        onScrollEndDrag={handleScrollEndDrag}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         style={styles.list}
       >
@@ -437,7 +597,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   slide: {
-    flex: 1,
+    // No `flex: 1` here. A slide's width is set inline from the window width,
+    // and `flex: 1` also sets flexBasis to 0 on the main axis — which inside a
+    // horizontal scroll view IS the width. Two rules arguing over the size of a
+    // paging slide is exactly the kind of ambiguity that lands a page boundary
+    // a pixel or two off; the explicit width is the one that should win.
+    height: '100%',
     backgroundColor: colors.heroBackground,
   },
   slideOverlay: {
