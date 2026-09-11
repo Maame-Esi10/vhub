@@ -1,4 +1,12 @@
-import { Pressable, PressableProps, StyleProp, StyleSheet, Text, TextStyle, ViewStyle } from 'react-native';
+import {
+  Pressable,
+  PressableProps,
+  StyleProp,
+  StyleSheet,
+  TextStyle,
+  ViewStyle,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
 export type ButtonVariant = 'solid' | 'outline' | 'text';

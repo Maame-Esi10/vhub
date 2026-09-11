@@ -1,4 +1,9 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
 export interface FilterChipOption<T extends string> {

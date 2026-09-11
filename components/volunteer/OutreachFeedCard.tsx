@@ -1,4 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar, Badge, FlyerBackground, formatEventDate, formatEventTimeRange } from '@/components/ui';
 import { MatchScoreBadge } from '@/components/volunteer/MatchScoreBadge';

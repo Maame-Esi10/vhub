@@ -1,4 +1,9 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { colors, fontFamily } from '@/constants/theme';
 
 export interface AvatarProps {

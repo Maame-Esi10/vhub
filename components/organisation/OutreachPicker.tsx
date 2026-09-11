@@ -1,4 +1,10 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { OutreachWithCounts } from '@/hooks';
 

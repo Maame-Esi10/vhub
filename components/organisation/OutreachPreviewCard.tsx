@@ -1,4 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  View,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Badge, FlyerBackground, formatEventTimeRange } from '@/components/ui';
 import { formatDaySpan, dayStringsOf } from '@/lib/outreachDays';

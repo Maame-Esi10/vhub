@@ -1,4 +1,11 @@
-import { ActivityIndicator, Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { getLogoSize, getSplashWordmarkFontSize } from '@/constants/logoSizes';
 

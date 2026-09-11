@@ -1,5 +1,13 @@
 import { forwardRef, ReactNode } from 'react';
-import { StyleProp, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
+import {
+  StyleProp,
+  StyleSheet,
+  TextInput,
+  TextInputProps,
+  View,
+  ViewStyle,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
 export interface InputProps extends TextInputProps {

@@ -1,4 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  View,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { getVScoreBand } from '@/lib/vscore';
 import type { VScoreBand } from '@/lib/vscore';

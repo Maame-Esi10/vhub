@@ -1,4 +1,10 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Badge, FlyerBackground, daysUntilEvent, formatEventDate, formatEventTimeRange } from '@/components/ui';
 import { dayShortfallSummary, hasHiddenDayShortfall, type DayCoverage } from '@/lib/dayCoverage';
