@@ -96,7 +96,15 @@ export default function VerifyIdentity() {
     }
 
     onboarding.reset();
-    router.replace('/(auth)/onboarding/complete');
+    /*
+      STRAIGHT TO THE CREDENTIAL SCREEN, which now carries the welcome and the
+      way onward as well (owner, 2026-09-11). There used to be a celebration
+      screen in between whose only real job was to offer a button to this one —
+      so the last thing a new volunteer saw was a screen congratulating them,
+      with the one outstanding task on it as a card they could walk past
+      without ever being told they had.
+    */
+    router.replace('/(volunteer)/verify-identity?from=onboarding');
   }
 
   function handleSecureVerification() {

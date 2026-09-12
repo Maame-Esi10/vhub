@@ -3,6 +3,7 @@ import {
   Image,
   Linking,
   Pressable,
+  Share,
   ScrollView,
   StyleSheet,
   View,
@@ -11,7 +12,7 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, ConfirmDialog, ScreenHeader } from '@/components/ui';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CREDENTIAL_CONSENT_POINTS } from '@/constants/credential-guidelines';
 import { useDocumentUrl } from '@/hooks/useDocumentUrl';
 import { useSignDeclaration } from '@/hooks/useSignDeclaration';
@@ -73,7 +74,39 @@ const STATUS_PRESENTATION = {
 
 export default function VolunteerVerifyIdentity() {
   const router = useRouter();
+  /*
+    THE ONBOARDING COMPLETION SCREEN WAS MERGED INTO THIS ONE (owner, 2026-09-11).
+
+    THE SPLIT AS IT WAS. Finishing the wizard landed on
+    app/(auth)/onboarding/complete.tsx — a "You're Ready!" celebration that
+    carried, for anyone who had signed the declaration and was not yet
+    verified, a card explaining that a credential document was the other half
+    of getting verified and a button that pushed HERE to do it.
+
+    WHY IT WAS BUILT THAT WAY. The declaration and the document cannot be
+    submitted together: /api/verification-document refuses a document while
+    declaration_signed is false, and the declaration is written by the wizard's
+    own submit. So the upload genuinely cannot live on the wizard step before
+    this. Splitting it across a celebration screen and this one was the way to
+    put a gap between the two writes.
+
+    WHY THAT WAS WRONG ANYWAY. The gap only had to be between two SERVER
+    CALLS, not between two SCREENS — by the time anything is rendered here the
+    declaration is already on file. So the split bought nothing and cost the
+    thing that matters: the last thing a new volunteer saw was a screen
+    congratulating them, with the one outstanding task on it as an optional
+    card they could walk past without ever being told they had. Which is
+    exactly what happened.
+
+    Now the wizard lands here with `?from=onboarding`, and this screen carries
+    the welcome, the upload and the way onward in one place. Everything below
+    keyed on `fromOnboarding` is that: the celebration replaces the settings
+    header, and the onward actions replace the back button.
+  */
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const fromOnboarding = from === 'onboarding';
   const user = useAuthStore((state) => state.user);
+  const profile = useAuthStore((state) => state.profile);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const signDeclaration = useSignDeclaration();
   const credentialUpload = useCredentialUpload();
@@ -105,11 +138,33 @@ export default function VolunteerVerifyIdentity() {
     signDeclaration.mutate(user.id);
   }
 
+  function handleShare() {
+    Share.share({
+      message: 'I just joined V-HUB to volunteer at medical outreaches across Ghana. Join me!',
+    }).catch(() => {
+      // no-op: share sheet dismissal/failure isn't actionable here
+    });
+  }
+
+  const firstName = profile?.full_name?.trim().split(' ')[0] || 'volunteer';
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Identity Verification" fallback="/(volunteer)/settings" />
+      {fromOnboarding ? null : (
+        <ScreenHeader title="Identity Verification" fallback="/(volunteer)/settings" />
+      )}
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {fromOnboarding ? (
+          <View style={styles.welcomeCard}>
+            <MaterialCommunityIcons name="party-popper" size={26} color={colors.primary} />
+            <Text style={styles.welcomeTitle}>You&apos;re in, {firstName}</Text>
+            <Text style={styles.welcomeBody}>
+              Your profile is active and you can start browsing outreaches straight away. There is
+              one optional thing left, and this is the screen for it.
+            </Text>
+          </View>
+        ) : null}
         <View style={[styles.statusCard, { backgroundColor: presentation.bg }]}>
           <MaterialCommunityIcons name={presentation.icon} size={28} color={presentation.fg} />
           <View style={styles.statusText}>
@@ -261,6 +316,39 @@ export default function VolunteerVerifyIdentity() {
               </View>
             ) : null}
 
+            {/*
+              THE ABSENCE OF A DOCUMENT IS NOW STATED, NOT IMPLIED.
+
+              The owner finished onboarding without uploading anything and was
+              never told. That was not a validation bug in the ordinary sense —
+              verification is genuinely optional, and blocking someone from
+              using the app over it would be wrong, because an unverified
+              volunteer can browse everything and join every support-role
+              outreach. What was missing was the app SAYING SO. An upload
+              button on its own is an invitation; it is not a statement that
+              nothing has been received, and those read identically to someone
+              who thinks they already did it.
+
+              So this is an indication, deliberately, and not a gate.
+            */}
+            {!hasDocument ? (
+              <View style={styles.outstandingCard}>
+                <MaterialCommunityIcons
+                  name="file-alert-outline"
+                  size={20}
+                  color={colors.warning}
+                />
+                <View style={styles.outstandingText}>
+                  <Text style={styles.outstandingTitle}>No document uploaded yet</Text>
+                  <Text style={styles.outstandingBody}>
+                    You can browse every outreach and join support-role ones without this. It is
+                    needed only for clinical roles, and you can come back to it at any time from
+                    Settings.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             {credentialUpload.error ? (
               <Text style={styles.errorText}>{credentialUpload.error.message}</Text>
             ) : null}
@@ -325,6 +413,47 @@ export default function VolunteerVerifyIdentity() {
             ) : null}
           </>
         )}
+
+        {/*
+          THE WAY ONWARD, and the reason this screen can absorb the completion
+          screen at all. Reached from Settings, this screen has a back button
+          and needs nothing here. Reached at the end of onboarding there is
+          nothing behind it — the wizard replaced itself — so it has to offer
+          the exits the celebration screen used to: into the feed, or to the
+          profile just built. The share action comes with them; it belongs to
+          the moment somebody has just joined, not to a verification screen.
+        */}
+        {fromOnboarding ? (
+          <View style={styles.onwardBlock}>
+            <Button
+              title="Find Your First Opportunity"
+              variant="solid"
+              onPress={() => router.replace('/(volunteer)/feed')}
+              accessibilityLabel="Find your first opportunity"
+            />
+            <View style={styles.onwardRow}>
+              <Button
+                title="View Profile"
+                variant="outline"
+                onPress={() => router.replace('/(volunteer)/profile')}
+                accessibilityLabel="View your profile"
+                style={styles.onwardProfileButton}
+              />
+              <Pressable
+                onPress={handleShare}
+                style={({ pressed }) => [styles.shareButton, pressed && styles.documentPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Share V-HUB"
+              >
+                <MaterialCommunityIcons
+                  name="share-variant-outline"
+                  size={20}
+                  color={colors.textPrimary}
+                />
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
 
       <ConfirmDialog
@@ -473,6 +602,81 @@ function DocumentPreview({
 }
 
 const styles = StyleSheet.create({
+  welcomeCard: {
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  welcomeTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 22,
+    color: colors.textPrimary,
+  },
+  welcomeBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textSecondary,
+  },
+  outstandingCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    backgroundColor: 'rgba(245, 158, 11, 0.10)',
+    borderRadius: radius.md,
+    padding: spacing.base,
+    marginTop: spacing.base,
+    marginBottom: spacing.sm,
+  },
+  outstandingText: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    gap: 2,
+  },
+  outstandingTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  outstandingBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+  },
+  onwardBlock: {
+    gap: spacing.md,
+    marginTop: spacing.xxl,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  onwardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  onwardProfileButton: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+  },
+  shareButton: {
+    width: 48,
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   guidelinesRow: {
     flexDirection: 'row',
     alignItems: 'center',
