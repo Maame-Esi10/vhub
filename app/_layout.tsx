@@ -22,6 +22,7 @@ import {
   QUERY_CACHE_MAX_AGE_MS,
 } from '@/lib/offline';
 import { OfflineBanner, SplashView } from '@/components/ui';
+import { readReturningUser } from '@/lib/launchState';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // no-op: splash screen may already be hidden (e.g. web)
@@ -73,6 +74,33 @@ function RootNavigator() {
   });
   const [minDisplayElapsed, setMinDisplayElapsed] = useState(false);
 
+  /*
+    WHICH SPLASH, decided before the first frame is drawn.
+
+    `null` means "not read yet", and it is why the native splash is not hidden
+    until this resolves. The alternative — guess, draw, then correct — is the
+    double-splash the whole screen was rebuilt to remove, and it would be at
+    its most obvious here, because the two variants are not a superset and a
+    subset: the mark sits in the middle of the screen in one and above a block
+    of text in the other, so it would visibly jump.
+
+    Reading one AsyncStorage key takes a few milliseconds against the second
+    and a half of fonts and session resolution that follow it, so nobody waits
+    on this; it simply happens while the native splash — which draws the same
+    mark on the same ground — is still up.
+  */
+  const [returningUser, setReturningUser] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    readReturningUser().then((value) => {
+      if (!cancelled) setReturningUser(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => setMinDisplayElapsed(true), MIN_SPLASH_DISPLAY_MS);
     return () => clearTimeout(timer);
@@ -81,14 +109,24 @@ function RootNavigator() {
   const ready = (fontsLoaded || !!fontError) && !authLoading && minDisplayElapsed;
 
   useEffect(() => {
-    // Hide the native splash on mount, not once `ready` — the JS
-    // SplashScreenView below takes over immediately so there's no gap where
-    // a blank screen would otherwise show.
+    // Hide the native splash once we know which JS splash replaces it, not on
+    // mount: the two are identical for a returning user, so handing over at
+    // this moment is invisible. Hiding before the answer arrived would show
+    // the wrong one first.
+    if (returningUser === null) return;
     SplashScreen.hideAsync().catch(() => {});
-  }, []);
+  }, [returningUser]);
+
+  if (returningUser === null) {
+    // The native splash is still up. Drawing anything here would replace it
+    // with a second, differently composed screen for a few milliseconds.
+    return null;
+  }
 
   if (!ready) {
-    return <SplashView />;
+    // A returning user gets the mark alone — no wordmark, no tagline, no
+    // spinner — which is exactly what the native splash was already showing.
+    return returningUser ? <SplashView variant="mark" /> : <SplashView />;
   }
 
   return (

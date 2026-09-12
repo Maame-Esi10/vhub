@@ -371,6 +371,7 @@ export default function Welcome() {
    * is what leaves welcome underneath the wizard, so its back button has
    * somewhere to go.
    */
+  const signedIn = useAuthStore((state) => !!state.user);
   const resumingOnboarding = useAuthStore(
     (state) =>
       !!state.user && state.profile?.role === 'volunteer' && state.volunteerProfile?.category == null
@@ -403,7 +404,15 @@ export default function Welcome() {
     return (
       <>
         <StatusBar style="light" />
-        <SplashView />
+        {/*
+          The SAME variant the root layout just showed, so the handover from
+          one to the other is invisible. Signed out, the root splash is the
+          full introduction and this continues it; signed in — a volunteer who
+          never finished the wizard lands here on every launch — the root
+          splash was the mark alone and so is this. Getting this wrong would
+          reintroduce the two-splashes-in-a-row stutter from the other side.
+        */}
+        <SplashView variant={signedIn ? 'mark' : 'full'} />
       </>
     );
   }

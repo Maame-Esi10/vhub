@@ -11,9 +11,17 @@
  */
 
 export const colors = {
-  // Primary coral/salmon accent — primary CTAs/links on light screens,
-  // and the icon/logo color on the dark splash.
+  // Primary coral/salmon accent — primary CTAs/links on light screens.
   primary: '#FF6B6B',
+
+  // The RED OF THE LOGO ITSELF, sampled from assets/logo.png (the mean of its
+  // opaque pixels). It is NOT the coral above, and the difference matters in
+  // exactly one place: the splash, where the "V-HUB" wordmark sits two
+  // millimetres under the mark. Drawn in coral the two reds were near enough
+  // to read as a printing error rather than as a palette. Use this only for
+  // type that has to belong to the artwork; `primary` remains the interface
+  // accent everywhere else.
+  brandMark: '#FD1D26',
 
   // Near-black navy used for solid "Login" / "Register" / "Continue"
   // buttons and dark text on light screens (not pure black).

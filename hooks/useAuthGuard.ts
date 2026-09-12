@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { isAuthUserMetadata, type AuthUserMetadata } from '@/lib/auth-metadata';
 import { ROLE_GROUP, ROLE_GROUPS, ROLE_HOME } from '@/lib/roleRoutes';
+import { writeReturningUser } from '@/lib/launchState';
 import type { Profile, VolunteerProfile } from '@/types/database';
 
 /**
@@ -292,6 +293,10 @@ export function useAuthGuard() {
     supabase.auth.getSession().then(async ({ data }) => {
       const sessionUser = data.session?.user ?? null;
       setUser(sessionUser);
+      // Remembered for the NEXT launch's splash, which has to decide what to
+      // draw before anything can know whether a session exists. See
+      // lib/launchState.ts. Fire-and-forget: nothing here waits on it.
+      void writeReturningUser(!!sessionUser);
       if (sessionUser) {
         await loadProfileForUser(sessionUser);
       } else {
@@ -305,6 +310,7 @@ export function useAuthGuard() {
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
       const sessionUser = session?.user ?? null;
       setUser(sessionUser);
+      void writeReturningUser(!!sessionUser);
 
       if (!PROFILE_REFRESH_EVENTS.has(event)) {
         // e.g. TOKEN_REFRESHED — session/user may still be updated above,
