@@ -16,6 +16,9 @@ import {
 } from '@/components/ui';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
+import { useMutation } from '@tanstack/react-query';
+import { checkMailHealth } from '@/lib/api-client';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * Admin settings. Same structure as the volunteer and organisation settings
@@ -31,6 +34,16 @@ import { useAuthStore } from '@/stores/authStore';
 export default function AdminSettings() {
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
+
+  /*
+    THE MAIL DIAGNOSTIC, REACHABLE FROM INSIDE THE APP.
+
+    It also answers to CRON_SECRET from a terminal (see the endpoint), because
+    a diagnostic that can only be run from inside the app is no use when the
+    thing being diagnosed is why somebody cannot register. Both doors exist on
+    purpose; this is the one that does not need a secret pasted anywhere.
+  */
+  const mailHealth = useMutation({ mutationFn: () => checkMailHealth() });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -57,6 +70,34 @@ export default function AdminSettings() {
           run against the database and nowhere else.
         */}
         <SettingsRow icon="shield-key-outline" label="Role" value="Granted in the database" />
+
+        <SettingsGroupLabel>DIAGNOSTICS</SettingsGroupLabel>
+        <SettingsRow
+          icon="email-check-outline"
+          label="Check email delivery"
+          value={
+            mailHealth.isPending
+              ? 'Checking...'
+              : mailHealth.isSuccess
+                ? 'Credential is valid'
+                : mailHealth.isError
+                  ? 'Failed'
+                  : 'Tap to test'
+          }
+          onPress={() => mailHealth.mutate()}
+        />
+        <View style={styles.note}>
+          <Text style={styles.noteText}>
+            {mailHealth.isSuccess
+              ? 'The Gmail app password is valid and V-HUB can authenticate to send mail. If Supabase still cannot send a confirmation email, the fault is in its own SMTP settings rather than the password.'
+              : mailHealth.isError
+                ? humanError(
+                    mailHealth.error,
+                    'The check could not be completed. Try again in a moment.'
+                  )
+                : 'Signs in to the mail account without sending anything, so it costs no quota and reaches no inbox. Use it when a confirmation or decision email has not arrived: it separates a revoked app password from a Supabase SMTP setting, which the errors themselves cannot.'}
+          </Text>
+        </View>
 
         <View style={styles.note}>
           <Text style={styles.noteText}>

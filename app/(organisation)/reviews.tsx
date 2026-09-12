@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar, Badge, EmptyState, ErrorState, ListSkeleton, VScoreBadge } from '@/components/ui';
@@ -30,6 +30,7 @@ import { markedAbsentThroughout } from '@/lib/attendance';
 import { useAuthStore } from '@/stores/authStore';
 import type { EventReview } from '@/types/database';
 import { humanError } from '@/lib/errorMessage';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 /**
  * Post-event review screen.
@@ -41,6 +42,7 @@ import { humanError } from '@/lib/errorMessage';
  * nothing to score them on.
  */
 export default function Reviews() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const organisationId = useAuthStore((s) => s.user)?.id;
 
@@ -200,7 +202,10 @@ export default function Reviews() {
           style={styles.flex}
           data={attendees}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
           refreshControl={
             <RefreshControl
               refreshing={applicationsQuery.isRefetching || reviewsQuery.isRefetching}
@@ -391,6 +396,14 @@ const styles = StyleSheet.create({
   reviewSummary: {
     flexDirection: 'row',
     alignItems: 'center',
+
+    // alignItems centres children within their line; alignContent places
+
+    // the line itself, and defaults to flex-start. Without it a wrapping row
+
+    // pins its single line to the TOP of the box.
+
+    alignContent: 'center',
     flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.md,

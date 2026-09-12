@@ -5,14 +5,16 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 export default function OrganisationProfile() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
 
@@ -26,7 +28,10 @@ export default function OrganisationProfile() {
         scrolls nothing still reads as a press to the card under the finger, so
         trying to reach the bottom opened whichever row was beneath the thumb.
       */}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[
+          styles.content,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]} showsVerticalScrollIndicator={false}>
       <View style={styles.headerRow}>
         <Text style={styles.header}>Profile</Text>
         <Pressable

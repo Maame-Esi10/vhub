@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -41,6 +41,7 @@ import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
 import { humanError } from '@/lib/errorMessage';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 type StatusFilter = ApplicationStatus | 'all';
 
@@ -69,6 +70,7 @@ const DECISION_CONFIRMATION: Record<OrganisationApplicationDecision, (name: stri
 };
 
 export default function Applicants() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const navigation = useNavigation();
   const params = useLocalSearchParams<{ outreachId?: string }>();
@@ -510,7 +512,10 @@ export default function Applicants() {
           style={styles.flex}
           data={rows}
           keyExtractor={(item) => item.key}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
           refreshControl={
             <RefreshControl
               refreshing={applicationsQuery.isRefetching}
@@ -745,6 +750,14 @@ const styles = StyleSheet.create({
   roleHeading: {
     flexDirection: 'row',
     alignItems: 'center',
+
+    // alignItems centres children within their line; alignContent places
+
+    // the line itself, and defaults to flex-start. Without it a wrapping row
+
+    // pins its single line to the TOP of the box.
+
+    alignContent: 'center',
     justifyContent: 'space-between',
     // Wraps instead of clipping when the row outgrows its width at a large
     // system font size. rowGap only applies between wrapped lines, so a row

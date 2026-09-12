@@ -38,32 +38,32 @@ export default function AdminTabsLayout() {
     <Tabs screenOptions={screenOptions}>
       <Tabs.Screen
         name="overview"
-        options={{ title: 'Home', tabBarIcon: tabBarIcon('shield-account', 'shield-account-outline') }}
+        options={{ title: 'Home', tabBarIcon: tabBarIcon('shield-checkmark', 'shield-checkmark-outline') }}
       />
       <Tabs.Screen
         name="organisations"
         options={{
           title: 'Orgs',
-          tabBarIcon: tabBarIcon('office-building', 'office-building-outline'),
+          tabBarIcon: tabBarIcon('business', 'business-outline'),
         }}
       />
       <Tabs.Screen
         name="credentials"
         options={{
           title: 'Credentials',
-          tabBarIcon: tabBarIcon('card-account-details', 'card-account-details-outline'),
+          tabBarIcon: tabBarIcon('id-card', 'id-card-outline'),
         }}
       />
       <Tabs.Screen
         name="people"
         options={{
           title: 'People',
-          tabBarIcon: tabBarIcon('account-group', 'account-group-outline'),
+          tabBarIcon: tabBarIcon('people', 'people-outline'),
         }}
       />
       <Tabs.Screen
         name="disputes"
-        options={{ title: 'Disputes', tabBarIcon: tabBarIcon('scale-balance', 'scale-balance') }}
+        options={{ title: 'Disputes', tabBarIcon: tabBarIcon('git-compare', 'git-compare-outline') }}
       />
 
       {/*

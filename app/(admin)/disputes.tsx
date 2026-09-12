@@ -6,7 +6,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Badge, Button, EmptyState, ErrorState, Input, ListSkeleton, Toast } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -17,6 +17,7 @@ import {
   type DisputeQueueRow,
 } from '@/hooks';
 import { humanError } from '@/lib/errorMessage';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 /**
  * Disputes: a volunteer's challenge to a record about them.
@@ -34,6 +35,7 @@ import { humanError } from '@/lib/errorMessage';
  * awaiting its own approval.
  */
 export default function AdminDisputes() {
+  const insets = useSafeAreaInsets();
   const queue = useDisputeQueue();
   const resolve = useResolveDispute();
 
@@ -97,7 +99,10 @@ export default function AdminDisputes() {
       <FlatList
         data={rows}
         keyExtractor={(row) => row.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={queue.isRefetching} onRefresh={() => queue.refetch()} />

@@ -1,7 +1,7 @@
 import { Redirect, Tabs } from 'expo-router';
 import { ROLE_HOME } from '@/lib/roleRoutes';
 import { useAuthStore } from '@/stores/authStore';
-import { useTabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
+import { CreateTabIcon, useTabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
 
 /**
  * Defense-in-depth guard: useAuthGuard (app/_layout.tsx) redirects on role
@@ -39,18 +39,24 @@ export default function OrganisationTabsLayout() {
           // without truncating, and matches the HOME label on this tab in
           // design-refs/Organization Dashboard.png. Route stays dashboard.tsx.
           title: 'Home',
-          tabBarIcon: tabBarIcon('view-dashboard', 'view-dashboard-outline'),
+          tabBarIcon: tabBarIcon('grid', 'grid-outline'),
         }}
       />
       <Tabs.Screen
         name="create-outreach"
-        options={{ title: 'Create', tabBarIcon: tabBarIcon('plus-circle', 'plus-circle-outline') }}
+        options={{
+          title: 'Create',
+          // A filled coral disc, not another outline glyph. This is the one
+          // tab that is an action rather than a destination, and it is the
+          // action the whole organisation side exists for.
+          tabBarIcon: CreateTabIcon,
+        }}
       />
       <Tabs.Screen
         name="applicants"
         options={{
           title: 'Applicants',
-          tabBarIcon: tabBarIcon('account-group', 'account-group-outline'),
+          tabBarIcon: tabBarIcon('people', 'people-outline'),
         }}
       />
       <Tabs.Screen
@@ -61,7 +67,7 @@ export default function OrganisationTabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: tabBarIcon('account-circle', 'account-circle-outline'),
+          tabBarIcon: tabBarIcon('person-circle', 'person-circle-outline'),
         }}
       />
 

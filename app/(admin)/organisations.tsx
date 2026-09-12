@@ -6,13 +6,14 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useVerificationQueue, type VerificationQueueRow } from '@/hooks';
 import { humanError } from '@/lib/errorMessage';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 /**
  * Organisations waiting on a verification decision.
@@ -26,6 +27,7 @@ import { humanError } from '@/lib/errorMessage';
  * needs the documents, and those are on the detail screen.
  */
 export default function AdminOrganisations() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const queue = useVerificationQueue();
 
@@ -63,7 +65,10 @@ export default function AdminOrganisations() {
       <FlatList
         data={rows}
         keyExtractor={(row) => row.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={queue.isRefetching} onRefresh={() => queue.refetch()} />

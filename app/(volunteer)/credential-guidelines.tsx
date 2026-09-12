@@ -53,10 +53,29 @@ export default function CredentialGuidelines() {
         <View style={styles.rulesCard}>
           {CREDENTIAL_GENERAL_RULES.map((rule) => (
             <View key={rule.text} style={styles.ruleRow}>
+              {/*
+                ONE VERTICAL RAIL, EACH GLYPH LEVEL WITH ITS FIRST LINE.
+
+                Two separate problems produced the ragged column the owner
+                reported. An icon in React Native is a Text node, and these
+                glyphs do not all have the same advance width at the same
+                `size` — so laid out naturally each one starts and ends at a
+                slightly different x, and so does the sentence beside it. A
+                fixed width with the glyph centred in it gives every row the
+                same rail and the same text indent.
+
+                And `alignItems: 'flex-start'` aligns the icon's BOX to the
+                text's box, not its ink to the text's baseline; an 18px glyph
+                in a 21px line sat visibly high. Giving the icon the text's own
+                lineHeight makes its box exactly one line tall, so the glyph
+                centres itself against the first line and stays there however
+                many lines the sentence runs to.
+              */}
               <MaterialCommunityIcons
                 name={rule.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']}
                 size={18}
                 color={colors.primary}
+                style={styles.ruleIcon}
               />
               <Text style={styles.ruleText}>{rule.text}</Text>
             </View>
@@ -125,6 +144,14 @@ const styles = StyleSheet.create({
     gap: spacing.base,
   },
   ruleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  ruleIcon: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: 20,
+    // Matches ruleText's lineHeight exactly — see the comment at the call site.
+    lineHeight: 21,
+    textAlign: 'center',
+  },
   ruleText: {
     flex: 1,
     fontFamily: fontFamily.regular,

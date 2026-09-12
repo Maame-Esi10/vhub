@@ -394,6 +394,14 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+
+    // alignItems centres children within their line; alignContent places
+
+    // the line itself, and defaults to flex-start. Without it a wrapping row
+
+    // pins its single line to the TOP of the box.
+
+    alignContent: 'center',
     justifyContent: 'space-between',
     // Wraps instead of clipping when the row outgrows its width at a large
     // system font size. rowGap only applies between wrapped lines, so a row

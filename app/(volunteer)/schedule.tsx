@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -31,6 +31,7 @@ import {
 import { describeCommitment, formatDaySpan, isAnyDayToday, lastDay } from '@/lib/outreachDays';
 import type { VolunteerApplication } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 /** One flattened list so a single FlatList can render date-grouped sections. */
 type Row =
@@ -39,6 +40,7 @@ type Row =
   | { kind: 'event'; key: string; application: VolunteerApplication; isPast?: boolean };
 
 export default function Schedule() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const volunteerId = useAuthStore((state) => state.user)?.id;
 
@@ -223,7 +225,10 @@ export default function Schedule() {
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={applicationsQuery.isRefetching}

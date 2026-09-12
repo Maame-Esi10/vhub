@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Badge,
@@ -25,6 +25,7 @@ import { useCredentialQueue, useDecideCredential, type CredentialQueueRow } from
 import { getDocumentUrl, type SignedDocument } from '@/lib/api-client';
 import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import type { VolunteerCategory } from '@/types/database';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 /**
  * Gate 1: the volunteer credential queue.
@@ -42,6 +43,7 @@ import type { VolunteerCategory } from '@/types/database';
  * status.
  */
 export default function AdminCredentials() {
+  const insets = useSafeAreaInsets();
   const queue = useCredentialQueue();
   const decide = useDecideCredential();
 
@@ -127,7 +129,10 @@ export default function AdminCredentials() {
       <FlatList
         data={rows}
         keyExtractor={(row) => row.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={queue.isRefetching} onRefresh={() => queue.refetch()} />

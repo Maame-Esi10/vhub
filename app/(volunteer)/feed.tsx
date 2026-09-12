@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar, EmptyState, ErrorState, FilterChips, ListSkeleton, SelectField, ModerationBanner } from '@/components/ui';
@@ -29,6 +29,7 @@ import {
 import type { RankedFeedItem } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachRoleType } from '@/types/database';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 type RoleFilter = OutreachRoleType | 'all';
 
@@ -46,6 +47,7 @@ const REGION_OPTIONS: SelectOption[] = [
 ];
 
 export default function Feed() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
@@ -228,7 +230,10 @@ export default function Feed() {
         data={items}
         keyExtractor={(item) => item.outreach.id}
         ListHeaderComponent={header}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
         refreshControl={
           <RefreshControl refreshing={feedQuery.isRefetching} onRefresh={() => feedQuery.refetch()} />
         }

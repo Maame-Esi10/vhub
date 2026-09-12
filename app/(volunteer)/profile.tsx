@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { VScoreBadge } from '@/components/ui';
@@ -8,6 +8,7 @@ import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getVScoreBand } from '@/lib/vscore';
 import { useAuthStore } from '@/stores/authStore';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
@@ -68,6 +69,7 @@ function ProfileAction({ icon, title, body, accessibilityLabel, onPress, first }
 }
 
 export default function VolunteerProfile() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
@@ -97,7 +99,10 @@ export default function VolunteerProfile() {
         scroller before a Pressable can call it a tap, which is what makes that
         stop happening.
       */}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[
+          styles.content,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <Text style={styles.header}>Profile</Text>
           <Pressable
@@ -226,6 +231,14 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+
+    // alignItems centres children within their line; alignContent places
+
+    // the line itself, and defaults to flex-start. Without it a wrapping row
+
+    // pins its single line to the TOP of the box.
+
+    alignContent: 'center',
     justifyContent: 'space-between',
     // Wraps instead of clipping when the row outgrows its width at a large
     // system font size. rowGap only applies between wrapped lines, so a row
@@ -295,6 +308,14 @@ const styles = StyleSheet.create({
   scoreHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+
+    // alignItems centres children within their line; alignContent places
+
+    // the line itself, and defaults to flex-start. Without it a wrapping row
+
+    // pins its single line to the TOP of the box.
+
+    alignContent: 'center',
     // Wrap, so the text drops under the ring at a large font size rather than
     // being squeezed into a column narrower than the words in it.
     flexWrap: 'wrap',
@@ -349,6 +370,14 @@ const styles = StyleSheet.create({
   scoreFooter: {
     flexDirection: 'row',
     alignItems: 'center',
+
+    // alignItems centres children within their line; alignContent places
+
+    // the line itself, and defaults to flex-start. Without it a wrapping row
+
+    // pins its single line to the TOP of the box.
+
+    alignContent: 'center',
     flexWrap: 'wrap',
     gap: spacing.xs,
     marginTop: spacing.base,

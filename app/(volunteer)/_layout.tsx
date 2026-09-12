@@ -38,27 +38,27 @@ export default function VolunteerTabsLayout() {
         // HOME label on this tab in design-refs/Volunteer Home Feed.png. The
         // route stays feed.tsx — renaming the file would change the URL and
         // every router.push('/(volunteer)/feed') call site for no gain.
-        options={{ title: 'Home', tabBarIcon: tabBarIcon('home-variant', 'home-variant-outline') }}
+        options={{ title: 'Home', tabBarIcon: tabBarIcon('home', 'home-outline') }}
       />
       <Tabs.Screen
         name="applications"
         options={{
           title: 'Applications',
-          tabBarIcon: tabBarIcon('file-document', 'file-document-outline'),
+          tabBarIcon: tabBarIcon('document-text', 'document-text-outline'),
         }}
       />
       <Tabs.Screen
         name="schedule"
         options={{
           title: 'Schedule',
-          tabBarIcon: tabBarIcon('calendar-check', 'calendar-check-outline'),
+          tabBarIcon: tabBarIcon('calendar', 'calendar-outline'),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: tabBarIcon('account-circle', 'account-circle-outline'),
+          tabBarIcon: tabBarIcon('person-circle', 'person-circle-outline'),
         }}
       />
 

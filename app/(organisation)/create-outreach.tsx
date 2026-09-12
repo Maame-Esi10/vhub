@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -60,6 +60,7 @@ import { hasOwnHours, sortDayDrafts } from '@/lib/outreachDays';
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { humanError } from '@/lib/errorMessage';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 const TOTAL_STEPS = 4;
 const STEP_TITLES = ['Basic Information', 'Where & When', 'Requirements & Capacity', 'Preview'];
@@ -72,6 +73,7 @@ const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
 }));
 
 export default function CreateOutreach() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const organisationId = useAuthStore((s) => s.user)?.id;
   const createOutreach = useCreateOutreach();
@@ -454,7 +456,10 @@ export default function CreateOutreach() {
         <ScrollView
           ref={scrollRef}
           style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
           keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.stepTitle}>{STEP_TITLES[step - 1]}</Text>

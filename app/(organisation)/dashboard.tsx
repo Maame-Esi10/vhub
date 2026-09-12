@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -35,6 +35,7 @@ import type { OutreachWithCounts } from '@/hooks';
 import { unreadCount, useNotifications } from '@/hooks/useNotifications';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachStatus } from '@/types/database';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 type StatusFilter = OutreachStatus | 'all';
 
@@ -47,6 +48,7 @@ const FILTERS: FilterChipOption<StatusFilter>[] = [
 ];
 
 export default function Dashboard() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
@@ -250,7 +252,10 @@ export default function Dashboard() {
         style={styles.flex}
         data={filteredOutreaches}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
         ListHeaderComponent={header}
         refreshControl={
           <RefreshControl refreshing={outreachesQuery.isRefetching} onRefresh={() => outreachesQuery.refetch()} />

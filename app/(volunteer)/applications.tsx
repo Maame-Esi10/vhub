@@ -6,7 +6,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { EmptyState, ErrorState, FilterChips, ListSkeleton, Toast } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
@@ -24,6 +24,7 @@ import type { VolunteerApplication } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
 import { humanError } from '@/lib/errorMessage';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 type StatusGroup = ApplicationStatus | 'all';
 
@@ -54,6 +55,7 @@ type Row =
   | { kind: 'application'; key: string; application: VolunteerApplication };
 
 export default function Applications() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const volunteerId = useAuthStore((state) => state.user)?.id;
 
@@ -203,7 +205,10 @@ export default function Applications() {
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={applicationsQuery.isRefetching}

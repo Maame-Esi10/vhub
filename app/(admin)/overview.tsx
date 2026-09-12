@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar, ErrorState, ListSkeleton, MetricCard } from '@/components/ui';
@@ -15,6 +15,7 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAdminActions } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import { humanError } from '@/lib/errorMessage';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 /**
  * The admin home.
@@ -29,6 +30,7 @@ import { humanError } from '@/lib/errorMessage';
  * places with two different framings.
  */
 export default function AdminOverview() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
 
@@ -44,7 +46,10 @@ export default function AdminOverview() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={actionsQuery.isRefetching} onRefresh={() => actionsQuery.refetch()} />

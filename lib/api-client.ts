@@ -52,6 +52,7 @@ export const API_ROUTES = {
   vettedSource: '/api/vetted-source',
   scoreEvent: '/api/score-event',
   accountClosure: '/api/account-closure',
+  mailHealth: '/api/mail-health',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -1292,4 +1293,27 @@ export function closeAccount(options?: RequestOptions): Promise<CloseAccountResp
     { confirmation: 'CLOSE' },
     options
   );
+}
+
+// ---------------------------------------------------------------------------
+// Mail health
+// ---------------------------------------------------------------------------
+
+export interface MailHealthResponse {
+  ok: true;
+  checkedAt: string;
+  meaning: string;
+}
+
+/**
+ * Admin-only. Authenticates to Gmail without sending anything and reports
+ * whether the app password is still valid.
+ *
+ * A success means the credential is alive, so a Supabase mail failure is in
+ * Supabase's own SMTP settings. A failure throws an ApiClientError whose
+ * message is nodemailer's description of the SMTP exchange — which is the
+ * diagnostic, and never contains the password.
+ */
+export function checkMailHealth(options?: RequestOptions): Promise<MailHealthResponse> {
+  return apiPost<MailHealthResponse>(API_ROUTES.mailHealth, {}, options);
 }

@@ -5,7 +5,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Badge, Button, ConfirmDialog, Input, ListSkeleton, Toast } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -16,6 +16,7 @@ import {
   type ModerationSearchRow,
 } from '@/hooks';
 import { humanError } from '@/lib/errorMessage';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 /**
  * Moderation: suspend, ban, reinstate.
@@ -36,6 +37,7 @@ import { humanError } from '@/lib/errorMessage';
  * moderation can be found and undone without remembering a name.
  */
 export default function AdminPeople() {
+  const insets = useSafeAreaInsets();
   const [term, setTerm] = useState('');
   const search = useAccountSearch(term);
   const moderated = useModeratedAccounts();
@@ -90,7 +92,10 @@ export default function AdminPeople() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[
+          styles.content,
+          { paddingBottom: tabBarClearance(insets.bottom) },
+        ]} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>People</Text>
         <Text style={styles.subtitle}>
           Suspending an account stops what has not happened yet. It never changes the past — attendance
