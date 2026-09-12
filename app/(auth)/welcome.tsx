@@ -86,7 +86,33 @@ const AUTOPLAY_INTERVAL_MS = 4000;
  * way. There is no prop that slows it down, which is why this is now driven by
  * an Animated.timing whose offset we push into the scroll view frame by frame.
  */
-const SLIDE_GLIDE_MS = 650;
+const SLIDE_GLIDE_MS = 780;
+
+/**
+ * The curve the slide travels on.
+ *
+ * NOT `Easing.inOut(Easing.cubic)`, which is what this was and which the owner
+ * described as reading "like swiping photos in a phone gallery". A symmetric
+ * curve is the motion of an object being dragged: it accelerates and
+ * decelerates in equal measure and says nothing. This one leaves quickly and
+ * spends most of its time arriving — the long tail is the part that reads as
+ * deliberate rather than mechanical, and it is what the parallax and the copy
+ * settle underneath have time to be seen against.
+ */
+const SLIDE_EASING = Easing.bezier(0.32, 0, 0.1, 1);
+
+/**
+ * How far the photograph lags behind the slide carrying it, as a share of the
+ * screen width. The image is inset by the same amount on both sides so the
+ * lag never drags an empty edge into view.
+ */
+const PARALLAX = 0.28;
+
+/** How much a neighbouring slide's photograph is zoomed before it settles. */
+const SETTLE_ZOOM = 1.09;
+
+/** How far the headline and subtext rise into place, in points. */
+const COPY_LIFT = 26;
 
 /**
  * Ceiling on how much longer a multi-slide move may take than a single-slide
@@ -237,7 +263,7 @@ export default function Welcome() {
       const animation = Animated.timing(glideX, {
         toValue: target,
         duration: SLIDE_GLIDE_MS * stretch,
-        easing: Easing.inOut(Easing.cubic),
+        easing: SLIDE_EASING,
         // Cannot be native: the native driver only writes style props, and this
         // value is not a style — its listener calls scrollTo(). A native-driven
         // value does not fire JS listeners at all, so the carousel would sit
@@ -347,14 +373,33 @@ export default function Welcome() {
     [settleAt, startAutoplay]
   );
 
-  const handleSkip = useCallback(() => {
-    const lastIndex = SLIDES.length - 1;
-    // Two slides in one move, so glideTo stretches the duration rather than
-    // doubling the speed. Arriving at the end, the only way on is back.
-    directionRef.current = -1;
-    glideTo(lastIndex);
-    startAutoplay();
-  }, [glideTo, startAutoplay]);
+  /*
+    SKIP BECAME LOG IN (owner's question, 2026-09-11; recommendation and change
+    in the same pass).
+
+    "Skip" promises to leave the thing you are in, and this control did not do
+    that — it jumped to the carousel's last slide. That is a weaker version of
+    doing nothing, because auto-advance arrives there on its own a few seconds
+    later, and the user is left exactly where they started with the same
+    decision in front of them.
+
+    There is also nothing here to skip TO. This is not a multi-step flow with
+    an app behind it: the two actions this screen exists to offer are pinned
+    over every slide and are reachable at any moment. The carousel is the
+    backdrop, not a gate.
+
+    What WAS missing is the opposite door. Both buttons lead to registration,
+    so somebody who already has an account had to open the register screen and
+    find the "Already have an account? Log in" line at the bottom of it. That
+    is the person a top-right escape hatch on a welcome screen is actually for,
+    and it is now what the control does.
+
+    It is hidden for a half-onboarded volunteer, who is already signed in and
+    is being offered "FINISH SETTING UP" and "NOT YOU? SIGN OUT" below.
+  */
+  const goToLogin = useCallback(() => {
+    router.push('/(auth)/login');
+  }, [router]);
 
   const goToRegister = useCallback(
     (role: RegisterRole) => {
@@ -441,32 +486,16 @@ export default function Welcome() {
         onMomentumScrollEnd={handleMomentumScrollEnd}
         style={styles.list}
       >
-        {SLIDES.map((slide) => (
-          <View key={slide.key} style={[styles.slide, { width }]}>
-            <Image
-              source={SLIDE_IMAGES[slide.key]}
-              style={StyleSheet.absoluteFill}
-              resizeMode="cover"
-              // Android fades every image in over 300ms by default, which
-              // reads as "dark, then picture" on a full-bleed hero even once
-              // the bytes are already cached.
-              fadeDuration={0}
-            />
-            <View style={[StyleSheet.absoluteFill, styles.slideOverlay]} />
-
-            <View
-              style={[
-                styles.slideText,
-                {
-                  paddingTop: insets.top + spacing.base + topBarHeight + spacing.xxl,
-                  paddingBottom: ctaHeight,
-                },
-              ]}
-            >
-              <Text style={styles.headline}>{slide.headline}</Text>
-              <Text style={styles.subtext}>{slide.subtext}</Text>
-            </View>
-          </View>
+        {SLIDES.map((slide, index) => (
+          <CarouselSlide
+            key={slide.key}
+            slide={slide}
+            index={index}
+            scrollX={scrollX}
+            width={width}
+            paddingTop={insets.top + spacing.base + topBarHeight + spacing.xxl}
+            paddingBottom={ctaHeight}
+          />
         ))}
       </Animated.ScrollView>
 
@@ -484,14 +513,16 @@ export default function Welcome() {
           <Image source={LOGO} style={{ width: logoSize, height: logoSize }} resizeMode="contain" />
           <Text style={styles.wordmark}>V-HUB</Text>
         </View>
-        <Pressable
-          onPress={handleSkip}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Skip to last slide"
-        >
-          <Text style={styles.skipText}>SKIP</Text>
-        </Pressable>
+        {resumingOnboarding ? null : (
+          <Pressable
+            onPress={goToLogin}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Log in to an existing account"
+          >
+            <Text style={styles.topBarAction}>LOG IN</Text>
+          </Pressable>
+        )}
       </View>
 
       <View
@@ -542,6 +573,113 @@ export default function Welcome() {
           </>
         )}
       </View>
+    </View>
+  );
+}
+
+interface CarouselSlideProps {
+  slide: Slide;
+  index: number;
+  scrollX: Animated.Value;
+  width: number;
+  paddingTop: number;
+  paddingBottom: number;
+}
+
+/**
+ * One full-bleed slide, with the motion that makes this an onboarding
+ * carousel rather than a photo gallery.
+ *
+ * WHY THERE IS ANY MOTION HERE AT ALL (owner, 2026-09-11). Before this the
+ * transition was correct and characterless: three flat cards sliding past at a
+ * constant rate, which is exactly what a phone's gallery does when you swipe
+ * between pictures. Nothing about it said the app had been designed.
+ *
+ * Three things happen at once, and they are layered on purpose — each moves at
+ * a different rate, which is what gives a flat screen depth:
+ *
+ *   the PHOTOGRAPH lags behind the slide carrying it (PARALLAX) and settles
+ *   out of a slight zoom (SETTLE_ZOOM), so it reads as sitting further away
+ *   than the frame it is in and coming to rest rather than being dealt;
+ *
+ *   the COPY lifts into place and cross-dissolves with its neighbour instead
+ *   of travelling rigidly with the picture, so the words arrive after the
+ *   image rather than with it.
+ *
+ * EVERY ONE OF THESE IS DRIVEN OFF `scrollX`, NOT OFF A TIMER. That is the
+ * important part and it is not incidental: interpolating the real scroll
+ * position means the same motion happens under a finger, at whatever speed the
+ * finger moves, as happens on auto-advance. Motion that only exists on
+ * autoplay is a cutscene; motion tied to the scroll is the interface
+ * responding. It is also free — every property used here (translate, scale,
+ * opacity) is one the native driver can write, so none of it touches the JS
+ * thread and none of it re-renders anything.
+ */
+function CarouselSlide({
+  slide,
+  index,
+  scrollX,
+  width,
+  paddingTop,
+  paddingBottom,
+}: CarouselSlideProps) {
+  const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+
+  // Positive when this slide has been scrolled PAST, so the picture trails to
+  // the right as the slide leaves to the left.
+  const imageShift = scrollX.interpolate({
+    inputRange,
+    outputRange: [-width * PARALLAX, 0, width * PARALLAX],
+    extrapolate: 'clamp',
+  });
+
+  const imageZoom = scrollX.interpolate({
+    inputRange,
+    outputRange: [SETTLE_ZOOM, 1, SETTLE_ZOOM],
+    extrapolate: 'clamp',
+  });
+
+  const copyLift = scrollX.interpolate({
+    inputRange,
+    outputRange: [COPY_LIFT, 0, COPY_LIFT],
+    extrapolate: 'clamp',
+  });
+
+  const copyFade = scrollX.interpolate({
+    inputRange,
+    outputRange: [0, 1, 0],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <View style={[styles.slide, { width }]}>
+      <Animated.Image
+        source={SLIDE_IMAGES[slide.key]}
+        style={[
+          styles.slideImage,
+          // Inset by exactly the distance the parallax can travel, so the lag
+          // can never drag the slide's own background into view at an edge.
+          { left: -width * PARALLAX, right: -width * PARALLAX },
+          { transform: [{ translateX: imageShift }, { scale: imageZoom }] },
+        ]}
+        resizeMode="cover"
+        // Android fades every image in over 300ms by default, which reads as
+        // "dark, then picture" on a full-bleed hero even once the bytes are
+        // already cached.
+        fadeDuration={0}
+      />
+      <View style={[StyleSheet.absoluteFill, styles.slideOverlay]} />
+
+      <Animated.View
+        style={[
+          styles.slideText,
+          { paddingTop, paddingBottom },
+          { opacity: copyFade, transform: [{ translateY: copyLift }] },
+        ]}
+      >
+        <Text style={styles.headline}>{slide.headline}</Text>
+        <Text style={styles.subtext}>{slide.subtext}</Text>
+      </Animated.View>
     </View>
   );
 }
@@ -606,6 +744,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   slide: {
+    // The photograph is deliberately wider than the slide so the parallax has
+    // something to reveal; without clipping it would spill over its neighbour.
+    overflow: 'hidden',
     // No `flex: 1` here. A slide's width is set inline from the window width,
     // and `flex: 1` also sets flexBasis to 0 on the main axis — which inside a
     // horizontal scroll view IS the width. Two rules arguing over the size of a
@@ -613,6 +754,11 @@ const styles = StyleSheet.create({
     // a pixel or two off; the explicit width is the one that should win.
     height: '100%',
     backgroundColor: colors.heroBackground,
+  },
+  slideImage: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
   },
   slideOverlay: {
     backgroundColor: colors.overlay,
@@ -641,7 +787,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     color: colors.white,
   },
-  skipText: {
+  topBarAction: {
     fontFamily: fontFamily.medium,
     fontSize: 13,
     letterSpacing: 1,
