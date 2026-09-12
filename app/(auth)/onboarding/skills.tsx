@@ -1,31 +1,16 @@
 import { useMemo, useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  Button,
-  CategoryChecklist,
-  Input,
-  OnboardingStepFooter,
-  OnboardingStepHeader,
-} from '@/components/ui';
+import { Button, Input, OnboardingStepFooter, OnboardingStepHeader } from '@/components/ui';
+import { SkillPicker, type SkillGroup } from '@/components/onboarding/SkillPicker';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { SKILL_CATEGORIES } from '@/constants/skills';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 
-interface SkillSection {
-  title: string;
-  icon: string;
-  data: string[];
-}
-
-const SECTIONS: SkillSection[] = SKILL_CATEGORIES.map((category) => ({
+const GROUPS: SkillGroup[] = SKILL_CATEGORIES.map((category) => ({
   title: category.name,
   icon: category.icon,
   data: category.skills,
@@ -38,23 +23,34 @@ export default function OnboardingSkills() {
   const [selected, setSelected] = useState<Set<string>>(new Set(initialSkillTags));
   const [query, setQuery] = useState('');
 
-  const sections = useMemo(() => {
+  // Opens on the category the volunteer already has something in, so returning
+  // to this step shows their own answers rather than the first card.
+  const [activeGroup, setActiveGroup] = useState<string>(() => {
+    const withSelection = GROUPS.find((group) =>
+      group.data.some((skill) => initialSkillTags.includes(skill))
+    );
+    return withSelection?.title ?? GROUPS[0]?.title ?? '';
+  });
+
+  const groups = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return SECTIONS;
-    return SECTIONS.map((section) => ({
-      ...section,
-      data: section.data.filter((skill) => skill.toLowerCase().includes(trimmed)),
-    })).filter((section) => section.data.length > 0);
+    if (!trimmed) return GROUPS;
+    return GROUPS.map((group) => ({
+      ...group,
+      data: group.data.filter((skill) => skill.toLowerCase().includes(trimmed)),
+    })).filter((group) => group.data.length > 0);
   }, [query]);
+
+  const matchCount = useMemo(
+    () => groups.reduce((sum, group) => sum + group.data.length, 0),
+    [groups]
+  );
 
   function toggleSkill(skill: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(skill)) {
-        next.delete(skill);
-      } else {
-        next.add(skill);
-      }
+      if (next.has(skill)) next.delete(skill);
+      else next.add(skill);
       return next;
     });
   }
@@ -82,47 +78,56 @@ export default function OnboardingSkills() {
           placeholder="Search skills..."
           value={query}
           onChangeText={setQuery}
-          leadingIcon={<MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />}
+          leadingIcon={
+            <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
+          }
           containerStyle={styles.search}
         />
 
-        {/*
-          With ninety skills across nine categories, the two things a volunteer
-          wants to know while scrolling are how many they have already picked
-          and whether their search found anything at all.
-        */}
-        <Text style={styles.selectionCount}>
-          {selected.size} selected
-          {query.trim()
-            ? ` · ${sections.reduce((sum, section) => sum + section.data.length, 0)} match "${query.trim()}"`
-            : ''}
-        </Text>
-
-        {/*
-          The same collapsible category cards the picker uses, from the same
-          component. This screen had its own flat SectionList before, which is
-          how two screens that should look identical stop looking identical.
-        */}
         <ScrollView
           style={styles.list}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {sections.length === 0 ? (
+          {query.trim() && groups.length === 0 ? (
             <Text style={styles.noMatches}>
               Nothing matches &quot;{query.trim()}&quot;. Try a shorter word.
             </Text>
-          ) : null}
-
-          <CategoryChecklist
-            sections={sections}
-            selected={selected}
-            onToggle={toggleSkill}
-            searching={query.trim().length > 0}
-          />
+          ) : (
+            <>
+              {query.trim() ? (
+                <Text style={styles.matchCount}>
+                  {matchCount === 1
+                    ? `1 skill matches "${query.trim()}"`
+                    : `${matchCount} skills match "${query.trim()}"`}
+                </Text>
+              ) : null}
+              {/*
+                ONBOARDING ONLY. The outreach skill picker still uses
+                CategoryChecklist and is deliberately untouched — see the
+                comment at the top of SkillPicker for why the same list wants a
+                different shape when you are being asked what you can do rather
+                than searching for something you already have in mind.
+              */}
+              <SkillPicker
+                groups={groups}
+                selected={selected}
+                onToggle={toggleSkill}
+                activeGroup={activeGroup}
+                onChangeGroup={setActiveGroup}
+                query={query}
+              />
+            </>
+          )}
         </ScrollView>
 
-        <Button title="Continue" variant="solid" onPress={handleContinue} style={styles.continueButton} />
+        <Button
+          title="Continue"
+          variant="solid"
+          onPress={handleContinue}
+          style={styles.continueButton}
+        />
         <OnboardingStepFooter step={1} total={5} section="Skill Configuration" />
       </View>
     </SafeAreaView>
@@ -152,11 +157,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginBottom: spacing.base,
   },
-  selectionCount: {
+  matchCount: {
     fontFamily: fontFamily.medium,
     fontSize: 12,
     color: colors.textSecondary,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   noMatches: {
     fontFamily: fontFamily.regular,
@@ -166,15 +171,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   search: {
-    marginBottom: spacing.sm,
+    marginBottom: spacing.base,
   },
   list: {
     flex: 1,
   },
   listContent: {
-    paddingBottom: spacing.base,
+    paddingBottom: spacing.lg,
   },
   continueButton: {
-    marginTop: spacing.sm,
+    marginTop: spacing.base,
   },
 });
