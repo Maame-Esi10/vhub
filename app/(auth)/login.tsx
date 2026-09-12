@@ -78,7 +78,13 @@ export default function Login() {
         behavior={KEYBOARD_AVOID_BEHAVIOR}
       >
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + spacing.xl }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            // Bottom inset as well as top: without it the last row of the form
+            // sits under the phone's gesture bar on some handsets and not
+            // others, which reads as a layout that only works on one device.
+            { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xxl },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.brandBlock}>

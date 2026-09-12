@@ -14,36 +14,45 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 interface ProfileActionProps {
   icon: IconName;
   title: string;
+  /** One short line. Not a sentence explaining the feature — see below. */
   body: string;
   accessibilityLabel: string;
   onPress: () => void;
+  /** The first row carries no divider above it. */
+  first?: boolean;
 }
 
 /**
- * One of the two actions under the score card.
+ * One row of the actions card.
  *
- * REDESIGNED 2026-09-11. These were thin outlined rows carrying a bare icon, a
- * title and two lines of grey body copy — the same visual weight as a
- * paragraph, so the two places a volunteer actually goes from this screen read
- * as footnotes. They now use the row language the rest of the app already
- * uses: a filled icon tile in the coral tint, a filled surface rather than an
- * outline, real internal padding, and a chevron in its own fixed column.
+ * REDESIGNED TWICE. The first attempt (2026-09-11) made each of these a
+ * separate filled card with a coral icon tile and two lines of body copy. The
+ * owner did not approve it, and rereading it she was right: two full-width
+ * cards carrying a paragraph each gave two ordinary navigation links more
+ * weight than the V-Score panel above them, which is the one thing on this
+ * screen that is genuinely worth looking at.
  *
- * The icon tile is deliberately NOT scaled with the system font: it holds a
- * glyph, not words, and growing it at a large font size only pushes the text
- * it labels into a narrower column.
+ * So they are now ONE grouped card with a hairline between the rows — the
+ * standard way a phone shows a short list of destinations, and about half the
+ * height. The subtitles are cut to a single short line. "Everything
+ * organisations have said about your work, in full, including their notes" is
+ * a sentence explaining a feature; a row like this needs a label and a hint,
+ * and the screen it opens can do the explaining.
  */
-function ProfileAction({ icon, title, body, accessibilityLabel, onPress }: ProfileActionProps) {
+function ProfileAction({ icon, title, body, accessibilityLabel, onPress, first }: ProfileActionProps) {
   return (
     <Pressable
-      style={({ pressed }) => [styles.actionCard, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.actionRow, !first && styles.actionRowDivided, pressed && styles.pressed]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
     >
-      <View style={styles.actionIconTile}>
-        <MaterialCommunityIcons name={icon} size={22} color={colors.primary} />
-      </View>
+      <MaterialCommunityIcons
+        name={icon}
+        size={22}
+        color={colors.primary}
+        style={styles.actionIcon}
+      />
       <View style={styles.actionText}>
         <Text style={styles.actionTitle}>{title}</Text>
         <Text style={styles.actionBody}>{body}</Text>
@@ -164,21 +173,23 @@ export default function VolunteerProfile() {
           </Pressable>
         ) : null}
 
-        <ProfileAction
-          icon="message-star-outline"
-          title="My Feedback"
-          body="Everything organisations have said about your work, in full, including their notes."
-          accessibilityLabel="See the feedback organisations have given you"
-          onPress={() => router.push('/(volunteer)/feedback')}
-        />
-
-        <ProfileAction
-          icon="account-edit-outline"
-          title="Edit Profile"
-          body="Update your details, expertise and weekly availability."
-          accessibilityLabel="Edit your professional profile"
-          onPress={() => router.push('/(volunteer)/edit-profile')}
-        />
+        <View style={styles.actionsCard}>
+          <ProfileAction
+            first
+            icon="message-star-outline"
+            title="My Feedback"
+            body="Reviews and notes from organisations"
+            accessibilityLabel="See the feedback organisations have given you"
+            onPress={() => router.push('/(volunteer)/feedback')}
+          />
+          <ProfileAction
+            icon="account-edit-outline"
+            title="Edit Profile"
+            body="Details, expertise and availability"
+            accessibilityLabel="Edit your professional profile"
+            onPress={() => router.push('/(volunteer)/edit-profile')}
+          />
+        </View>
 
         {/*
           Sign Out lives in Settings (the gear above), not here — it is account
@@ -352,31 +363,36 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
 
-  // ---- The two actions --------------------------------------------------
-  actionCard: {
+  // ---- The two actions, as one grouped card ----------------------------
+  actionsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    marginTop: spacing.lg,
+    overflow: 'hidden',
+  },
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.base,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginTop: spacing.base,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.base,
   },
-  actionIconTile: {
-    width: 44,
-    height: 44,
+  actionRowDivided: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  // A bare glyph rather than a tile. The tile was what made these read as
+  // heavier than the score card above them.
+  actionIcon: {
     flexGrow: 0,
     flexShrink: 0,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(255, 107, 107, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 22,
   },
   actionText: {
     flexGrow: 1,
     flexShrink: 1,
     flexBasis: 0,
-    gap: 2,
+    gap: 1,
   },
   actionTitle: {
     fontFamily: fontFamily.semiBold,
@@ -385,8 +401,8 @@ const styles = StyleSheet.create({
   },
   actionBody: {
     fontFamily: fontFamily.regular,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12.5,
+    lineHeight: 17,
     color: colors.textSecondary,
   },
   // An icon is a Text node underneath, so without this it is a shrinkable flex

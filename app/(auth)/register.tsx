@@ -16,12 +16,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Input } from '@/components/ui';
+import { Button, Input , PasswordRequirements } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { ORG_TYPES, OrgType } from '@/constants/org-types';
 import { useResendConfirmation, useSignUp } from '@/hooks';
 import { humanError, humanErrorOrNull } from '@/lib/errorMessage';
+import { describePasswordProblem } from '@/lib/password';
+
 
 type RegisterRole = 'volunteer' | 'organisation';
 
@@ -95,8 +97,15 @@ export default function Register() {
       nextFieldErrors.email = 'Please enter your email address.';
     }
 
-    if (!password || password.length < 6) {
-      nextFieldErrors.password = 'Password must be at least 6 characters.';
+    /*
+      THE SHARED RULE, not a second opinion. This was `password.length < 6`,
+      which meant the app demanded 8 characters to CHANGE a password and 6 to
+      choose one in the first place — the wrong way round, and neither number
+      was ever mentioned to the person typing. See lib/password.ts.
+    */
+    const passwordProblem = describePasswordProblem(password);
+    if (passwordProblem) {
+      nextFieldErrors.password = passwordProblem;
     }
 
     setFieldErrors(nextFieldErrors);
@@ -230,7 +239,21 @@ export default function Register() {
         behavior={KEYBOARD_AVOID_BEHAVIOR}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          /*
+            THE BOTTOM INSET, WHICH WAS MISSING ENTIRELY.
+
+            This is why "Already have an account? Log in" was visible on one
+            phone and not the other. It is the last thing in the scroll view,
+            and the content stopped 24dp from the bottom of the WINDOW — but on
+            a phone using gesture navigation the bottom 24-48dp of the window
+            is underneath the system gesture bar. On a handset with three-button
+            navigation, or a smaller inset, the same 24dp was enough and the row
+            showed. Nothing about the row itself was ever wrong.
+          */
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + spacing.xxl },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           <View style={[styles.brandStrip, { paddingTop: insets.top + spacing.sm }]}>
@@ -336,6 +359,12 @@ export default function Register() {
                       </Pressable>
                     }
                   />
+                  {/*
+                    Live, as they type. The rules that tick here are the same
+                    ones validate() enforces, imported from lib/password.ts, so
+                    the checklist can never promise something the form rejects.
+                  */}
+                  <PasswordRequirements value={password} />
                 </View>
 
                 <Pressable
@@ -488,6 +517,12 @@ export default function Register() {
                       </Pressable>
                     }
                   />
+                  {/*
+                    Live, as they type. The rules that tick here are the same
+                    ones validate() enforces, imported from lib/password.ts, so
+                    the checklist can never promise something the form rejects.
+                  */}
+                  <PasswordRequirements value={password} />
 
                   <Input
                     label="Description"

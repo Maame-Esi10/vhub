@@ -157,22 +157,24 @@ export async function syncProfileEmail(userId: string, email: string): Promise<v
   }
 }
 
-/** Password rule shared by this screen and the sign-up form. */
-export const MIN_PASSWORD_LENGTH = 8;
+/*
+  THE PASSWORD RULE MOVED TO lib/password.ts (2026-09-12) and is re-exported
+  here so existing imports keep working.
 
-export type PasswordStrength = 'weak' | 'fair' | 'strong';
-
-/**
- * Cheap, local strength read for the meter. Not a security control -- the
- * only enforced rule is MIN_PASSWORD_LENGTH; this exists to nudge, not block.
- */
-export function passwordStrength(value: string): PasswordStrength {
-  if (value.length < MIN_PASSWORD_LENGTH) return 'weak';
-  const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((re) => re.test(value)).length;
-  if (value.length >= 12 && classes >= 3) return 'strong';
-  if (classes >= 2) return 'fair';
-  return 'weak';
-}
+  It moved because the comment that used to sit here — "shared by this screen
+  and the sign-up form" — was not true. Registration had its own inline
+  `password.length < 6`, checked only on submit, so the app demanded 8
+  characters to CHANGE a password and 6 to CHOOSE one. Putting the rule in a
+  pure module both screens import is what makes the claim true.
+*/
+export {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_RULES,
+  checkPasswordRules,
+  describePasswordProblem,
+  passwordStrength,
+} from '@/lib/password';
+export type { PasswordStrength, PasswordRule } from '@/lib/password';
 
 /**
  * Closing your own account.

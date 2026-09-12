@@ -44,7 +44,10 @@ export interface SplashViewProps {
  */
 export function SplashView({ showLoading = true, variant = 'full' }: SplashViewProps) {
   const { width } = useWindowDimensions();
-  const logoSize = getLogoSize('hero', width);
+  // Two sizes, because the mark has two jobs. Alone on the dark ground it is
+  // the whole screen; above the wordmark and the subtitle it is the top of a
+  // lockup and has to leave them room. See constants/logoSizes.ts.
+  const logoSize = getLogoSize(variant === 'mark' ? 'hero' : 'heroCompact', width);
   const wordmarkFontSize = getSplashWordmarkFontSize(width);
 
   if (variant === 'mark') {
