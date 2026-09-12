@@ -5041,3 +5041,103 @@ because the question was asked and the answer should not have to be rediscovered
   large font setting can say whether it is in the right place.
 - **Not built:** nothing from this round. The one item that is not a code change
   is Supabase's "Confirm email" setting.
+
+## Signup 500, and the JSON that reached a user (2026-09-12)
+
+### The 500 was diagnosed, not inferred
+
+Reproduced directly against the live project with the public anon key:
+
+```
+POST /auth/v1/signup -> 500
+{"code":500,"error_code":"unexpected_failure","msg":"Error sending confirmation email"}
+```
+
+**Supabase's SMTP send is failing.** Not the app, not the schema, not the
+`profiles` INSERT grant list that was tightened in `20260909`. Turning "Confirm
+email" on is what *exposed* it: with it off Supabase never asks for a mail, so a
+broken mailer and a working one look identical.
+
+A second probe answered the question that decides whether anything needs
+cleaning up: **Supabase rolls the signup back.** Registering the same address
+twice returns the same 500 rather than "already registered", and a login attempt
+returns `invalid_credentials`. No orphaned `auth.users` rows exist, from the
+owner's attempts or from the probes.
+
+The probes used `@example.invalid`, which is reserved by RFC 6761 and can never
+be delivered to. That raises an obvious objection — a real SMTP server would
+also refuse an undeliverable domain — but it is answered by the owner's own
+report: she saw the same 500 with a **real** address on her phone. The probe
+confirms the error text; her report confirms the failure is not an artefact of
+the fake domain.
+
+**Which half is broken cannot be told from the error, and Supabase offers no
+test button.** So `GET /api/mail-health` (admin only) authenticates to Gmail with
+nodemailer's `verify()`, which completes the AUTH exchange and hangs up without
+sending — no quota, no inbox touched. 200 means the app password is alive and
+the fault is in Supabase's SMTP settings; 502 means the credential is dead, and
+if so **every email this API has tried to send since it died has failed
+silently**, because both send paths log and swallow so a mail outage never fails
+a recorded decision. CLAUDE.md has warned about exactly this since 2026-09-01:
+changing the Google account's password revokes the app password, stops all mail,
+and looks like Supabase breaking.
+
+### The raw JSON
+
+`{"status":500,"statusText":"","redirected":false,"url":"…/auth/v1/signup"}` is a
+serialised HTTP Response. It reached the screen because the screen rendered
+`error.message`, and because supabase-js sets `message` to a stringified copy of
+the response when the body is not the JSON it expected.
+
+**The screen was not doing anything unusual — 97 places render an error the same
+way.** So the fix is one function they all go through, which is allowed to decide
+that a "message" is unfit for a person and substitute one that is.
+`lib/errorMessage.ts` rejects JSON, stack traces, bare URLs, SQLSTATEs, bare
+error codes and anything over 300 characters, and maps the failures worth naming
+to sentences. It rescues exactly one thing from a serialised response: a 5xx
+status means the fault is ours and nothing was saved, which is what decides
+whether trying again is worth someone's time.
+
+83 sites converted across two codemods. The only `error.message` left in the app
+are `console.warn` calls, which are for developers and stay raw. 12 unit tests,
+including the exact string that was on screen.
+
+### The rest of the round
+
+- **Password validation.** `MIN_PASSWORD_LENGTH` sat in `useAccountSecurity`
+  under a comment calling it "the password rule shared by this screen and the
+  sign-up form". It was not shared: registration had its own inline
+  `password.length < 6`, checked only on submit. **The app demanded 8 characters
+  to change a password and 6 to choose one.** The rule is now `lib/password.ts`:
+  at least 8 characters, at least one letter, at least one number, and nothing
+  else. A symbol requirement reliably produces `Password1!`, which satisfies
+  every box and is among the first things an attacker tries; length is what
+  helps, so the meter rewards it and the requirements do not mandate it. 12
+  tests.
+- **"Already have an account? Log in", visible on one phone and not the other.**
+  Nothing was wrong with the row. The register screen never applied
+  `insets.bottom` anywhere, so its scroll content stopped 24dp from the bottom
+  of the *window* — and on a phone using gesture navigation the bottom 24–48dp
+  of the window is underneath the system gesture bar. On a handset with
+  three-button navigation the same 24dp cleared it. All four auth screens had
+  the gap.
+- **The full splash's logo.** The mark now has two sizes because it has two
+  jobs: alone on the dark ground it is the whole screen and keeps the approved
+  size; above the wordmark and subtitle it was three times the wordmark's height
+  and crowded the block it was meant to introduce, so it drops to roughly twice
+  it.
+- **My Feedback and Edit Profile.** Two separate filled cards with a paragraph
+  each gave two ordinary navigation links more weight than the V-Score panel
+  above them. One grouped card, a hairline between the rows, about half the
+  height, subtitles cut to a single short line. The V-Score card is untouched at
+  the owner's request.
+
+### Buckets
+
+- **Built and working:** all of the above. 546 tests green, both typechecks
+  clean, both lint passes at zero.
+- **Built but untested:** `/api/mail-health` needs a deploy before it can be
+  called, and it needs an admin session.
+- **Not built, and not ours:** the Supabase SMTP configuration itself. The app
+  now reports the failure in a sentence and offers a resend; it cannot send the
+  mail.
