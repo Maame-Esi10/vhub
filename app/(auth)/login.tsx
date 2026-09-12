@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
 } from 'react-native';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -74,7 +74,7 @@ export default function Login() {
       <StatusBar style="dark" />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_AVOID_BEHAVIOR}
       >
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + spacing.xl }]}

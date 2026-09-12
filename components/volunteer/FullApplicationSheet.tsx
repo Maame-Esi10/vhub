@@ -2,13 +2,13 @@ import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -68,7 +68,7 @@ export function FullApplicationSheet({
         <SafeAreaView style={styles.sheet} edges={['bottom']}>
           <KeyboardAvoidingView
             style={styles.flex}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={KEYBOARD_AVOID_BEHAVIOR}
           >
             <View style={styles.header}>
               <Pressable onPress={onDismiss} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12}>

@@ -4,13 +4,13 @@ import {
   Image,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
 } from 'react-native';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -20,7 +20,7 @@ import { Button, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { ORG_TYPES, OrgType } from '@/constants/org-types';
-import { useSignUp } from '@/hooks';
+import { useResendConfirmation, useSignUp } from '@/hooks';
 
 type RegisterRole = 'volunteer' | 'organisation';
 
@@ -36,6 +36,7 @@ export default function Register() {
   const { role: roleParam } = useLocalSearchParams<{ role?: string }>();
   const role = useMemo(() => resolveRole(roleParam), [roleParam]);
   const signUp = useSignUp();
+  const resendConfirmation = useResendConfirmation();
 
   // Shared fields
   const [email, setEmail] = useState('');
@@ -182,6 +183,34 @@ export default function Register() {
           <Text style={styles.confirmationHint}>
             Nothing arrived? Check your spam folder first.
           </Text>
+          {/*
+            THIS SCREEN USED TO BE A DEAD END. An unconfirmed address cannot log
+            in, and Supabase refuses a second registration for an address it
+            already holds — so if the email did not arrive there was no way
+            forward from inside the app and no way back into the account. One
+            button is the whole fix.
+          */}
+          <Button
+            title={
+              resendConfirmation.isSuccess
+                ? 'Sent — check your inbox again'
+                : resendConfirmation.isPending
+                  ? 'Sending...'
+                  : 'Send the email again'
+            }
+            variant="outline"
+            disabled={resendConfirmation.isPending || resendConfirmation.isSuccess}
+            onPress={() => resendConfirmation.mutate(email)}
+            accessibilityLabel="Send the confirmation email again"
+            style={styles.confirmationButton}
+          />
+          {resendConfirmation.isError ? (
+            <Text style={styles.errorText}>
+              {resendConfirmation.error instanceof Error
+                ? resendConfirmation.error.message
+                : 'Could not send it just now.'}
+            </Text>
+          ) : null}
           <Button
             title="Back to Login"
             variant="solid"
@@ -199,7 +228,7 @@ export default function Register() {
       <StatusBar style="dark" />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_AVOID_BEHAVIOR}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -516,17 +545,27 @@ export default function Register() {
               </>
             )}
 
-            <View style={styles.loginRow}>
-              <Text style={styles.loginText}>Already have an account? </Text>
-              <Pressable
-                onPress={goToLogin}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Log in"
-              >
-                <Text style={styles.loginLink}>Log in</Text>
-              </Pressable>
-            </View>
+            {/*
+              THE WHOLE LINE IS THE CONTROL, and it is meant to be seen.
+
+              It was a grey 14px sentence with only the last two words
+              tappable, sitting flush under the submit button — the owner's
+              report was that she could barely find it. For a returning user
+              this is the most important thing on the screen, and it was the
+              quietest. It now has a rule above it separating it from the form,
+              real vertical room, near-black lead-in text and a link at the
+              same weight as a button label; the tap target is the entire row
+              rather than two words at the end of it.
+            */}
+            <Pressable
+              onPress={goToLogin}
+              accessibilityRole="button"
+              accessibilityLabel="Already have an account? Log in"
+              style={({ pressed }) => [styles.loginRow, pressed && styles.loginRowPressed]}
+            >
+              <Text style={styles.loginText}>Already have an account?</Text>
+              <Text style={styles.loginLink}>Log in</Text>
+            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -713,16 +752,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: spacing.xl,
+    // Wraps at a large font size instead of squeezing two sentences onto one
+    // line that is not wide enough for either.
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.xxl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  loginRowPressed: {
+    opacity: 0.6,
   },
   loginText: {
     fontFamily: fontFamily.regular,
-    fontSize: 14,
-    color: colors.textSecondary,
+    fontSize: 15,
+    color: colors.textPrimary,
   },
   loginLink: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 14,
+    fontSize: 15,
     color: colors.primary,
   },
   modalBackdrop: {
