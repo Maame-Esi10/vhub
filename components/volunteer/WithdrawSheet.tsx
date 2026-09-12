@@ -162,6 +162,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // Wraps instead of clipping when the row outgrows its width at a large
+    // system font size. rowGap only applies between wrapped lines, so a row
+    // that still fits on one is unaffected.
+    flexWrap: 'wrap',
+    rowGap: 4,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.base,
   },
@@ -234,6 +239,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // Wraps instead of clipping when the row outgrows its width at a large
+    // system font size. rowGap only applies between wrapped lines, so a row
+    // that still fits on one is unaffected.
+    flexWrap: 'wrap',
+    rowGap: 4,
     minHeight: 52,
     paddingHorizontal: spacing.base,
     borderRadius: radius.md,

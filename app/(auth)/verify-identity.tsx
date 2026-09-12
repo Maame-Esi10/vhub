@@ -211,18 +211,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xxl,
   },
+  // "30% COMPLET", with the final letter clipped off, came from here: two
+  // text nodes in a space-between row with nothing telling either what to do
+  // when they no longer fit. At a large system font they do not fit, and a
+  // flex item that cannot shrink any further is simply cut off at the
+  // container edge. Wrapping lets the value drop to its own line instead, and
+  // the shrink floors stop either one being squeezed to nothing first.
   progressRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
     marginTop: spacing.base,
   },
   progressLabel: {
+    flexShrink: 1,
     fontFamily: fontFamily.semiBold,
     fontSize: 11,
     letterSpacing: 1,
     color: colors.textSecondary,
   },
   progressValue: {
+    flexShrink: 0,
     fontFamily: fontFamily.semiBold,
     fontSize: 11,
     color: colors.primary,

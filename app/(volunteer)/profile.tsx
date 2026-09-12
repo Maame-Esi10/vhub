@@ -216,6 +216,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // Wraps instead of clipping when the row outgrows its width at a large
+    // system font size. rowGap only applies between wrapped lines, so a row
+    // that still fits on one is unaffected.
+    flexWrap: 'wrap',
+    rowGap: 4,
     gap: spacing.base,
     marginTop: spacing.base,
     marginBottom: spacing.xl,
@@ -318,6 +323,11 @@ const styles = StyleSheet.create({
   scoreScale: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    // Wraps instead of clipping when the row outgrows its width at a large
+    // system font size. rowGap only applies between wrapped lines, so a row
+    // that still fits on one is unaffected.
+    flexWrap: 'wrap',
+    rowGap: 4,
     marginTop: spacing.xs,
   },
   scoreScaleEnd: {
