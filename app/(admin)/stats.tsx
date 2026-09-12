@@ -10,6 +10,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ErrorState, ListSkeleton, ScreenHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { usePlatformStats, type MonthlyNoShows } from '@/hooks';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * The platform, in numbers.
@@ -44,7 +45,7 @@ export default function AdminStats() {
         <View style={styles.stateWrap}>
           <ErrorState
             message={
-              stats.error instanceof Error ? stats.error.message : 'Could not load the statistics.'
+              humanError(stats.error, 'Could not load the statistics.')
             }
             onRetry={() => stats.refetch()}
           />

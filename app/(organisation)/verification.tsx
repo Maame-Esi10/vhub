@@ -15,6 +15,7 @@ import { useMyVerificationSubmission, useSubmitVerification } from '@/hooks';
 import { useOrganisationDocumentUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import type { OrgVerificationState } from '@/types/database';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * Where an organisation submits itself for verification.
@@ -205,9 +206,7 @@ export default function OrganisationVerification() {
         <View style={styles.stateWrap}>
           <ErrorState
             message={
-              submissionQuery.error instanceof Error
-                ? submissionQuery.error.message
-                : 'Could not load your verification details.'
+              humanError(submissionQuery.error, 'Could not load your verification details.')
             }
             onRetry={() => submissionQuery.refetch()}
           />
@@ -370,7 +369,7 @@ export default function OrganisationVerification() {
               style={styles.addButton}
             />
             {uploadDocument.error ? (
-              <Text style={styles.errorText}>{uploadDocument.error.message}</Text>
+              <Text style={styles.errorText}>{humanError(uploadDocument.error)}</Text>
             ) : null}
 
             {/*
@@ -407,7 +406,7 @@ export default function OrganisationVerification() {
               </View>
             ) : null}
 
-            {submit.error ? <Text style={styles.errorText}>{submit.error.message}</Text> : null}
+            {submit.error ? <Text style={styles.errorText}>{humanError(submit.error)}</Text> : null}
             {attempted && firstError ? (
               <Text style={styles.errorText}>Fix the marked fields above, then submit again.</Text>
             ) : null}

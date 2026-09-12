@@ -22,6 +22,7 @@ import { useSignDeclaration } from '@/hooks/useSignDeclaration';
 import { useCredentialUpload, useDeleteCredential } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * Standalone identity-verification status, reached from Settings.
@@ -226,7 +227,7 @@ export default function VolunteerVerifyIdentity() {
             </Pressable>
 
             {signDeclaration.error ? (
-              <Text style={styles.errorText}>{signDeclaration.error.message}</Text>
+              <Text style={styles.errorText}>{humanError(signDeclaration.error)}</Text>
             ) : null}
 
             <Button
@@ -350,7 +351,7 @@ export default function VolunteerVerifyIdentity() {
             ) : null}
 
             {credentialUpload.error ? (
-              <Text style={styles.errorText}>{credentialUpload.error.message}</Text>
+              <Text style={styles.errorText}>{humanError(credentialUpload.error)}</Text>
             ) : null}
 
             <Button
@@ -406,10 +407,10 @@ export default function VolunteerVerifyIdentity() {
             ) : null}
 
             {credentialUpload.error ? (
-              <Text style={styles.errorText}>{credentialUpload.error.message}</Text>
+              <Text style={styles.errorText}>{humanError(credentialUpload.error)}</Text>
             ) : null}
             {deleteCredential.error ? (
-              <Text style={styles.errorText}>{deleteCredential.error.message}</Text>
+              <Text style={styles.errorText}>{humanError(deleteCredential.error)}</Text>
             ) : null}
           </>
         )}

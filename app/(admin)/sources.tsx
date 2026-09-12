@@ -26,6 +26,7 @@ import {
   useVettedSources,
   type VettedSource,
 } from '@/hooks';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * The vetted-sources whitelist.
@@ -101,7 +102,7 @@ export default function AdminSources() {
         ) : sources.isError ? (
           <ErrorState
             message={
-              sources.error instanceof Error ? sources.error.message : 'Could not load the sources.'
+              humanError(sources.error, 'Could not load the sources.')
             }
             onRetry={() => sources.refetch()}
           />
@@ -196,7 +197,7 @@ export default function AdminSources() {
                   : undefined
               }
             />
-            {add.error ? <Text style={styles.errorText}>{add.error.message}</Text> : null}
+            {add.error ? <Text style={styles.errorText}>{humanError(add.error)}</Text> : null}
             <View style={styles.formActions}>
               <Button
                 title={add.isPending ? 'Saving…' : 'Add it'}
@@ -255,7 +256,7 @@ export default function AdminSources() {
           placeholder="What changed"
           multiline
         />
-        {remove.error ? <Text style={styles.errorText}>{remove.error.message}</Text> : null}
+        {remove.error ? <Text style={styles.errorText}>{humanError(remove.error)}</Text> : null}
       </ConfirmDialog>
 
       <Toast message={toast} onDismiss={() => setToast(null)} />

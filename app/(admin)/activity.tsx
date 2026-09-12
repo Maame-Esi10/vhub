@@ -4,6 +4,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -45,9 +46,7 @@ export default function AdminActivity() {
         <View style={styles.stateWrap}>
           <ErrorState
             message={
-              actionsQuery.error instanceof Error
-                ? actionsQuery.error.message
-                : 'Could not load the admin activity log.'
+              humanError(actionsQuery.error, 'Could not load the admin activity log.')
             }
             onRetry={() => actionsQuery.refetch()}
           />

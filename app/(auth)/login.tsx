@@ -19,6 +19,7 @@ import { Button, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { useSignIn } from '@/hooks';
+import { humanErrorOrNull } from '@/lib/errorMessage';
 
 // The circular badge backdrop is sized relative to the logo so their ratio
 // (badge slightly larger, framing the mark) stays consistent as the logo
@@ -56,7 +57,7 @@ export default function Login() {
   }, [email, password, signIn]);
 
   const submitting = signIn.isPending;
-  const errorMessage = validationError ?? signIn.error?.message ?? null;
+  const errorMessage = validationError ?? humanErrorOrNull(signIn.error) ?? null;
 
   const handleForgotPassword = useCallback(() => {
     // Was an intentional no-op for the whole of Phase 1: somebody who forgot

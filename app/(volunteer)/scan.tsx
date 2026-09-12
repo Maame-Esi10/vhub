@@ -17,6 +17,7 @@ import { useCheckIn } from '@/hooks/useCheckInScan';
 import { useOutreach } from '@/hooks/useOutreaches';
 import { decodeCheckinQr } from '@/lib/checkin-qr';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * The volunteer's check-in scanner.
@@ -165,7 +166,7 @@ export default function VolunteerScanCheckin() {
           <Text style={styles.messageTitle}>Could not check you in</Text>
           {/* The API's messages are written to be shown as-is — "you are not on
               the accepted list", "that code is not valid for this outreach". */}
-          <Text style={styles.messageBody}>{checkIn.error.message}</Text>
+          <Text style={styles.messageBody}>{humanError(checkIn.error)}</Text>
           <Button title="Try again" variant="solid" onPress={scanAgain} style={styles.actionButton} />
         </View>
       </Shell>

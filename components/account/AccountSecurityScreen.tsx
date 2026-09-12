@@ -31,6 +31,7 @@ import {
 import { useSignOut } from '@/hooks/useSignOut';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { humanError } from '@/lib/errorMessage';
 
 export interface AccountSecurityScreenProps {
   /** Where the header's back arrow lands if there is no navigation history. */
@@ -290,16 +291,12 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
 
             {changeEmail.error ? (
               <Text style={styles.error}>
-                {changeEmail.error instanceof Error
-                  ? changeEmail.error.message
-                  : 'Could not start the email change.'}
+                {humanError(changeEmail.error, 'Could not start the email change.')}
               </Text>
             ) : null}
             {cancelChange.error ? (
               <Text style={styles.error}>
-                {cancelChange.error instanceof Error
-                  ? cancelChange.error.message
-                  : 'Could not cancel the email change.'}
+                {humanError(cancelChange.error, 'Could not cancel the email change.')}
               </Text>
             ) : null}
 
@@ -372,9 +369,7 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
             ) : null}
             {changePassword.error ? (
               <Text style={styles.error}>
-                {changePassword.error instanceof Error
-                  ? changePassword.error.message
-                  : 'Could not update your password.'}
+                {humanError(changePassword.error, 'Could not update your password.')}
               </Text>
             ) : null}
 
@@ -474,7 +469,7 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
           error={closeAttempted && !closeConfirmed ? 'Type CLOSE to confirm.' : undefined}
         />
         {closeAccount.error ? (
-          <Text style={styles.error}>{closeAccount.error.message}</Text>
+          <Text style={styles.error}>{humanError(closeAccount.error)}</Text>
         ) : null}
       </ConfirmDialog>
     </SafeAreaView>

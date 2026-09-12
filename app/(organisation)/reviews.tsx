@@ -29,6 +29,7 @@ import { useOutreachAttendance } from '@/hooks/useAttendance';
 import { markedAbsentThroughout } from '@/lib/attendance';
 import { useAuthStore } from '@/stores/authStore';
 import type { EventReview } from '@/types/database';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * Post-event review screen.
@@ -138,7 +139,7 @@ export default function Reviews() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              outreachesQuery.error instanceof Error ? outreachesQuery.error.message : 'Please try again.'
+              humanError(outreachesQuery.error, 'Please try again.')
             }
             onRetry={() => outreachesQuery.refetch()}
           />
@@ -189,9 +190,7 @@ export default function Reviews() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              applicationsQuery.error instanceof Error
-                ? applicationsQuery.error.message
-                : 'Please try again.'
+              humanError(applicationsQuery.error, 'Please try again.')
             }
             onRetry={() => applicationsQuery.refetch()}
           />
@@ -245,9 +244,7 @@ export default function Reviews() {
         isPending={submitReview.isPending}
         errorMessage={
           submitReview.isError
-            ? submitReview.error instanceof Error
-              ? submitReview.error.message
-              : 'Could not save this review.'
+            ? humanError(submitReview.error, 'Could not save this review.')
             : undefined
         }
         onSubmit={handleSubmit}

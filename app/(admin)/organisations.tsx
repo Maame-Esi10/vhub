@@ -12,6 +12,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useVerificationQueue, type VerificationQueueRow } from '@/hooks';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * Organisations waiting on a verification decision.
@@ -46,9 +47,7 @@ export default function AdminOrganisations() {
         <View style={styles.stateWrap}>
           <ErrorState
             message={
-              queue.error instanceof Error
-                ? queue.error.message
-                : 'Could not load the verification queue.'
+              humanError(queue.error, 'Could not load the verification queue.')
             }
             onRetry={() => queue.refetch()}
           />

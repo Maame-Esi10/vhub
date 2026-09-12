@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -213,7 +214,7 @@ export default function Feed() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.centerFill}>
           <ErrorState
-            message={feedQuery.error instanceof Error ? feedQuery.error.message : 'Please try again.'}
+            message={humanError(feedQuery.error, 'Please try again.')}
             onRetry={() => feedQuery.refetch()}
           />
         </View>

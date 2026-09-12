@@ -21,6 +21,7 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { ORG_TYPES, OrgType } from '@/constants/org-types';
 import { useResendConfirmation, useSignUp } from '@/hooks';
+import { humanError, humanErrorOrNull } from '@/lib/errorMessage';
 
 type RegisterRole = 'volunteer' | 'organisation';
 
@@ -138,7 +139,7 @@ export default function Register() {
   }, [validate, signUp, role, email, password, fullName, orgName, orgType, description, website, router]);
 
   const submitting = signUp.isPending;
-  const errorMessage = validationError ?? signUp.error?.message ?? null;
+  const errorMessage = validationError ?? humanErrorOrNull(signUp.error) ?? null;
 
   const headerTitle = role === 'volunteer' ? 'Volunteer Registration' : 'Organization Registration';
 
@@ -206,9 +207,7 @@ export default function Register() {
           />
           {resendConfirmation.isError ? (
             <Text style={styles.errorText}>
-              {resendConfirmation.error instanceof Error
-                ? resendConfirmation.error.message
-                : 'Could not send it just now.'}
+              {humanError(resendConfirmation.error, 'Could not send it just now.')}
             </Text>
           ) : null}
           <Button

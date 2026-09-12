@@ -14,6 +14,7 @@ import { Avatar, ErrorState, ListSkeleton, MetricCard } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAdminActions } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * The admin home.
@@ -73,9 +74,7 @@ export default function AdminOverview() {
         ) : actionsQuery.isError ? (
           <ErrorState
             message={
-              actionsQuery.error instanceof Error
-                ? actionsQuery.error.message
-                : 'Could not load the admin activity log.'
+              humanError(actionsQuery.error, 'Could not load the admin activity log.')
             }
             onRetry={() => actionsQuery.refetch()}
           />

@@ -59,6 +59,7 @@ import { hasOwnHours, sortDayDrafts } from '@/lib/outreachDays';
 // modules. See the note in lib/cloudinary.ts.
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
+import { humanError } from '@/lib/errorMessage';
 
 const TOTAL_STEPS = 4;
 const STEP_TITLES = ['Basic Information', 'Where & When', 'Requirements & Capacity', 'Preview'];
@@ -519,7 +520,7 @@ export default function CreateOutreach() {
                   </Pressable>
                 ) : null}
                 {flyerUpload.error ? (
-                  <Text style={styles.flyerError}>{flyerUpload.error.message}</Text>
+                  <Text style={styles.flyerError}>{humanError(flyerUpload.error)}</Text>
                 ) : null}
               </View>
 
@@ -536,7 +537,7 @@ export default function CreateOutreach() {
                 onMove={handleMoveGalleryImage}
                 uploading={galleryUpload.isPending}
                 max={MAX_GALLERY_IMAGES}
-                error={galleryUpload.error ? galleryUpload.error.message : null}
+                error={galleryUpload.error ? humanError(galleryUpload.error) : null}
               />
             </View>
           ) : null}
@@ -666,9 +667,7 @@ export default function CreateOutreach() {
               {roleError ? <Text style={styles.submitError}>{roleError}</Text> : null}
               {createOutreach.isError ? (
                 <Text style={styles.submitError}>
-                  {createOutreach.error instanceof Error
-                    ? createOutreach.error.message
-                    : 'Could not save this outreach. Please try again.'}
+                  {humanError(createOutreach.error, 'Could not save this outreach. Please try again.')}
                 </Text>
               ) : null}
             </View>

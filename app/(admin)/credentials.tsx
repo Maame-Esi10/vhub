@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -65,7 +66,7 @@ export default function AdminCredentials() {
     } catch (error) {
       setViewerState({
         loading: false,
-        error: error instanceof Error ? error.message : 'This document could not be opened.',
+        error: humanError(error, 'This document could not be opened.'),
         signed: null,
       });
     }
@@ -110,7 +111,7 @@ export default function AdminCredentials() {
         <View style={styles.stateWrap}>
           <ErrorState
             message={
-              queue.error instanceof Error ? queue.error.message : 'Could not load the credential queue.'
+              humanError(queue.error, 'Could not load the credential queue.')
             }
             onRetry={() => queue.refetch()}
           />
@@ -198,7 +199,7 @@ export default function AdminCredentials() {
                       attempted && reason.trim().length < 3 ? 'Write a reason before deciding.' : undefined
                     }
                   />
-                  {decide.error ? <Text style={styles.errorText}>{decide.error.message}</Text> : null}
+                  {decide.error ? <Text style={styles.errorText}>{humanError(decide.error)}</Text> : null}
                   <View style={styles.actions}>
                     <Button
                       title={decide.isPending ? 'Saving…' : 'Approve'}

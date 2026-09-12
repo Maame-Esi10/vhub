@@ -33,6 +33,7 @@ import { useUpdateVolunteerProfile } from '@/hooks/useProfileEditor';
 import { useAvatarUpload, useRemoveAvatar } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import type { ExperienceLevel, VolunteerCategory } from '@/types/database';
+import { humanError, humanErrorOrNull } from '@/lib/errorMessage';
 
 
 
@@ -319,7 +320,7 @@ export default function EditVolunteerProfile() {
 
           {error ? (
             <Text style={styles.error}>
-              {error instanceof Error ? error.message : 'Could not save. Please try again.'}
+              {humanError(error, 'Could not save. Please try again.')}
             </Text>
           ) : null}
 
@@ -360,7 +361,7 @@ export default function EditVolunteerProfile() {
         visible={photoNotice}
         icon="alert-circle-outline"
         title="Photo not updated"
-        message={avatarUpload.error?.message ?? 'Please try again.'}
+        message={humanErrorOrNull(avatarUpload.error) ?? 'Please try again.'}
         confirmLabel="Got It"
         cancelLabel="Close"
         onConfirm={() => setPhotoNotice(false)}

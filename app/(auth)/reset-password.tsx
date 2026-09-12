@@ -21,6 +21,7 @@ import {
   useCompletePasswordReset,
   useRequestPasswordReset,
 } from '@/hooks';
+import { humanError } from '@/lib/errorMessage';
 
 /** The recovery code Supabase puts in the email. */
 const CODE_LENGTH = 6;
@@ -272,7 +273,7 @@ export default function ResetPassword() {
               />
             )}
             {completeReset.error ? (
-              <Text style={styles.errorText}>{completeReset.error.message}</Text>
+              <Text style={styles.errorText}>{humanError(completeReset.error)}</Text>
             ) : null}
           </View>
 
@@ -290,7 +291,7 @@ export default function ResetPassword() {
               </Text>
             </Pressable>
             {resent ? <Text style={styles.resentNote}>A new code is on its way.</Text> : null}
-            {resend.error ? <Text style={styles.errorText}>{resend.error.message}</Text> : null}
+            {resend.error ? <Text style={styles.errorText}>{humanError(resend.error)}</Text> : null}
           </View>
 
           <View style={styles.backRow}>

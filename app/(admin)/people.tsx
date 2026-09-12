@@ -15,6 +15,7 @@ import {
   useModerateAccount,
   type ModerationSearchRow,
 } from '@/hooks';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * Moderation: suspend, ban, reinstate.
@@ -185,7 +186,7 @@ export default function AdminPeople() {
           multiline
           error={attempted && reason.trim().length < 3 ? 'Write a reason first.' : undefined}
         />
-        {moderate.error ? <Text style={styles.errorText}>{moderate.error.message}</Text> : null}
+        {moderate.error ? <Text style={styles.errorText}>{humanError(moderate.error)}</Text> : null}
       </ConfirmDialog>
 
       <Toast message={toast} onDismiss={() => setToast(null)} durationMs={5000} />

@@ -23,6 +23,7 @@ import {
   type AppNotification,
 } from '@/hooks/useNotifications';
 import { colors, fontFamily, spacing } from '@/constants/theme';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * The organisation's inbox.
@@ -115,9 +116,7 @@ export default function OrganisationNotifications() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              notificationsQuery.error instanceof Error
-                ? notificationsQuery.error.message
-                : 'Please try again.'
+              humanError(notificationsQuery.error, 'Please try again.')
             }
             onRetry={() => notificationsQuery.refetch()}
           />

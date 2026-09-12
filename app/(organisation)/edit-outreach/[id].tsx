@@ -65,6 +65,7 @@ import { changedDayHours, dayDraftsFromRows, dayStringsOf } from '@/lib/outreach
 // modules. See the note in lib/cloudinary.ts.
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
+import { humanError } from '@/lib/errorMessage';
 
 const REGION_OPTIONS: SelectOption[] = GHANA_REGIONS.map((r) => ({ value: r.name, label: r.name }));
 const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
@@ -571,9 +572,7 @@ export default function EditOutreach() {
           await setDayHours.mutateAsync({ outreachId: outreach.id, days: dayHourChanges });
         } catch (error) {
           setSaveError(
-            error instanceof Error
-              ? error.message
-              : 'Your changes saved, but the hours for individual days did not. Try setting them again.'
+            humanError(error, 'Your changes saved, but the hours for individual days did not. Try setting them again.')
           );
           return;
         }
@@ -590,7 +589,7 @@ export default function EditOutreach() {
       });
     } catch (error) {
       setSaveError(
-        error instanceof Error ? error.message : 'Could not save your changes. Please try again.'
+        humanError(error, 'Could not save your changes. Please try again.')
       );
     }
   }
@@ -686,7 +685,7 @@ export default function EditOutreach() {
                 </Pressable>
               ) : null}
               {flyerUpload.error ? (
-                <Text style={styles.flyerError}>{flyerUpload.error.message}</Text>
+                <Text style={styles.flyerError}>{humanError(flyerUpload.error)}</Text>
               ) : null}
             </View>
 

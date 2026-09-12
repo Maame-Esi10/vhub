@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -235,7 +236,7 @@ export default function Dashboard() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.errorWrap}>
           <ErrorState
-            message={outreachesQuery.error instanceof Error ? outreachesQuery.error.message : 'Please try again.'}
+            message={humanError(outreachesQuery.error, 'Please try again.')}
             onRetry={() => outreachesQuery.refetch()}
           />
         </View>

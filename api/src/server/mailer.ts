@@ -65,6 +65,38 @@ function getTransport(): Transporter {
 }
 
 /**
+ * Connects to Gmail and authenticates, WITHOUT sending anything.
+ *
+ * WHY IT EXISTS. Supabase's own auth emails go through the same Gmail account
+ * as this API, but through Supabase's SMTP client, not ours -- so when signup
+ * started failing with "Error sending confirmation email" there was no way to
+ * tell a dead credential from a mis-typed Supabase SMTP setting. Both produce
+ * the same opaque 500 from an endpoint we do not own.
+ *
+ * `verify()` opens the connection, completes the AUTH exchange and hangs up.
+ * If it succeeds the app password is alive and the fault is in Supabase's
+ * settings; if it fails with an authentication error the credential is dead
+ * and Supabase's copy of it is dead too, along with every email THIS api has
+ * tried to send since -- silently, because both send paths log and swallow.
+ *
+ * It builds its OWN transport rather than reusing the cached pool, so a frozen
+ * socket on a warm instance cannot be reported as a bad password.
+ */
+export async function verifyMailCredentials(): Promise<void> {
+  const probe = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user: env.gmailUser, pass: env.gmailAppPassword },
+  });
+  try {
+    await probe.verify();
+  } finally {
+    probe.close();
+  }
+}
+
+/**
  * Drops the cached transport so the next send builds a fresh one.
  *
  * Needed because a pooled connection cached on a serverless instance can be

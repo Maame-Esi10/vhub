@@ -16,6 +16,7 @@ import {
   useResolveDispute,
   type DisputeQueueRow,
 } from '@/hooks';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * Disputes: a volunteer's challenge to a record about them.
@@ -83,7 +84,7 @@ export default function AdminDisputes() {
         <Header count={null} />
         <View style={styles.stateWrap}>
           <ErrorState
-            message={queue.error instanceof Error ? queue.error.message : 'Could not load disputes.'}
+            message={humanError(queue.error, 'Could not load disputes.')}
             onRetry={() => queue.refetch()}
           />
         </View>
@@ -164,7 +165,7 @@ export default function AdminDisputes() {
                         : undefined
                     }
                   />
-                  {resolve.error ? <Text style={styles.errorText}>{resolve.error.message}</Text> : null}
+                  {resolve.error ? <Text style={styles.errorText}>{humanError(resolve.error)}</Text> : null}
 
                   <View style={styles.actions}>
                     <Button

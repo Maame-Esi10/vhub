@@ -13,6 +13,7 @@ import type {
   OrganisationProfile,
   OrganisationRegistration,
 } from '@/types/database';
+import { humanError } from '@/lib/errorMessage';
 
 export const orgVerificationKeys = {
   all: ['organisation-verification'] as const,
@@ -48,7 +49,7 @@ async function fetchSubmission(organisationId: string): Promise<VerificationSubm
   ]);
 
   if (profileResult.error) {
-    throw new Error(profileResult.error.message || 'Could not load the organisation.');
+    throw new Error(humanError(profileResult.error) || 'Could not load the organisation.');
   }
   if (!profileResult.data) return null;
 

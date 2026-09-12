@@ -40,6 +40,7 @@ import {
 import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
+import { humanError } from '@/lib/errorMessage';
 
 type StatusFilter = ApplicationStatus | 'all';
 
@@ -182,7 +183,7 @@ export default function Applicants() {
         loading: false,
         // The API refuses with a flat, identical message whatever the reason,
         // so it is shown as-is rather than being interpreted here.
-        error: error instanceof Error ? error.message : 'This document could not be opened.',
+        error: humanError(error, 'This document could not be opened.'),
         signed: null,
       });
     }
@@ -400,7 +401,7 @@ export default function Applicants() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.centerFill}>
           <ErrorState
-            message={outreachesQuery.error instanceof Error ? outreachesQuery.error.message : 'Please try again.'}
+            message={humanError(outreachesQuery.error, 'Please try again.')}
             onRetry={() => outreachesQuery.refetch()}
           />
         </View>
@@ -499,7 +500,7 @@ export default function Applicants() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              applicationsQuery.error instanceof Error ? applicationsQuery.error.message : 'Please try again.'
+              humanError(applicationsQuery.error, 'Please try again.')
             }
             onRetry={() => applicationsQuery.refetch()}
           />
@@ -564,9 +565,7 @@ export default function Applicants() {
               {batchOutcome ? <Text style={styles.batchOutcome}>{batchOutcome}</Text> : null}
               {batchDecide.isError ? (
                 <Text style={styles.batchError}>
-                  {batchDecide.error instanceof Error
-                    ? batchDecide.error.message
-                    : 'Could not process these applicants. Please try again.'}
+                  {humanError(batchDecide.error, 'Could not process these applicants. Please try again.')}
                 </Text>
               ) : null}
 
@@ -636,9 +635,7 @@ export default function Applicants() {
                 isPending={updateStatus.isPending && activeApplicationId === application.id}
                 errorMessage={
                   updateStatus.isError && activeApplicationId === application.id
-                    ? updateStatus.error instanceof Error
-                      ? updateStatus.error.message
-                      : 'Could not update this application.'
+                    ? humanError(updateStatus.error, 'Could not update this application.')
                     : undefined
                 }
               />

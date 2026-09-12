@@ -14,6 +14,7 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { useCompleteOnboarding } from '@/hooks';
+import { humanErrorOrNull } from '@/lib/errorMessage';
 
 /**
  * Step 5/5 of volunteer onboarding (design-refs/ID Verification.png). Kept
@@ -49,7 +50,7 @@ export default function VerifyIdentity() {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const submitting = completeOnboarding.isPending;
-  const errorMessage = validationError ?? completeOnboarding.error?.message ?? null;
+  const errorMessage = validationError ?? humanErrorOrNull(completeOnboarding.error) ?? null;
   const progress = useMemo(() => (confirmed ? 1 : 0.3), [confirmed]);
 
   async function persistAndFinish(options: { declarationSigned: boolean }) {

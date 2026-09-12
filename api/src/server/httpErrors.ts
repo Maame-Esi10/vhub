@@ -57,6 +57,13 @@ export const Errors = {
     }),
   internal: (message = "Something went wrong. Please try again.") =>
     new ApiError(500, "internal_error", message),
+  /**
+   * An upstream service we depend on refused or failed, and the fault is not
+   * in this request. Distinct from `internal` on purpose: a 502 says "the
+   * thing behind me is down", which is what a caller needs to know before
+   * retrying, and it keeps genuine bugs in this API identifiable as 500s.
+   */
+  badGateway: (message: string) => new ApiError(502, "upstream_failure", message),
 };
 
 /**

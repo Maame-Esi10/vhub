@@ -4,6 +4,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -109,9 +110,7 @@ export default function PublicVolunteerProfile() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              profileQuery.error instanceof Error
-                ? profileQuery.error.message
-                : 'This profile could not be loaded.'
+              humanError(profileQuery.error, 'This profile could not be loaded.')
             }
             onRetry={() => profileQuery.refetch()}
           />
@@ -225,9 +224,7 @@ export default function PublicVolunteerProfile() {
         <View style={styles.decisionBar}>
           {updateStatus.isError ? (
             <Text style={styles.decisionError}>
-              {updateStatus.error instanceof Error
-                ? updateStatus.error.message
-                : 'Could not update this application.'}
+              {humanError(updateStatus.error, 'Could not update this application.')}
             </Text>
           ) : null}
           <View style={styles.decisionRow}>

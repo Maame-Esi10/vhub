@@ -31,6 +31,7 @@ import { encodeCheckinQr } from '@/lib/checkin-qr';
 import { isVenueAnchorUsable } from '@/lib/attendance';
 import { formatDaySpan, lastDay, todayIso } from '@/lib/outreachDays';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { humanErrorOrNull } from '@/lib/errorMessage';
 
 /**
  * The organiser's check-in QR, displayed at the venue for volunteers to scan.
@@ -78,8 +79,8 @@ export default function OrganisationCheckinQr() {
         <ScreenHeader title="Check-in code" fallback={`/(organisation)/outreach/${id}`} />
         <ErrorState
           message={
-            outreachQuery.error?.message ??
-            codeQuery.error?.message ??
+            humanErrorOrNull(outreachQuery.error) ??
+            humanErrorOrNull(codeQuery.error) ??
             'Could not load the check-in code for this outreach.'
           }
           onRetry={() => {
@@ -123,7 +124,7 @@ export default function OrganisationCheckinQr() {
   // LocationUnavailableError's messages are written to be shown as-is (they
   // already name the fix — enable it in Settings, step outside), and the API
   // client's messages are too, so one branch serves both.
-  const anchorError = anchor.error?.message ?? null;
+  const anchorError = humanErrorOrNull(anchor.error) ?? null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

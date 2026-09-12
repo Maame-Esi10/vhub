@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -99,9 +100,7 @@ export default function PublicOrganisationProfile() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              profileQuery.error instanceof Error
-                ? profileQuery.error.message
-                : 'This organisation could not be loaded.'
+              humanError(profileQuery.error, 'This organisation could not be loaded.')
             }
             onRetry={() => profileQuery.refetch()}
           />
@@ -203,9 +202,7 @@ export default function PublicOrganisationProfile() {
             <ErrorState
               title="Couldn't load outreaches"
               message={
-                outreachesQuery.error instanceof Error
-                  ? outreachesQuery.error.message
-                  : 'Please try again.'
+                humanError(outreachesQuery.error, 'Please try again.')
               }
               onRetry={() => outreachesQuery.refetch()}
             />

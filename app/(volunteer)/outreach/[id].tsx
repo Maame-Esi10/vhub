@@ -48,6 +48,7 @@ import {
 import { formatDaySpan, hoursVaryByDay } from '@/lib/outreachDays';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
+import { humanError } from '@/lib/errorMessage';
 
 const STATUS_MESSAGE: Record<ApplicationStatus, string> = {
   pending: "You've applied. The organisation is reviewing your application.",
@@ -272,9 +273,7 @@ export default function OutreachDetail() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              outreachQuery.error instanceof Error
-                ? outreachQuery.error.message
-                : 'This outreach could not be loaded.'
+              humanError(outreachQuery.error, 'This outreach could not be loaded.')
             }
             onRetry={() => outreachQuery.refetch()}
           />
@@ -623,9 +622,7 @@ export default function OutreachDetail() {
 
         {createApplication.isError && !fullFormVisible ? (
           <Text style={styles.error}>
-            {createApplication.error instanceof Error
-              ? createApplication.error.message
-              : 'Could not submit your application.'}
+            {humanError(createApplication.error, 'Could not submit your application.')}
           </Text>
         ) : null}
       </ScrollView>
@@ -698,9 +695,7 @@ export default function OutreachDetail() {
         busyDayId={releaseDay.isPending ? (releaseDay.variables?.outreachDayId ?? null) : null}
         errorMessage={
           releaseDay.isError
-            ? releaseDay.error instanceof Error
-              ? releaseDay.error.message
-              : 'Could not change that day.'
+            ? humanError(releaseDay.error, 'Could not change that day.')
             : null
         }
         onRelease={(outreachDayId) =>
@@ -764,9 +759,7 @@ export default function OutreachDetail() {
         isPending={createApplication.isPending}
         errorMessage={
           createApplication.isError
-            ? createApplication.error instanceof Error
-              ? createApplication.error.message
-              : 'Could not submit your application.'
+            ? humanError(createApplication.error, 'Could not submit your application.')
             : undefined
         }
         onSubmit={handleFullSubmit}
@@ -781,9 +774,7 @@ export default function OutreachDetail() {
         isPending={cancelApplication.isPending}
         errorMessage={
           cancelApplication.isError
-            ? cancelApplication.error instanceof Error
-              ? cancelApplication.error.message
-              : 'Could not withdraw your application.'
+            ? humanError(cancelApplication.error, 'Could not withdraw your application.')
             : undefined
         }
         onConfirm={handleWithdraw}

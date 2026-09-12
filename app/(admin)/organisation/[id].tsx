@@ -5,6 +5,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -69,7 +70,7 @@ export default function AdminOrganisationDetail() {
     } catch (error) {
       setViewerState({
         loading: false,
-        error: error instanceof Error ? error.message : 'This document could not be opened.',
+        error: humanError(error, 'This document could not be opened.'),
         signed: null,
       });
     }
@@ -114,9 +115,7 @@ export default function AdminOrganisationDetail() {
         <View style={styles.stateWrap}>
           <ErrorState
             message={
-              detail.error instanceof Error
-                ? detail.error.message
-                : 'This organisation could not be loaded.'
+              humanError(detail.error, 'This organisation could not be loaded.')
             }
             onRetry={() => detail.refetch()}
           />
@@ -203,7 +202,7 @@ export default function AdminOrganisationDetail() {
               }
             />
 
-            {decide.error ? <Text style={styles.errorText}>{decide.error.message}</Text> : null}
+            {decide.error ? <Text style={styles.errorText}>{humanError(decide.error)}</Text> : null}
 
             <View style={styles.actions}>
               <Button

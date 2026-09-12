@@ -31,6 +31,7 @@ import { useMyOrganisationProfile, useUpdateOrganisationProfile } from '@/hooks/
 // modules. See the note in lib/cloudinary.ts.
 import { useAvatarUpload, useRemoveAvatar } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
+import { humanError } from '@/lib/errorMessage';
 
 const DESCRIPTION_MAX = 600;
 
@@ -417,7 +418,7 @@ export default function EditOrganisationProfile() {
 
             {error ? (
               <Text style={styles.error}>
-                {error instanceof Error ? error.message : 'Could not save. Please try again.'}
+                {humanError(error, 'Could not save. Please try again.')}
               </Text>
             ) : null}
 

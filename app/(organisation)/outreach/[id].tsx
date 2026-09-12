@@ -35,6 +35,7 @@ import { formatDaySpan, hasFirstDayArrived, hoursVaryByDay, lastDay } from '@/li
 import { isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachStatus } from '@/types/database';
+import { humanError } from '@/lib/errorMessage';
 
 const STATUS_TONE: Record<OutreachStatus, BadgeTone> = {
   draft: 'neutral',
@@ -160,9 +161,7 @@ export default function OrganisationOutreachDetail() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              outreachQuery.error instanceof Error
-                ? outreachQuery.error.message
-                : 'This outreach could not be loaded.'
+              humanError(outreachQuery.error, 'This outreach could not be loaded.')
             }
             onRetry={() => outreachQuery.refetch()}
           />
@@ -265,7 +264,7 @@ export default function OrganisationOutreachDetail() {
           },
           onError: (error) => {
             setConfirming(null);
-            setLifecycleError(error instanceof Error ? error.message : 'Could not delete this outreach.');
+            setLifecycleError(humanError(error, 'Could not delete this outreach.'));
           },
         }
       );
@@ -279,7 +278,7 @@ export default function OrganisationOutreachDetail() {
         onError: (error) => {
           setConfirming(null);
           setLifecycleError(
-            error instanceof Error ? error.message : 'Could not update this outreach.'
+            humanError(error, 'Could not update this outreach.')
           );
         },
       }

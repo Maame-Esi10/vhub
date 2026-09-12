@@ -35,6 +35,7 @@ import type { Dispute, DisputeType } from '@/types/database';
 import { formatDaySpan } from '@/lib/outreachDays';
 import { useAuthStore } from '@/stores/authStore';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * The volunteer's own feedback (screen 5, owner decision 2026-08-05).
@@ -147,7 +148,7 @@ export default function VolunteerFeedback() {
         <ScreenHeader title="My feedback" fallback="/(volunteer)/profile" />
         <View style={styles.centerFill}>
           <ErrorState
-            message={reviewsQuery.error.message}
+            message={humanError(reviewsQuery.error)}
             onRetry={() => void reviewsQuery.refetch()}
           />
         </View>
@@ -270,7 +271,7 @@ export default function VolunteerFeedback() {
           }
         />
         {raiseDispute.error ? (
-          <Text style={styles.disputeError}>{raiseDispute.error.message}</Text>
+          <Text style={styles.disputeError}>{humanError(raiseDispute.error)}</Text>
         ) : null}
       </ConfirmDialog>
 

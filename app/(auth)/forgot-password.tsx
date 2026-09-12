@@ -16,6 +16,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useRequestPasswordReset } from '@/hooks';
+import { humanErrorOrNull } from '@/lib/errorMessage';
 
 /**
  * "Reset Password" — design-refs/Forgot Password.png.
@@ -76,7 +77,7 @@ export default function ForgotPassword() {
   }, [router]);
 
   const submitting = requestReset.isPending;
-  const errorMessage = validationError ?? requestReset.error?.message ?? null;
+  const errorMessage = validationError ?? humanErrorOrNull(requestReset.error) ?? null;
 
   return (
     <View style={styles.container}>

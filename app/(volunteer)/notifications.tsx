@@ -22,6 +22,7 @@ import {
   type NotificationFilter,
 } from '@/hooks/useNotifications';
 import { colors, fontFamily, spacing } from '@/constants/theme';
+import { humanError } from '@/lib/errorMessage';
 
 const TABS: { value: NotificationFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -106,9 +107,7 @@ export default function Notifications() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              notificationsQuery.error instanceof Error
-                ? notificationsQuery.error.message
-                : 'Please try again.'
+              humanError(notificationsQuery.error, 'Please try again.')
             }
             onRetry={() => notificationsQuery.refetch()}
           />

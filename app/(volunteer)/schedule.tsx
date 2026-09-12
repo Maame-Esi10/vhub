@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -201,9 +202,7 @@ export default function Schedule() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              applicationsQuery.error instanceof Error
-                ? applicationsQuery.error.message
-                : 'Please try again.'
+              humanError(applicationsQuery.error, 'Please try again.')
             }
             onRetry={() => applicationsQuery.refetch()}
           />

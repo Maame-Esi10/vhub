@@ -29,6 +29,7 @@ import { isPresent, needsAction } from '@/lib/attendance';
 import { formatDayShort, formatDaySpan, todayIso } from '@/lib/outreachDays';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { ApplicationWithVolunteer } from '@/hooks/useApplications';
+import { humanError, humanErrorOrNull } from '@/lib/errorMessage';
 
 /**
  * Post-event attendance (section 3, owner decision 2026-08-05).
@@ -210,13 +211,9 @@ export default function OrganisationAttendance() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              outreachQuery.error?.message ??
-              (applicationsQuery.error instanceof Error
-                ? applicationsQuery.error.message
-                : undefined) ??
-              (attendanceQuery.error instanceof Error
-                ? attendanceQuery.error.message
-                : 'Please try again.')
+              humanErrorOrNull(outreachQuery.error) ??
+              (humanError(applicationsQuery.error)) ??
+              (humanError(attendanceQuery.error, 'Please try again.'))
             }
             onRetry={() => {
               void outreachQuery.refetch();
@@ -289,7 +286,7 @@ export default function OrganisationAttendance() {
         </View>
       ) : null}
 
-      {resolve.isError ? <Text style={styles.errorText}>{resolve.error.message}</Text> : null}
+      {resolve.isError ? <Text style={styles.errorText}>{humanError(resolve.error)}</Text> : null}
 
       <FlatList
         data={rows}

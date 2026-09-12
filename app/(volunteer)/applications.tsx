@@ -23,6 +23,7 @@ import {
 import type { VolunteerApplication } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
+import { humanError } from '@/lib/errorMessage';
 
 type StatusGroup = ApplicationStatus | 'all';
 
@@ -183,9 +184,7 @@ export default function Applications() {
         <View style={styles.centerFill}>
           <ErrorState
             message={
-              applicationsQuery.error instanceof Error
-                ? applicationsQuery.error.message
-                : 'Please try again.'
+              humanError(applicationsQuery.error, 'Please try again.')
             }
             onRetry={() => applicationsQuery.refetch()}
           />
@@ -264,9 +263,7 @@ export default function Applications() {
           isPending={cancelApplication.isPending}
           errorMessage={
             cancelApplication.isError
-              ? cancelApplication.error instanceof Error
-                ? cancelApplication.error.message
-                : 'Could not withdraw your application.'
+              ? humanError(cancelApplication.error, 'Could not withdraw your application.')
               : undefined
           }
           onConfirm={handleWithdraw}

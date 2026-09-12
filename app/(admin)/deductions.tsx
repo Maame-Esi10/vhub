@@ -22,6 +22,7 @@ import {
 import { SCORE_EVENT_LABELS, useAllScoreEvents, useVoidScoreEvent } from '@/hooks';
 import type { AdminScoreEventRow } from '@/hooks';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { humanError } from '@/lib/errorMessage';
 
 /**
  * Every V-Score deduction the platform has applied, and the one way to undo
@@ -104,7 +105,7 @@ export default function AdminDeductions() {
           <View style={styles.block}>
             <ErrorState
               message={
-                query.error instanceof Error ? query.error.message : 'Could not load deductions.'
+                humanError(query.error, 'Could not load deductions.')
               }
               onRetry={() => void query.refetch()}
             />
@@ -184,7 +185,7 @@ export default function AdminDeductions() {
           multiline
           error={attempted && reason.trim().length < 3 ? 'Write a reason first.' : undefined}
         />
-        {voidEvent.error ? <Text style={styles.errorText}>{voidEvent.error.message}</Text> : null}
+        {voidEvent.error ? <Text style={styles.errorText}>{humanError(voidEvent.error)}</Text> : null}
       </ConfirmDialog>
 
       <Toast message={toast} onDismiss={() => setToast(null)} durationMs={6000} />
