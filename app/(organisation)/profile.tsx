@@ -1,5 +1,6 @@
 import {
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -17,6 +18,15 @@ export default function OrganisationProfile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/*
+        THE WHOLE SCREEN SCROLLS, AND IT DID NOT BEFORE. Same defect as the
+        volunteer Profile tab and the same cause: a plain flex column with a
+        `flex: 1` spacer at the bottom, which fits at the default font size and
+        runs off the phone at a large one with nothing to scroll. A drag that
+        scrolls nothing still reads as a press to the card under the finger, so
+        trying to reach the bottom opened whichever row was beneath the thumb.
+      */}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.headerRow}>
         <Text style={styles.header}>Profile</Text>
         <Pressable
@@ -93,7 +103,7 @@ export default function OrganisationProfile() {
       </Pressable>
 
       {/* Sign Out lives in Settings (the gear above), not here. */}
-      <View style={styles.spacer} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -102,9 +112,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  content: {
     paddingHorizontal: spacing.xl,
-    // See the volunteer profile screen: keeps Sign Out clear of the tab bar.
-    paddingBottom: spacing.base,
+    // The tab bar carries the device inset itself; this is the room above it,
+    // generous enough that the last card clears the bar at a large font size.
+    paddingBottom: spacing.xxl,
   },
   header: {
     fontFamily: fontFamily.bold,
@@ -199,8 +212,5 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: colors.textSecondary,
     marginTop: 2,
-  },
-  spacer: {
-    flex: 1,
   },
 });
