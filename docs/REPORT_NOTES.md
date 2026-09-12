@@ -4885,3 +4885,159 @@ depend on a package this project does not actually declare.
   well as forward. That is honest about what the carousel is doing and is what
   makes the constant speed possible; it is a deliberate change in behaviour
   rather than a side effect.
+
+## Device round 1–3: what large fonts broke, and why it was structural (2026-09-12)
+
+The owner ran the first three tests of the device round on the new EAS build.
+Everything passed functionally. The findings were almost all one defect wearing
+different clothes, plus two screens with no scroll container and one Supabase
+project setting.
+
+### The font-size class of bug, which was one mismatch
+
+**Every `fontSize` in the app scales with the phone's accessibility setting.
+Every other number in a stylesheet does not.** `minWidth: 96`, `height: 64`,
+`maxWidth: '40%'`, `paddingHorizontal: spacing.base` are all fixed
+density-independent pixels. At 1.3x the text needs a third more room and the
+boxes holding it do not move at all. That single mismatch produced every
+reported symptom:
+
+- **"Notificatio / ns"** — `SettingsRow` has four things across it and about
+  232dp of width for its two text nodes on a 360dp phone. At 1.3x that is not
+  enough for the label and its value, and *no redistribution of the same 232dp
+  makes it enough*. Squeezed below the width of its own longest word, Android
+  breaks inside the word as a last resort.
+- **"30% Complet"** — two text nodes in a `space-between` row with nothing
+  telling either what to do once they no longer fit. A flex item that cannot
+  shrink further is clipped at the container edge rather than wrapped.
+- **Text escaping its container** — a box sized for two lines holding three.
+
+**The answer is a ceiling AND layout that grows, and one without the other does
+not work.** `MAX_FONT_SCALE` is 1.3: the largest multiplier at which the
+tightest row in the app still fits its longest label. Android allows 2.0 and
+stacks a separate display-size multiplier on top of that; no phone layout
+survives it, and **an app that refuses to draw is less accessible than one that
+draws slightly smaller than asked** — the same thing iOS apps do when they cap
+Dynamic Type. A ceiling alone still leaves a 96dp column holding 1.3x text, so
+`scaleWithFont()` multiplies any constant that exists *because of the words
+inside the box*, and `prefersStackedLayout()` is the single place that decides
+when a side-by-side row should stop being one.
+
+**`components/ui/Text.tsx` is now THE text primitive** and all 106 files that
+draw text import it. `textBreakStrategy="simple"` swaps Android's default
+`highQuality` line breaker — which is allowed to split a word for a tidier
+right edge — for the greedy one that breaks at spaces. It is a default, not an
+imposition: the splash wordmark passes `allowFontScaling={false}` because it is
+a logotype rather than text to be read.
+
+**26 `space-between` rows across 20 files gained `flexWrap` and a `rowGap`.**
+Safe by construction: wrap changes nothing until the content overflows, and
+`rowGap` applies only *between* wrapped lines, so a row that still fits on one
+is pixel-identical to before.
+
+### The scroll bug, which looked like a navigation bug
+
+Both Profile tabs and the onboarding completion screen were plain flex columns
+ending in a `flex: 1` spacer. **At the default font size everything fitted, so
+the absence of a scroll view was invisible.** At a large font size the cards
+grow, the column runs past the bottom of the phone, and the content underneath
+is unreachable.
+
+The reported symptom was stranger than that: swiping up on the volunteer
+Profile opened My Feedback. **A drag that scrolls nothing is still a press to
+the view under the finger**, so trying to reach the bottom activated whichever
+card the thumb was on. Inside a scroll view the drag is claimed by the scroller
+before a `Pressable` can call it a tap.
+
+Audited every screen. Only those three had content that can outgrow the
+viewport with nothing to scroll; `map`, `scan` and `search` are deliberately
+full-bleed, and no screen pins its content with a `contentContainerStyle` of
+`flex: 1`.
+
+### The keyboard, which was ten copies of advice that expired
+
+`behavior={Platform.OS === 'ios' ? 'padding' : undefined}` at ten sites means
+`KeyboardAvoidingView` does nothing at all on Android. That was correct once:
+Android's `adjustResize` shrank the window when the keyboard opened, so a
+ScrollView inside it shrank too — React Native's own docs still say you usually
+need no help on Android for that reason. **It stopped being true when the app
+went edge-to-edge**, which Expo SDK 57 and RN 0.86 do by default and Android 15
+enforces. An edge-to-edge window draws behind the system bars and does not
+resize; the keyboard is an inset over the top of it. Nothing shrinks, nothing
+scrolls, and the field being typed into is behind the keyboard. Every form in
+the app had it, not only registration.
+
+### The confirmation email that never arrived
+
+**Nothing is wrong with Gmail SMTP, and nothing was ever sent.** The evidence is
+in what happened next: she reached the onboarding wizard. `useSignUp` returns
+`confirmationRequired` only when Supabase hands back no session, and the
+register screen shows "Check your email" only on that result. Reaching
+onboarding means a session came back with the sign-up, which Supabase does
+**only when "Confirm email" is off for the project**. With it off no
+confirmation email is ever requested, so no mailer can have failed.
+
+The app was correct throughout; the setting is a dashboard decision. Two things
+were still worth changing. The "Check your email" screen was a **dead end** — an
+unconfirmed address cannot log in and Supabase refuses a second registration for
+an address it already holds, so a mail that did not arrive left no way forward
+and no way back into the account. There is now a resend button, which reports
+success whatever happens except on a rate limit, so it cannot be used to
+discover which addresses hold accounts.
+
+### Splash, carousel, and the two redesigns
+
+- **The wordmark was `colors.primary` (coral) while the mark above it is the
+  logo's red.** Two millimetres apart and near enough to read as a printing
+  error. `colors.brandMark` is the sampled logo red, and only type that belongs
+  to the artwork uses it.
+- **A signed-in user gets the mark alone.** The fuller screen is an
+  introduction, worth a returning volunteer's time exactly once. The decision
+  has to be made before the first frame and nothing knows whether a session
+  exists that early — reading one is the work the splash is covering — so it is
+  remembered in AsyncStorage from last time. The native splash is held until
+  that read returns rather than hidden on mount, because the two variants are
+  not a superset and a subset and correcting a guess would visibly jump.
+- **The carousel had correct motion and no character.** Three layers now move
+  at different rates: the photograph lags behind its slide and settles out of a
+  slight zoom, the copy lifts and cross-dissolves, and the curve leaves quickly
+  and spends its time arriving. All interpolated off the real scroll position
+  rather than a timer, so the same motion happens under a finger — **motion that
+  only exists on autoplay is a cutscene**. Every property used is one the native
+  driver can write, so none of it touches the JS thread.
+- **SKIP became LOG IN.** "Skip" promises to leave the thing you are in, and it
+  jumped to the carousel's last slide — weaker than doing nothing, since
+  auto-advance arrives there anyway. There was also nothing to skip *to*: both
+  actions are pinned over every slide. What was missing was the opposite door,
+  since both buttons lead to registration and someone who already had an account
+  had to open the register screen to find the log-in line at the bottom of it.
+- **The onboarding skills step** stopped being nine collapsed accordions. That
+  shape answers "find one skill in a long list", which is the picker's job; it
+  is the wrong answer to "tell us what you can do". One category at a time from
+  a rail, skills as wrapping chips, choices pinned above. **Onboarding only —
+  `CategoryChecklist` and the outreach picker are untouched.**
+- **Three containers on the volunteer Profile tab** were redesigned: the V-Score
+  card is now a feature panel with a track showing where the score sits on the
+  0-100 scale its bands are cut from, and My Feedback and Edit Profile move to
+  the filled row language the rest of the app already uses.
+
+### Student credentials, confirmed rather than changed
+
+`constants/credential-guidelines.ts` already covers students: "Your student
+identity card, or a letter from your school confirming you are enrolled", with
+the acceptance rule that it must name the person, the school and the programme
+and show current enrolment. The picker accepts
+`type: ['application/pdf', 'image/*']`, so a photographed student ID and a PDF
+enrolment letter both go through. Nothing needed changing; it is recorded here
+because the question was asked and the answer should not have to be rediscovered.
+
+### Buckets
+
+- **Built and working:** everything above. Type-check clean, both lint passes
+  clean, 534 tests green.
+- **Built but untested on a device:** all of it, by definition — this is a round
+  of UI fixes and it needs the next build to confirm. In particular the 1.3
+  ceiling is a judgement about where layouts stop coping, and only a phone at a
+  large font setting can say whether it is in the right place.
+- **Not built:** nothing from this round. The one item that is not a code change
+  is Supabase's "Confirm email" setting.
