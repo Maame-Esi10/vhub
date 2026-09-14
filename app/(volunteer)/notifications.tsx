@@ -23,6 +23,7 @@ import {
 } from '@/hooks/useNotifications';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 const TABS: { value: NotificationFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -32,6 +33,9 @@ const TABS: { value: NotificationFilter; label: string }[] = [
 
 
 export default function Notifications() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // row needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const [filter, setFilter] = useState<NotificationFilter>('all');
   const notificationsQuery = useNotifications();
@@ -141,7 +145,7 @@ export default function Notifications() {
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={rows.length === 0 ? styles.emptyContent : undefined}
+        contentContainerStyle={[rows.length === 0 ? styles.emptyContent : null, tabBarPadding]}
         refreshControl={
           <RefreshControl
             refreshing={notificationsQuery.isRefetching}

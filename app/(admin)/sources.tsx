@@ -27,6 +27,7 @@ import {
   type VettedSource,
 } from '@/hooks';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * The vetted-sources whitelist.
@@ -42,6 +43,9 @@ import { humanError } from '@/lib/errorMessage';
  * broken, and might spend a while proving it.
  */
 export default function AdminSources() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const sources = useVettedSources();
   const add = useAddVettedSource();
   const remove = useRemoveVettedSource();
@@ -86,7 +90,7 @@ export default function AdminSources() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Vetted sources" fallback="/(admin)/overview" />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <View style={styles.explainCard}>
           <MaterialCommunityIcons name="information-outline" size={20} color={colors.primary} />
           <Text style={styles.explainText}>

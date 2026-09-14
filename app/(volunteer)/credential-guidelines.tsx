@@ -14,6 +14,7 @@ import {
   CREDENTIAL_GUIDELINES,
 } from '@/constants/credential-guidelines';
 import { useAuthStore } from '@/stores/authStore';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * What to send, and what makes it acceptable.
@@ -29,6 +30,9 @@ import { useAuthStore } from '@/stores/authStore';
  * name on it. The illustrations here are generic icons.
  */
 export default function CredentialGuidelines() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const myCategory = volunteerProfile?.category ?? null;
 
@@ -43,7 +47,7 @@ export default function CredentialGuidelines() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="What to send" fallback="/(volunteer)/verify-identity" />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
           Verification is one document and one look at it by a person. These are the things that
           decide whether that look takes a minute or sends you back to try again.

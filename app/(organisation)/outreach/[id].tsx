@@ -36,6 +36,7 @@ import { isUnderSubscribed, placesRemaining } from '@/lib/underSubscription';
 import { useAuthStore } from '@/stores/authStore';
 import type { OutreachStatus } from '@/types/database';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 const STATUS_TONE: Record<OutreachStatus, BadgeTone> = {
   draft: 'neutral',
@@ -68,6 +69,9 @@ const STATUS_LABEL: Record<OutreachStatus, string> = {
  * actions. They stay here and stop migrating.
  */
 export default function OrganisationOutreachDetail() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const { id, saved, created } = useLocalSearchParams<{
     id: string;
@@ -309,7 +313,7 @@ export default function OrganisationOutreachDetail() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
         <FlyerBackground uri={outreach.flyer_url} style={styles.hero}>
           <View style={styles.heroContent}>
             <Badge label={STATUS_LABEL[outreach.status]} tone={STATUS_TONE[outreach.status]} />
@@ -750,11 +754,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     // alignItems centres children within their line; alignContent places
-
     // the line itself, and defaults to flex-start. Without it a wrapping row
-
     // pins its single line to the TOP of the box.
-
     alignContent: 'center',
     justifyContent: 'space-between',
     // Wraps instead of clipping when the row outgrows its width at a large
@@ -858,11 +859,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     // alignItems centres children within their line; alignContent places
-
     // the line itself, and defaults to flex-start. Without it a wrapping row
-
     // pins its single line to the TOP of the box.
-
     alignContent: 'center',
     justifyContent: 'space-between',
     // Wraps instead of clipping when the row outgrows its width at a large
@@ -908,11 +906,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     // alignItems centres children within their line; alignContent places
-
     // the line itself, and defaults to flex-start. Without it a wrapping row
-
     // pins its single line to the TOP of the box.
-
     alignContent: 'center',
     gap: spacing.xs,
     flexWrap: 'wrap',

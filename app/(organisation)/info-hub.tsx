@@ -16,6 +16,7 @@ import {
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { LAYER1_WEIGHTS } from '@/lib/matching/layer1';
 import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS } from '@/lib/vscore';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * Organisation Info Hub — the same explanation the volunteer hub gives, told
@@ -33,10 +34,13 @@ import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS } from '@/lib/vscore';
  * system the app no longer runs.
  */
 export default function OrganisationInfoHub() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Info Hub" fallback="/(organisation)/profile" />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
         <Text style={styles.title}>How V-HUB works</Text>
         <Text style={styles.intro}>
           V-HUB ranks and scores the volunteers who apply to your outreaches. Here is exactly what

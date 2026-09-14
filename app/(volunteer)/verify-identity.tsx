@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import {
   Image,
+  LayoutAnimation,
   Linking,
+  Platform,
   Pressable,
   Share,
   ScrollView,
   StyleSheet,
+  UIManager,
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -23,6 +26,13 @@ import { useCredentialUpload, useDeleteCredential } from '@/hooks/useMediaUpload
 import { useAuthStore } from '@/stores/authStore';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
+
+// Collapsing a section without this is an instant jump on Android rather than
+// an animation. Same guard InfoSection uses; both are no-ops if already set.
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 /**
  * Standalone identity-verification status, reached from Settings.
@@ -74,6 +84,9 @@ const STATUS_PRESENTATION = {
 };
 
 export default function VolunteerVerifyIdentity() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   /*
     THE ONBOARDING COMPLETION SCREEN WAS MERGED INTO THIS ONE (owner, 2026-09-11).
@@ -115,6 +128,8 @@ export default function VolunteerVerifyIdentity() {
   const [confirmed, setConfirmed] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [consented, setConsented] = useState(false);
+  // Closed by default: see the note on the heading row below.
+  const [consentPointsOpen, setConsentPointsOpen] = useState(false);
 
   // Consent is asked ONCE. Once the server has stamped it, the block goes away
   // — asking again on every replacement would train people to tap past it,
@@ -155,7 +170,7 @@ export default function VolunteerVerifyIdentity() {
         <ScreenHeader title="Identity Verification" fallback="/(volunteer)/settings" />
       )}
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         {fromOnboarding ? (
           <View style={styles.welcomeCard}>
             <MaterialCommunityIcons name="party-popper" size={26} color={colors.primary} />
@@ -282,13 +297,58 @@ export default function VolunteerVerifyIdentity() {
             */}
             {!consentRecorded ? (
               <View style={styles.consentCard}>
-                <Text style={styles.consentHeading}>Before you upload</Text>
-                {CREDENTIAL_CONSENT_POINTS.map((point) => (
-                  <View key={point} style={styles.consentRow}>
-                    <MaterialCommunityIcons name="circle-small" size={20} color={colors.textSecondary} />
-                    <Text style={styles.consentText}>{point}</Text>
-                  </View>
-                ))}
+                {/*
+                  THE POINTS COLLAPSE; THE AGREEMENT DOES NOT (owner, 2026-09-14).
+                  Five bullets of storage and retention detail pushed the
+                  checkbox -- the control that actually unblocks the upload --
+                  below the fold on a small phone, so the screen read as an
+                  essay with no obvious next step.
+
+                  Only the explanation is behind the arrow. The heading, the
+                  checkbox and the policy link stay visible at all times,
+                  because a consent control a reader has to go looking for is
+                  worse than one they have to scroll past, and hiding the thing
+                  being agreed to behind a tap is not consent worth recording.
+
+                  It opens CLOSED. Anyone who wants the detail taps once; the
+                  text is also reachable in full from the policy link below,
+                  which is the canonical copy.
+                */}
+                <Pressable
+                  onPress={() => {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                    setConsentPointsOpen((open) => !open);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: consentPointsOpen }}
+                  accessibilityLabel={
+                    consentPointsOpen
+                      ? 'Hide what happens to your document'
+                      : 'Read what happens to your document'
+                  }
+                  hitSlop={8}
+                  style={styles.consentHeadingRow}
+                >
+                  <Text style={styles.consentHeading}>Before you upload</Text>
+                  <MaterialCommunityIcons
+                    name={consentPointsOpen ? 'chevron-up' : 'chevron-down'}
+                    size={22}
+                    color={colors.textSecondary}
+                  />
+                </Pressable>
+
+                {consentPointsOpen
+                  ? CREDENTIAL_CONSENT_POINTS.map((point) => (
+                      <View key={point} style={styles.consentRow}>
+                        <MaterialCommunityIcons
+                          name="circle-small"
+                          size={20}
+                          color={colors.textSecondary}
+                        />
+                        <Text style={styles.consentText}>{point}</Text>
+                      </View>
+                    ))
+                  : null}
 
                 <Pressable
                   onPress={() => setConsented((prev) => !prev)}
@@ -695,7 +755,23 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.lg,
   },
-  consentHeading: { fontFamily: fontFamily.semiBold, fontSize: 15, color: colors.textPrimary },
+  consentHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // alignItems centres children within their line; alignContent places the
+    // line itself and defaults to flex-start, so a wrapping row pins to the top.
+    alignContent: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    rowGap: spacing.xs,
+    gap: spacing.sm,
+  },
+  consentHeading: {
+    flexShrink: 1,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
   consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   consentText: {
     flex: 1,

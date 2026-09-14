@@ -23,6 +23,7 @@ import { SCORE_EVENT_LABELS, useAllScoreEvents, useVoidScoreEvent } from '@/hook
 import type { AdminScoreEventRow } from '@/hooks';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * Every V-Score deduction the platform has applied, and the one way to undo
@@ -46,6 +47,9 @@ import { humanError } from '@/lib/errorMessage';
  * ScreenHeader, same card, same badge and confirm dialog as the other queues.
  */
 export default function AdminDeductions() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const query = useAllScoreEvents();
   const voidEvent = useVoidScoreEvent();
 
@@ -85,7 +89,7 @@ export default function AdminDeductions() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="V-Score deductions" fallback="/(admin)/overview" />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
           Every deduction that was not a review: a cancelled place, or a committed day dropped inside
           24 hours of it. A no-show is not here — that is expressed by the organisation&apos;s review,

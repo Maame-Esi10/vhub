@@ -16,6 +16,7 @@ import {
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { useMyOrganisationProfile } from '@/hooks/useProfileEditor';
 import { useAuthStore } from '@/stores/authStore';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * Organisation Settings — the same structure as the volunteer Settings
@@ -34,6 +35,9 @@ const VERIFICATION_ROW_VALUE: Record<string, string> = {
 };
 
 export default function OrganisationSettings() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
@@ -43,7 +47,7 @@ export default function OrganisationSettings() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Settings" fallback="/(organisation)/profile" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <View style={styles.identity}>
           <Avatar name={org?.org_name ?? 'Organisation'} uri={profile?.avatar_url} size={88} />
           <Text style={styles.name}>{org?.org_name ?? profile?.full_name ?? 'Organisation'}</Text>

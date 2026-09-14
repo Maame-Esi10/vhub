@@ -36,6 +36,7 @@ import { formatDaySpan } from '@/lib/outreachDays';
 import { useAuthStore } from '@/stores/authStore';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * The volunteer's own feedback (screen 5, owner decision 2026-08-05).
@@ -56,6 +57,9 @@ import { humanError } from '@/lib/errorMessage';
  * into "this person said this about you".
  */
 export default function VolunteerFeedback() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const volunteerId = useAuthStore((state) => state.user)?.id;
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const reviewsQuery = useMyReviews(volunteerId);
@@ -163,7 +167,7 @@ export default function VolunteerFeedback() {
       <FlatList
         data={reviews}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, tabBarPadding]}
         ListHeaderComponent={
           <>
             {reviews.length > 0 ? (
@@ -559,11 +563,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     // alignItems centres children within their line; alignContent places
-
     // the line itself, and defaults to flex-start. Without it a wrapping row
-
     // pins its single line to the TOP of the box.
-
     alignContent: 'center',
     justifyContent: 'space-between',
     // Wraps instead of clipping when the row outgrows its width at a large

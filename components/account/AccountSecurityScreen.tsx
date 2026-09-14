@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  LayoutAnimation,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  UIManager,
   View,
 } from 'react-native';
 import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
@@ -32,6 +35,13 @@ import { useSignOut } from '@/hooks/useSignOut';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
+
+// Collapsing a section without this is an instant jump on Android rather than
+// an animation. Same guard InfoSection uses; both are no-ops if already set.
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export interface AccountSecurityScreenProps {
   /** Where the header's back arrow lands if there is no navigation history. */
@@ -55,8 +65,14 @@ export interface AccountSecurityScreenProps {
  * are different things with different audiences and different risk.
  */
 export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
+
+  // Closed by default: see the note on the danger card below.
+  const [closureDetailOpen, setClosureDetailOpen] = useState(false);
 
   const [newEmail, setNewEmail] = useState('');
   const [emailPassword, setEmailPassword] = useState('');
@@ -220,7 +236,7 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
         behavior={KEYBOARD_AVOID_BEHAVIOR}
       >
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, tabBarPadding]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -399,47 +415,95 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
           */}
           <SettingsGroupLabel>CLOSING YOUR ACCOUNT</SettingsGroupLabel>
 
+          {/*
+            THE EXPLANATION COLLAPSES; THE BUTTON SITS OUTSIDE THE CARD
+            (owner, 2026-09-14).
+
+            Three paragraphs rendered unconditionally made this the tallest
+            block on the screen, and the one nobody reading it wanted -- the
+            person here is either closing their account, in which case they
+            want the control, or they are not, in which case they want none of
+            it. Collapsed, the card states what it is in one line and opens on
+            request.
+
+            It opens CLOSED, which is the opposite of the usual rule for
+            destructive copy, and deliberately: the text is not a warning
+            attached to a button press, it is reference material about what
+            closure does. The warning that has to be read is in the
+            confirmation dialog, where it is unavoidable and where the person
+            has to type CLOSE to get past it.
+
+            THE BUTTON IS OUTSIDE THE CARD. Nested inside it, the control read
+            as part of the explanation -- collapse the text and the button
+            would have vanished with it, which is the one thing that must never
+            happen to the only way out of the platform. Outside, the card
+            explains and the button acts, and collapsing one cannot hide the
+            other.
+          */}
           <View style={styles.dangerCard}>
-            <View style={styles.dangerHeader}>
+            <Pressable
+              onPress={() => {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setClosureDetailOpen((open) => !open);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: closureDetailOpen }}
+              accessibilityLabel={
+                closureDetailOpen
+                  ? 'Hide what closing your account does'
+                  : 'Read what closing your account does'
+              }
+              hitSlop={8}
+              style={styles.dangerHeader}
+            >
               <MaterialCommunityIcons
                 name="alert-circle-outline"
                 size={20}
                 color={colors.danger}
               />
-              <Text style={styles.dangerTitle}>Close my account</Text>
-            </View>
+              <Text style={styles.dangerTitle}>What closing your account does</Text>
+              <MaterialCommunityIcons
+                name={closureDetailOpen ? 'chevron-up' : 'chevron-down'}
+                size={22}
+                color={colors.textSecondary}
+              />
+            </Pressable>
 
             {/*
-              Says exactly what survives and what does not, BEFORE the button.
-              A closure that quietly kept records the person believed were gone
-              would be the app breaking its own privacy policy in the one place
-              somebody is most entitled to trust it.
+              Says exactly what survives and what does not. A closure that
+              quietly kept records the person believed were gone would be the
+              app breaking its own privacy policy in the one place somebody is
+              most entitled to trust it.
             */}
-            <Text style={styles.dangerBody}>
-              This removes you from V-HUB straight away. Your name, contact details, photo and
-              everything you have written about yourself are cleared, any document you uploaded is
-              destroyed, and you will not be able to sign in again.
-            </Text>
-            <Text style={styles.dangerBody}>
-              Events you actually took part in stay on record — that you attended, and reviews
-              written about that work. An organisation’s record of who worked at its clinic is
-              its record too, not only yours, so it is kept without your name on it.
-            </Text>
-            <Text style={styles.dangerBody}>
-              Anything still ahead of you is cancelled first, and anyone affected is told.
-            </Text>
-
-            <Button
-              title="Close my account"
-              variant="outline"
-              onPress={() => {
-                setCloseVisible(true);
-                setCloseConfirmation('');
-                setCloseAttempted(false);
-              }}
-              style={styles.action}
-            />
+            {closureDetailOpen ? (
+              <>
+                <Text style={styles.dangerBody}>
+                  This removes you from V-HUB straight away. Your name, contact details, photo and
+                  everything you have written about yourself are cleared, any document you uploaded
+                  is destroyed, and you will not be able to sign in again.
+                </Text>
+                <Text style={styles.dangerBody}>
+                  Events you actually took part in stay on record — that you attended, and reviews
+                  written about that work. An organisation’s record of who worked at its clinic is
+                  its record too, not only yours, so it is kept without your name on it.
+                </Text>
+                <Text style={styles.dangerBody}>
+                  Anything still ahead of you is cancelled first, and anyone affected is told.
+                </Text>
+              </>
+            ) : null}
           </View>
+
+          <Button
+            title="Close my account"
+            variant="outline"
+            onPress={() => {
+              setCloseVisible(true);
+              setCloseConfirmation('');
+              setCloseAttempted(false);
+            }}
+            style={styles.closeAccountButton}
+          />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -588,6 +652,13 @@ const styles = StyleSheet.create({
   action: {
     marginTop: spacing.base,
   },
+  closeAccountButton: {
+    // Clear separation from the card it belongs to, and from the bottom of
+    // the scroll content: this is the one irreversible control in the app and
+    // a destructive action jammed against anything invites the wrong tap.
+    marginTop: spacing.base,
+    marginBottom: spacing.xl,
+  },
   dangerCard: {
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radius.lg,
@@ -596,10 +667,24 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.sm,
     marginTop: spacing.md,
-    marginBottom: spacing.xl,
+    // No bottom margin: the button below is its pair, and the gap between
+    // them is the button's own marginTop.
+    marginBottom: 0,
   },
-  dangerHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dangerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // alignItems centres children within their line; alignContent places the
+    // line itself and defaults to flex-start, so a wrapping row pins to the top.
+    alignContent: 'center',
+    flexWrap: 'wrap',
+    rowGap: spacing.xs,
+    gap: spacing.sm,
+  },
   dangerTitle: {
+    // Takes the room left by the icon and the chevron, and wraps rather than
+    // pushing the chevron off the row at a large system font size.
+    flex: 1,
     fontFamily: fontFamily.semiBold,
     fontSize: 15,
     color: colors.textPrimary,

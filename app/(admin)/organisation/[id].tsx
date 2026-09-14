@@ -24,6 +24,7 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAdminActionsForTarget, useDecideVerification, useVerificationDetail } from '@/hooks';
 import { getOrganisationDocumentUrl, type SignedDocument } from '@/lib/api-client';
 import type { OrganisationDocument, OrgVerificationState } from '@/types/database';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * One organisation's verification submission, and the decision on it.
@@ -39,6 +40,9 @@ import type { OrganisationDocument, OrgVerificationState } from '@/types/databas
  * submission being approved and rejected in circles by different people.
  */
 export default function AdminOrganisationDetail() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const organisationId = typeof id === 'string' ? id : undefined;
@@ -131,7 +135,7 @@ export default function AdminOrganisationDetail() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Organisation" fallback="/(admin)/organisations" />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <View style={styles.identity}>
           <Text style={styles.orgName}>{profile.org_name}</Text>
           <View style={styles.badgeRow}>

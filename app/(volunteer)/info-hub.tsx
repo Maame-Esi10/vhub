@@ -16,6 +16,7 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { LAYER1_WEIGHTS } from '@/lib/matching/layer1';
 import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS, V_SCORE_PENALTIES } from '@/lib/vscore';
 import { useAuthStore } from '@/stores/authStore';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 // Collapsing a section without this is an instant jump on Android.
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -32,6 +33,9 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
  * stale and start explaining a scoring system the app no longer runs.
  */
 export default function InfoHub() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
 
   return (
@@ -41,7 +45,7 @@ export default function InfoHub() {
         without a back control there is no way off it at all.
       */}
       <ScreenHeader title="Info Hub" fallback="/(volunteer)/profile" />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
         <Text style={styles.title}>How V-HUB works</Text>
         <Text style={styles.intro}>
           Two numbers shape what you see and who you get matched with. Neither is a judgement of you
@@ -397,11 +401,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     // alignItems centres children within their line; alignContent places
-
     // the line itself, and defaults to flex-start. Without it a wrapping row
-
     // pins its single line to the TOP of the box.
-
     alignContent: 'center',
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,

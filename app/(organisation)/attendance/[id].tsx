@@ -30,6 +30,7 @@ import { formatDayShort, formatDaySpan, todayIso } from '@/lib/outreachDays';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { ApplicationWithVolunteer } from '@/hooks/useApplications';
 import { humanError, humanErrorOrNull } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * Post-event attendance (section 3, owner decision 2026-08-05).
@@ -70,6 +71,9 @@ type Row =
   | { kind: 'volunteer'; key: string; application: ApplicationWithVolunteer };
 
 export default function OrganisationAttendance() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
@@ -291,7 +295,7 @@ export default function OrganisationAttendance() {
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, tabBarPadding]}
         renderItem={({ item }) => {
           if (item.kind === 'header') {
             return (

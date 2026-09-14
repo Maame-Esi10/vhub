@@ -19,6 +19,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useMutation } from '@tanstack/react-query';
 import { checkMailHealth } from '@/lib/api-client';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * Admin settings. Same structure as the volunteer and organisation settings
@@ -32,6 +33,9 @@ import { humanError } from '@/lib/errorMessage';
  * Account & Security screen every role uses.
  */
 export default function AdminSettings() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
 
@@ -48,7 +52,7 @@ export default function AdminSettings() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Settings" fallback="/(admin)/overview" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <View style={styles.identity}>
           <Avatar name={profile?.full_name ?? 'Admin'} uri={profile?.avatar_url} size={88} />
           <Text style={styles.name}>{profile?.full_name ?? 'Admin'}</Text>

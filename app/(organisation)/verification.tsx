@@ -16,6 +16,7 @@ import { useOrganisationDocumentUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import type { OrgVerificationState } from '@/types/database';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * Where an organisation submits itself for verification.
@@ -84,6 +85,9 @@ interface DocumentDraft {
 }
 
 export default function OrganisationVerification() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const profile = useAuthStore((state) => state.profile);
   const submissionQuery = useMyVerificationSubmission();
   const submit = useSubmitVerification();
@@ -219,7 +223,7 @@ export default function OrganisationVerification() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Organisation Verification" fallback="/(organisation)/settings" />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <View style={[styles.statusCard, { borderColor: presentation.tint }]}>
           <MaterialCommunityIcons name={presentation.icon} size={28} color={presentation.tint} />
           <View style={styles.statusText}>

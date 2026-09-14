@@ -24,6 +24,7 @@ import {
 } from '@/hooks/useNotifications';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * The organisation's inbox.
@@ -45,6 +46,9 @@ import { humanError } from '@/lib/errorMessage';
  * inventing a second visual style for the same content.
  */
 export default function OrganisationNotifications() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // row needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const notificationsQuery = useNotifications();
   const markRead = useMarkNotificationsRead();
@@ -132,7 +136,7 @@ export default function OrganisationNotifications() {
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={rows.length === 0 ? styles.emptyContent : styles.listContent}
+        contentContainerStyle={[rows.length === 0 ? styles.emptyContent : styles.listContent, tabBarPadding]}
         refreshControl={
           <RefreshControl
             refreshing={notificationsQuery.isRefetching}

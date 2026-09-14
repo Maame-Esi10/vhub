@@ -16,6 +16,7 @@ import {
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { getVScoreBand } from '@/lib/vscore';
 import { useAuthStore } from '@/stores/authStore';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * Volunteer Settings, per design-refs/Settings.png: avatar + identity block,
@@ -34,6 +35,9 @@ import { useAuthStore } from '@/stores/authStore';
  * volunteer actually has.
  */
 export default function VolunteerSettings() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
@@ -51,7 +55,7 @@ export default function VolunteerSettings() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Settings" fallback="/(volunteer)/profile" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <View style={styles.identity}>
           <Avatar name={profile?.full_name ?? 'Volunteer'} uri={profile?.avatar_url} size={88} />
           <Text style={styles.name}>{profile?.full_name ?? 'Volunteer'}</Text>

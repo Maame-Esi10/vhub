@@ -66,6 +66,7 @@ import { changedDayHours, dayDraftsFromRows, dayStringsOf } from '@/lib/outreach
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 const REGION_OPTIONS: SelectOption[] = GHANA_REGIONS.map((r) => ({ value: r.name, label: r.name }));
 const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
@@ -86,6 +87,9 @@ const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
  * and every section is independently editable.
  */
 export default function EditOutreach() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const { id, section } = useLocalSearchParams<{ id: string; section?: string }>();
   const outreachId = typeof id === 'string' ? id : undefined;
@@ -299,10 +303,14 @@ export default function EditOutreach() {
             urls: results.map((r) => r.secureUrl),
             startPosition: galleryImages.length,
           },
-          { onError: (error) => setGalleryError(error.message) }
+          {
+            onError: (error) =>
+              setGalleryError(humanError(error, 'Could not add those images. Please try again.')),
+          }
         );
       },
-      onError: (error) => setGalleryError(error.message),
+      onError: (error) =>
+        setGalleryError(humanError(error, 'Could not upload those images. Please try again.')),
     });
   }
 
@@ -312,7 +320,10 @@ export default function EditOutreach() {
     setGalleryError(null);
     deleteImage.mutate(
       { imageId: image.id, outreachId },
-      { onError: (error) => setGalleryError(error.message) }
+      {
+        onError: (error) =>
+          setGalleryError(humanError(error, 'Could not remove that image. Please try again.')),
+      }
     );
   }
 
@@ -327,7 +338,10 @@ export default function EditOutreach() {
     setGalleryError(null);
     reorderImages.mutate(
       { outreachId, orderedIds: ordered },
-      { onError: (error) => setGalleryError(error.message) }
+      {
+        onError: (error) =>
+          setGalleryError(humanError(error, 'Could not reorder the images. Please try again.')),
+      }
     );
   }
 
@@ -622,7 +636,7 @@ export default function EditOutreach() {
         <ScrollView
           ref={scrollRef}
           style={styles.flex}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, tabBarPadding]}
           keyboardShouldPersistTaps="handled"
         >
           {/* ---------- Details ---------- */}

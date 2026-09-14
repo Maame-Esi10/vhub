@@ -32,6 +32,7 @@ import { isVenueAnchorUsable } from '@/lib/attendance';
 import { formatDaySpan, lastDay, todayIso } from '@/lib/outreachDays';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { humanErrorOrNull } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * The organiser's check-in QR, displayed at the venue for volunteers to scan.
@@ -53,6 +54,9 @@ import { humanErrorOrNull } from '@/lib/errorMessage';
 const QR_SIZE = 232;
 
 export default function OrganisationCheckinQr() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const { id } = useLocalSearchParams<{ id: string }>();
   const outreachQuery = useOutreach(id);
   const daysQuery = useOutreachDays(id);
@@ -130,7 +134,7 @@ export default function OrganisationCheckinQr() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Check-in code" fallback={`/(organisation)/outreach/${id}`} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>{outreach.title}</Text>
         <Text style={styles.meta}>
           {daySpan || formatEventDate(outreach.date)}

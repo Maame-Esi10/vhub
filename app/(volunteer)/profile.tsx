@@ -3,7 +3,7 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { VScoreBadge } from '@/components/ui';
+import { Avatar, VScoreBadge } from '@/components/ui';
 import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getVScoreBand } from '@/lib/vscore';
@@ -116,19 +116,46 @@ export default function VolunteerProfile() {
           </Pressable>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.name}>{profile?.full_name ?? 'Volunteer'}</Text>
-          {profile?.email ? <Text style={styles.email}>{profile.email}</Text> : null}
-          <View style={styles.badgeRow}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>Volunteer</Text>
-            </View>
-            {categoryLabel ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{categoryLabel}</Text>
-              </View>
+        {/*
+          THE IDENTITY HEADER (owner-approved, 2026-09-14). This was a flat grey
+          rectangle holding a name and an email -- the least informative element
+          on the screen, occupying the strongest position on it.
+
+          The problem was never that the information is unimportant; it is that
+          a block with no visual anchor cannot justify the top of a screen, so
+          the eye had nothing to move PAST and the V-Score card below it -- the
+          thing a volunteer actually opens this screen to check -- read as third
+          in a list of three equals.
+
+          An avatar fixes that at no cost in height, because the photo and the
+          two text lines sit side by side rather than stacked. It also makes the
+          screen legible as YOURS rather than as a settings list, which is what
+          a profile screen is for.
+
+          The photo falls back to initials, never to a remote placeholder
+          service -- see components/ui/Avatar.
+        */}
+        <View style={styles.identity}>
+          <Avatar name={profile?.full_name ?? 'Volunteer'} uri={profile?.avatar_url} size={64} />
+          <View style={styles.identityText}>
+            <Text style={styles.name}>{profile?.full_name ?? 'Volunteer'}</Text>
+            {profile?.email ? (
+              <Text style={styles.email} numberOfLines={1}>
+                {profile.email}
+              </Text>
             ) : null}
           </View>
+        </View>
+
+        <View style={styles.badgeRow}>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>Volunteer</Text>
+          </View>
+          {categoryLabel ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{categoryLabel}</Text>
+            </View>
+          ) : null}
         </View>
 
         {score !== null ? (
@@ -179,20 +206,28 @@ export default function VolunteerProfile() {
         ) : null}
 
         <View style={styles.actionsCard}>
+          {/*
+            EDIT PROFILE FIRST (owner-approved, 2026-09-14). Not merely a stated
+            preference: Edit Profile is the only control on this screen that
+            changes a volunteer's outcomes. Skills, specialties and availability
+            are three of the five matching components, so editing the profile is
+            literally how somebody improves what they are offered. My Feedback
+            is a record of what has already happened. Active above passive.
+          */}
           <ProfileAction
             first
-            icon="message-star-outline"
-            title="My Feedback"
-            body="Reviews and notes from organisations"
-            accessibilityLabel="See the feedback organisations have given you"
-            onPress={() => router.push('/(volunteer)/feedback')}
-          />
-          <ProfileAction
             icon="account-edit-outline"
             title="Edit Profile"
             body="Details, expertise and availability"
             accessibilityLabel="Edit your professional profile"
             onPress={() => router.push('/(volunteer)/edit-profile')}
+          />
+          <ProfileAction
+            icon="message-star-outline"
+            title="My Feedback"
+            body="Reviews and notes from organisations"
+            accessibilityLabel="See the feedback organisations have given you"
+            onPress={() => router.push('/(volunteer)/feedback')}
           />
         </View>
 
@@ -233,11 +268,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     // alignItems centres children within their line; alignContent places
-
     // the line itself, and defaults to flex-start. Without it a wrapping row
-
     // pins its single line to the TOP of the box.
-
     alignContent: 'center',
     justifyContent: 'space-between',
     // Wraps instead of clipping when the row outgrows its width at a large
@@ -260,10 +292,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // alignItems centres children within their line; alignContent places the
+    // line itself and defaults to flex-start, so a wrapping row pins to the top.
+    alignContent: 'center',
+    flexWrap: 'wrap',
+    rowGap: spacing.md,
+    gap: spacing.base,
+  },
+  identityText: {
+    // Takes the room left by the avatar and wraps within it, rather than
+    // pushing the row wider than the screen at a large system font size.
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   name: {
     fontFamily: fontFamily.semiBold,
@@ -282,7 +326,9 @@ const styles = StyleSheet.create({
     // are wider than a phone, and a chip half off the screen reads as damage.
     flexWrap: 'wrap',
     gap: spacing.sm,
-    marginTop: spacing.base,
+    // Sits WITH the identity header, so it keeps the tighter within-section
+    // gap rather than the xl that now separates the sections themselves.
+    marginTop: spacing.md,
   },
   badge: {
     backgroundColor: 'rgba(255, 107, 107, 0.12)',
@@ -303,18 +349,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
-    marginTop: spacing.lg,
+    // SECTION GAP, not a within-section gap (owner, 2026-09-14). While the
+    // space BETWEEN sections equalled the space INSIDE them, nothing on this
+    // screen read as grouped -- it was one undifferentiated column, which is
+    // most of why it felt wrong across three attempts. xl between, lg within.
+    marginTop: spacing.xl,
   },
   scoreHeader: {
     flexDirection: 'row',
     alignItems: 'center',
 
     // alignItems centres children within their line; alignContent places
-
     // the line itself, and defaults to flex-start. Without it a wrapping row
-
     // pins its single line to the TOP of the box.
-
     alignContent: 'center',
     // Wrap, so the text drops under the ring at a large font size rather than
     // being squeezed into a column narrower than the words in it.
@@ -372,11 +419,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     // alignItems centres children within their line; alignContent places
-
     // the line itself, and defaults to flex-start. Without it a wrapping row
-
     // pins its single line to the TOP of the box.
-
     alignContent: 'center',
     flexWrap: 'wrap',
     gap: spacing.xs,
@@ -396,7 +440,11 @@ const styles = StyleSheet.create({
   actionsCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    marginTop: spacing.lg,
+    // SECTION GAP, not a within-section gap (owner, 2026-09-14). While the
+    // space BETWEEN sections equalled the space INSIDE them, nothing on this
+    // screen read as grouped -- it was one undifferentiated column, which is
+    // most of why it felt wrong across three attempts. xl between, lg within.
+    marginTop: spacing.xl,
     overflow: 'hidden',
   },
   actionRow: {

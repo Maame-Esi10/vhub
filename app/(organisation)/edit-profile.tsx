@@ -32,6 +32,7 @@ import { useMyOrganisationProfile, useUpdateOrganisationProfile } from '@/hooks/
 import { useAvatarUpload, useRemoveAvatar } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 const DESCRIPTION_MAX = 600;
 
@@ -47,6 +48,9 @@ const DESCRIPTION_MAX = 600;
  * button pair. Nothing new was invented.
  */
 export default function EditOrganisationProfile() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
@@ -127,7 +131,8 @@ export default function EditOrganisationProfile() {
     setPhotoError(null);
     avatarUpload.mutate(user.id, {
       // null means the picker was dismissed, which is not a failure.
-      onError: (error) => setPhotoError(error.message),
+      onError: (error) =>
+        setPhotoError(humanError(error, 'Could not upload that photo. Please try again.')),
     });
   }
 
@@ -202,7 +207,7 @@ export default function EditOrganisationProfile() {
           behavior={KEYBOARD_AVOID_BEHAVIOR}
         >
           <ScrollView
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, tabBarPadding]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
@@ -472,7 +477,7 @@ export default function EditOrganisationProfile() {
             onSuccess: () => setRemovingPhoto(false),
             onError: (error) => {
               setRemovingPhoto(false);
-              setPhotoError(error.message);
+              setPhotoError(humanError(error, 'Could not remove that photo. Please try again.'));
             },
           });
         }}

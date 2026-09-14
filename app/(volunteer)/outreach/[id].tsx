@@ -49,6 +49,7 @@ import { formatDaySpan, hoursVaryByDay } from '@/lib/outreachDays';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 const STATUS_MESSAGE: Record<ApplicationStatus, string> = {
   pending: "You've applied. The organisation is reviewing your application.",
@@ -60,6 +61,9 @@ const STATUS_MESSAGE: Record<ApplicationStatus, string> = {
 };
 
 export default function OutreachDetail() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const outreachId = typeof id === 'string' ? id : undefined;
@@ -332,7 +336,7 @@ export default function OutreachDetail() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
         <FlyerBackground uri={outreach.flyer_url} style={styles.hero}>
           <View style={styles.heroContent}>
             <MatchScoreBadge onDark />
@@ -842,11 +846,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
 
     // alignItems centres children within their line; alignContent places
-
     // the line itself, and defaults to flex-start. Without it a wrapping row
-
     // pins its single line to the TOP of the box.
-
     alignContent: 'center',
     justifyContent: 'space-between',
     // Wraps instead of clipping when the row outgrows its width at a large

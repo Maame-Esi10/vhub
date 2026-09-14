@@ -11,6 +11,7 @@ import { ErrorState, ListSkeleton, ScreenHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { usePlatformStats, type MonthlyNoShows } from '@/hooks';
 import { humanError } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * The platform, in numbers.
@@ -25,6 +26,9 @@ import { humanError } from '@/lib/errorMessage';
  * bars scaled to the largest is a chart already.
  */
 export default function AdminStats() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const stats = usePlatformStats();
 
   if (stats.isLoading) {
@@ -65,7 +69,7 @@ export default function AdminStats() {
       <ScreenHeader title="Statistics" fallback="/(admin)/overview" />
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, tabBarPadding]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={stats.isRefetching} onRefresh={() => stats.refetch()} />

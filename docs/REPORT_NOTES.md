@@ -5141,3 +5141,115 @@ including the exact string that was on screen.
 - **Not built, and not ours:** the Supabase SMTP configuration itself. The app
   now reports the failure in a sentence and offers a resend; it cannot send the
   mail.
+
+## The 35 days of email that reached nobody (recorded 2026-09-14)
+
+**Finding.** Between **28 July 2026 and 1 September 2026**, every transactional
+email the serverless API tried to send failed for every recipient except the
+project owner. Roughly five weeks. Nobody noticed at the time, and nothing in
+the app, the database or any dashboard indicated it.
+
+**Cause.** The API shipped on 2026-07-28 (`e48b732`) using Resend. Resend will
+not send from an arbitrary address without a **verified domain**, and this
+project has none. Without one the only usable sender is the shared
+`onboarding@resend.dev`, and Resend delivers from that address **only to the
+address the Resend account itself was registered under** — the owner's. Every
+other recipient was refused with a 403. This was not intermittent and not a
+misconfiguration that could have been corrected: it is how the free tier is
+designed to work, and the fix was always a different transport, which arrived
+on 2026-09-01 (`42c22d2`) as Gmail SMTP.
+
+**What was lost.** Acceptance, rejection and waitlist notices from
+`/api/application-status`; waitlist promotions from `server/waitlist.ts`; and
+outreach-cancellation notices from `server/accountStop.ts`. **Push
+notifications were unaffected** — a separate transport that never went through
+Resend — so anyone with the app installed still learned of the decision. The
+loss falls on recipients who relied on email alone. **No data was lost or
+corrupted**: every decision is correctly recorded, and only the courtesy
+notification about it went missing. There is nothing to repair.
+
+**Why it was invisible, which is the part worth keeping.** Both send paths in
+`api/src/server/email.ts` catch, `console.error`, and return normally. That
+design is **correct and must not change**: the database write is the source of
+truth, and an organisation's recorded decision must never be reported as failed
+because a mail server was unreachable. But the consequence is that *total
+delivery failure and perfect delivery produce byte-identical behaviour on every
+screen*. A swallowed failure is a deliberate trade — availability of the
+primary action, bought with silence about the secondary one — and the price of
+that trade is that the silence must be broken somewhere else.
+
+It was not, for two compounding reasons. Vercel's Hobby plan keeps runtime logs
+as a live tail with about an hour of retention and no alerting, so the
+`console.error` lines expired before anyone could have read them. And the
+Resend batch path put up to 100 messages in a single `batch.send` inside one
+try/catch, so one bad address discarded the rest of the chunk — the failure was
+not only invisible but amplified.
+
+**What now covers it.** Error monitoring (2026-09-08, `726b60d`) hangs off
+`errorResponse()` and alerts on 5xx once `ALERT_EMAIL` is set, which it now is.
+`sendMailBatch` isolates each message so one failure is one failure.
+`/api/mail-health` authenticates against Gmail without sending, which is what
+distinguishes a dead credential from a mis-typed SMTP setting — the check that
+did not exist for the whole of the Resend era.
+
+**The limitation that remains.** Monitoring covers the API's own 5xx responses.
+It does not prove an individual message was *delivered*, and nothing here does:
+an SMTP handshake that succeeds is not a message that arrived. Confirming
+delivery needs a provider with webhooks, which needs a domain, which is ruled
+out on cost. The honest statement for the report is that V-HUB can now tell you
+when its mail transport is broken, and still cannot tell you that any given
+email was read.
+
+**Generalisation for the FYP write-up.** A failure that is swallowed by design
+needs a second channel that is *not* the thing being swallowed — a health probe,
+an alert, or a counter. Logging into a store with an hour of retention is not
+that second channel; it only looks like one. This is the same reasoning that put
+`v_score_recomputed_at` on a derived cache: a value nothing records the state of
+is indistinguishable from a stale one.
+
+## The floating tab bar covered every pushed screen (2026-09-14)
+
+**Symptom.** Sign Out on Settings was visible behind the floating pill and could
+not be tapped.
+
+**Cause, which was a misread category rather than a missed screen.** The bar is
+`position: absolute`, so React Navigation reserves no space for it and each
+screen must leave that room itself via `tabBarClearance(insets.bottom)`. Only
+the visible tabs did — because "tab screen" had been read as "screen with a
+button on the bar", when it actually means "screen inside the tab navigator". A
+screen registered with `href: null` is hidden from the bar but is still a screen
+*of* that navigator, so the pill floats over it identically. **Twenty-nine of
+the forty-three screens were in that second group.**
+
+**Why it was total rather than tight.** Those screens carried a
+sensible-looking `paddingBottom: spacing.xxl` (32). The pill's top edge sits at
+`insets.bottom + BAR_LIFT + BAR_HEIGHT` = `inset + 76` from the bottom of the
+screen, and the clearance needs `inset + 92`. On a typical handset that is ~85px
+short — more than a button's height, which is why controls were entirely
+unreachable rather than merely cramped. The worst case was
+`(volunteer)/notifications`, which passed `contentContainerStyle` **only when
+the list was empty**, so a populated list had zero bottom padding and its last
+row — a tappable one — sat fully under the bar.
+
+**Fix.** `useTabBarContentPadding()` in `components/ui/tabBarOptions.tsx`
+returns the whole style object, so a call site is one spread and no screen
+re-derives a measurement. Applied to 24 files (the three Account & Security
+routes share one component). Three screens are exempt with stated reasons:
+`map` and `search` are placeholder stubs, and `scan` is full-bleed with
+vertically centred controls.
+
+**What actually prevents recurrence.** `components/ui/__tests__/tabBarClearance.test.ts`
+parses the three `_layout.tsx` files, enumerates every registered screen, and
+asserts each either accounts for the bar or appears on an exemption list with a
+reason. A review cannot hold this line, because the broken screens *looked*
+fine in source — only arithmetic against the bar's height showed the shortfall.
+The test was verified to fail when the clearance is removed from a screen, so it
+is a real guard rather than a vacuous pass.
+
+**Generalisation for the write-up.** The audit that missed this asked "do the
+tab screens pad?" and grepped for the helper, which answered a question about
+the 14 screens already known to be correct. The right question was "which
+screens does the bar render over?", whose answer comes from the navigator's
+registration list, not from the screens' own source. **When a layout invariant
+depends on what a framework does implicitly, enumerate from the framework's
+configuration, never from the code that is supposed to comply with it.**

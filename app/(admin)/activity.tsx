@@ -12,6 +12,7 @@ import { Badge, EmptyState, ErrorState, ListSkeleton } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAdminActions } from '@/hooks';
 import type { AdminAction, AdminActionTargetType } from '@/types/database';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 /**
  * The audit trail, newest first.
@@ -25,6 +26,9 @@ import type { AdminAction, AdminActionTargetType } from '@/types/database';
  * empty log here is the correct and expected state, not a failure.
  */
 export default function AdminActivity() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const actionsQuery = useAdminActions();
   const actions = actionsQuery.data ?? [];
 
@@ -60,7 +64,7 @@ export default function AdminActivity() {
       <FlatList
         data={actions}
         keyExtractor={(action) => action.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, tabBarPadding]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={actionsQuery.isRefetching} onRefresh={() => actionsQuery.refetch()} />

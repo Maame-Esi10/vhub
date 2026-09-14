@@ -118,6 +118,41 @@ export function tabBarClearance(bottomInset: number): number {
 }
 
 /**
+ * The bottom padding a scroll container needs so its LAST element is clear of
+ * the floating tab bar, ready to spread into a `contentContainerStyle`.
+ *
+ * WHY THIS EXISTS RATHER THAN EACH SCREEN CALLING tabBarClearance ITSELF
+ * (owner-reported, 2026-09-14: Sign Out on Settings was visible behind the
+ * pill and could not be tapped).
+ *
+ * The bar is `position: absolute`, so React Navigation reserves NO room for
+ * it and every screen it floats over must leave that room itself. The trap is
+ * which screens those are. A screen registered with `href: null` is hidden
+ * from the BAR but is still a screen OF the tab navigator, so the bar renders
+ * on top of it exactly as it does on a visible tab -- Settings, Edit Profile,
+ * Notifications and twenty others included. Only the four/five visible tabs
+ * per group had been padded, because "tab screen" was read as "screen with a
+ * tab button" when it actually means "screen inside the tab navigator".
+ *
+ * A fixed `paddingBottom: spacing.xxl` (32) is not close: the pill's top edge
+ * sits at `inset + 76` from the bottom of the screen, so on a typical handset
+ * the last ~85px of content is underneath it -- comfortably more than a
+ * button's height, which is why the control was completely unreachable rather
+ * than merely tight.
+ *
+ * Returning the whole style object rather than the number keeps the
+ * arithmetic in one place and makes the call site a single spread, so a screen
+ * added later copies a line instead of re-deriving a measurement.
+ *
+ * Spread it LAST so it wins over any paddingBottom already in the stylesheet:
+ *   contentContainerStyle={[styles.content, useTabBarContentPadding()]}
+ */
+export function useTabBarContentPadding(): { paddingBottom: number } {
+  const insets = useSafeAreaInsets();
+  return { paddingBottom: tabBarClearance(insets.bottom) };
+}
+
+/**
  * Builds a tabBarIcon renderer that swaps a filled glyph in on focus and an
  * outline glyph otherwise.
  *

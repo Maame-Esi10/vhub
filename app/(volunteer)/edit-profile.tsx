@@ -34,6 +34,7 @@ import { useAvatarUpload, useRemoveAvatar } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import type { ExperienceLevel, VolunteerCategory } from '@/types/database';
 import { humanError, humanErrorOrNull } from '@/lib/errorMessage';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 
 
@@ -52,6 +53,9 @@ const BIO_MAX = 400;
  * with `specialties` would quietly change matching results.
  */
 export default function EditVolunteerProfile() {
+  // The floating tab bar is absolute and reserves no space, so the last
+  // element needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
@@ -170,7 +174,7 @@ export default function EditVolunteerProfile() {
         behavior={KEYBOARD_AVOID_BEHAVIOR}
       >
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, tabBarPadding]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
