@@ -20,8 +20,8 @@ import { Button, Input , PasswordRequirements } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { ORG_TYPES, OrgType } from '@/constants/org-types';
-import { useResendConfirmation, useSignUp } from '@/hooks';
-import { humanError, humanErrorOrNull } from '@/lib/errorMessage';
+import { useSignUp } from '@/hooks';
+import { humanErrorOrNull } from '@/lib/errorMessage';
 import { describePasswordProblem } from '@/lib/password';
 
 
@@ -39,7 +39,6 @@ export default function Register() {
   const { role: roleParam } = useLocalSearchParams<{ role?: string }>();
   const role = useMemo(() => resolveRole(roleParam), [roleParam]);
   const signUp = useSignUp();
-  const resendConfirmation = useResendConfirmation();
 
   // Shared fields
   const [email, setEmail] = useState('');
@@ -47,7 +46,6 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
 
   // Volunteer fields
   const [fullName, setFullName] = useState('');
@@ -137,7 +135,13 @@ export default function Register() {
       );
 
       if (result.status === 'confirmationRequired') {
-        setAwaitingConfirmation(true);
+        // THE CODE SCREEN, NOT AN INLINE DEAD END (owner, 2026-09-14).
+        // This used to flip into a panel saying "check your email for a link",
+        // whose only moves were to resend the mail or go back to login -- so
+        // finishing registration meant leaving the app, and everything that
+        // happened out there was invisible to it. confirm-email.tsx takes the
+        // six-digit code instead and never leaves V-HUB.
+        router.push({ pathname: '/(auth)/confirm-email', params: { email: email.trim() } });
         return;
       }
 
@@ -151,85 +155,6 @@ export default function Register() {
   const errorMessage = validationError ?? humanErrorOrNull(signUp.error) ?? null;
 
   const headerTitle = role === 'volunteer' ? 'Volunteer Registration' : 'Organization Registration';
-
-  if (awaitingConfirmation) {
-    return (
-      <View style={styles.container}>
-        <StatusBar style="dark" />
-        <View style={[styles.brandStrip, { paddingTop: insets.top + spacing.sm }]}>
-          <Image
-            source={require('../../assets/logo.png')}
-            style={{ width: logoSize, height: logoSize }}
-            resizeMode="contain"
-          />
-        </View>
-        <View style={[styles.header, { paddingTop: spacing.sm }]}>
-          <Pressable
-            onPress={goBack}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            style={styles.backButton}
-          >
-            <MaterialCommunityIcons name="arrow-left" size={22} color={colors.textPrimary} />
-          </Pressable>
-          <Text style={styles.headerTitle}>{headerTitle}</Text>
-          <View style={styles.backButton} />
-        </View>
-        <View style={styles.confirmationContent}>
-          <View style={styles.confirmationIcon}>
-            <MaterialCommunityIcons name="email-check-outline" size={40} color={colors.primary} />
-          </View>
-          <Text style={styles.confirmationTitle}>Check your email</Text>
-          <Text style={styles.confirmationBody}>
-            We sent a confirmation link to {email.trim()}. Verify your address, then log in to
-            finish setting up your account.
-          </Text>
-          {/* The confirmation email is the most spam-prone message V-HUB sends: it goes
-              to somebody who has never heard from the sender, and it contains a link.
-              Since delivery moved to a Gmail account rather than a branded domain
-              (2026-09-01), the filter risk is real enough to name here. Same wording as
-              the reset-password screen, deliberately. */}
-          <Text style={styles.confirmationHint}>
-            Nothing arrived? Check your spam folder first.
-          </Text>
-          {/*
-            THIS SCREEN USED TO BE A DEAD END. An unconfirmed address cannot log
-            in, and Supabase refuses a second registration for an address it
-            already holds — so if the email did not arrive there was no way
-            forward from inside the app and no way back into the account. One
-            button is the whole fix.
-          */}
-          <Button
-            title={
-              resendConfirmation.isSuccess
-                ? 'Sent — check your inbox again'
-                : resendConfirmation.isPending
-                  ? 'Sending...'
-                  : 'Send the email again'
-            }
-            variant="outline"
-            disabled={resendConfirmation.isPending || resendConfirmation.isSuccess}
-            onPress={() => resendConfirmation.mutate(email)}
-            accessibilityLabel="Send the confirmation email again"
-            style={styles.confirmationButton}
-          />
-          {resendConfirmation.isError ? (
-            <Text style={styles.errorText}>
-              {humanError(resendConfirmation.error, 'Could not send it just now.')}
-            </Text>
-          ) : null}
-          <Button
-            title="Back to Login"
-            variant="solid"
-            onPress={goToLogin}
-            accessibilityLabel="Back to login"
-            style={styles.confirmationButton}
-          />
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>

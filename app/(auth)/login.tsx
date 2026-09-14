@@ -19,6 +19,7 @@ import { Button, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { useSignIn } from '@/hooks';
+import { useAuthStore } from '@/stores/authStore';
 import { humanErrorOrNull } from '@/lib/errorMessage';
 
 // The circular badge backdrop is sized relative to the logo so their ratio
@@ -33,6 +34,20 @@ export default function Login() {
   const logoSize = getLogoSize('medium', width);
   const badgeSize = logoSize * BADGE_TO_LOGO_RATIO;
   const signIn = useSignIn();
+  /*
+    THE FAILURE THAT HAPPENS AFTER A SUCCESSFUL SIGN-IN.
+
+    signInWithPassword can succeed while the profile load behind it fails, and
+    the router deliberately stays put when there is no profile rather than
+    guessing a home route. That combination left a person signed in, on this
+    screen, with the button no longer spinning and nothing said at all --
+    reported 2026-09-14 as "Nothing happened. No error, no message."
+
+    signIn.error is null in that case, because signing in genuinely worked. The
+    guard now records why it could not finish, and this is where it is read.
+  */
+  const authError = useAuthStore((state) => state.authError);
+  const setAuthError = useAuthStore((state) => state.setAuthError);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,6 +60,9 @@ export default function Login() {
 
   const handleLogin = useCallback(() => {
     setValidationError(null);
+    // Clear the previous attempt's explanation, so a stale message can never
+    // be read as the result of this one.
+    setAuthError(null);
 
     if (!email.trim() || !password) {
       setValidationError('Please enter both your email and password.');
@@ -54,10 +72,19 @@ export default function Login() {
     signIn.mutate({ email: email.trim(), password });
     // On success, app/_layout.tsx's auth guard detects the new session and
     // redirects to the correct tab group automatically.
-  }, [email, password, signIn]);
+  }, [email, password, signIn, setAuthError]);
 
   const submitting = signIn.isPending;
-  const errorMessage = validationError ?? humanErrorOrNull(signIn.error) ?? null;
+  // Order is failure-order: what the form itself rejected, then what the
+  // sign-in call rejected, then what failed after the sign-in succeeded.
+  const errorMessage = validationError ?? humanErrorOrNull(signIn.error) ?? authError ?? null;
+
+  /*
+    "Confirm your email first" is the one sign-in failure with a next step, and
+    until now it named the emailed link -- which is precisely the journey that
+    breaks invisibly. Offer the in-app code instead.
+  */
+  const needsConfirmation = /confirm your email/i.test(errorMessage ?? '');
 
   const handleForgotPassword = useCallback(() => {
     // Was an intentional no-op for the whole of Phase 1: somebody who forgot
@@ -172,6 +199,19 @@ export default function Login() {
               />
             )}
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+            {needsConfirmation ? (
+              <Pressable
+                onPress={() =>
+                  router.push({ pathname: '/(auth)/confirm-email', params: { email: email.trim() } })
+                }
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Enter your confirmation code"
+                style={styles.confirmLinkRow}
+              >
+                <Text style={styles.confirmLink}>Enter your confirmation code</Text>
+              </Pressable>
+            ) : null}
           </View>
 
           <View style={styles.signupRow}>
@@ -269,6 +309,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
     backgroundColor: colors.navy,
+  },
+  confirmLinkRow: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+  },
+  confirmLink: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.primary,
+    textAlign: 'center',
   },
   errorText: {
     fontFamily: fontFamily.regular,

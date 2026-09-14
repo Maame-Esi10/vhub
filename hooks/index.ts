@@ -2,6 +2,7 @@ export { useAuthGuard } from './useAuthGuard';
 export { useSignIn } from './useSignIn';
 export { useSignUp } from './useSignUp';
 export { useResendConfirmation } from './useResendConfirmation';
+export { useConfirmSignUp } from './useConfirmSignUp';
 export type { SignUpParams, SignUpResult } from './useSignUp';
 export { useCompleteOnboarding } from './useCompleteOnboarding';
 export { useSignOut } from './useSignOut';

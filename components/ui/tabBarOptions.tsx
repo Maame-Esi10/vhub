@@ -7,11 +7,30 @@ type IconName = keyof typeof Ionicons.glyphMap;
 
 /**
  * How far the bar floats in from the left and right edges of the screen.
- * Matches `spacing.base`, which is the horizontal rhythm the cards on the
- * screens behind it already use, so the bar lines up with the content rather
- * than sitting at some width of its own.
+ *
+ * 28, NOT spacing.base (owner-reported twice, 2026-09-14: "the navbar still
+ * touches both edges" and "too much space between the icons"). Those are one
+ * complaint, not two.
+ *
+ * It WAS spacing.base, deliberately, so the pill lined up with the content
+ * gutter on the screens behind it. That reasoning was wrong for a floating
+ * control: matching the content's own margin is exactly what makes a bar read
+ * as part of the layout rather than as something sitting on top of it, so at
+ * 16 the pill looked full-width with rounded ends. A floating element has to
+ * be inset MORE than the content it floats over, or the eye has nothing to
+ * separate the two.
+ *
+ * It also fixes the icon spacing, because the two are the same measurement.
+ * React Navigation gives every tab `flex: 1`, so the gap between icons is just
+ * the bar's width divided by the number of tabs. Nothing can pull the icons
+ * together except making the bar narrower.
+ *
+ * 28 rather than spacing.xxl (32) is where the five-tab bars stop fitting:
+ * the organisation and admin bars carry five labels, and "CREDENTIALS" is the
+ * longest. At 32 it truncates; the label size below is reduced to buy back
+ * what this costs. See the note on tabBarLabelStyle.
  */
-const BAR_INSET = spacing.base;
+const BAR_INSET = spacing.xl + spacing.xs;
 
 /** Clearance between the bottom of the bar and the gesture bar or screen edge. */
 const BAR_LIFT = spacing.md;
@@ -83,12 +102,17 @@ export function useTabBarScreenOptions() {
     },
     tabBarLabelStyle: {
       fontFamily: fontFamily.semiBold,
-      // 9.5/0.2 rather than 10/0.5: the organisation bar carries five tabs,
-      // and at the wider tracking "DASHBOARD" and "APPLICANTS" were being
-      // truncated on narrow devices. Every bar shares the value so they stay
-      // visually identical.
-      fontSize: 9.5,
-      letterSpacing: 0.2,
+      // 9/0 rather than 9.5/0.2, which was itself down from 10/0.5. Each
+      // reduction has bought room for the same thing: five labels across a
+      // pill, the longest being "CREDENTIALS" on the admin bar at eleven
+      // characters. Widening BAR_INSET above narrows the bar by 24px, which
+      // costs roughly 5px per tab on a five-tab bar, and this returns it.
+      //
+      // Letter-spacing is now zero. On uppercase text at this size it was
+      // buying legibility worth less than the ~2px per label it cost, and a
+      // truncated label is worse than a slightly tighter one.
+      fontSize: 9,
+      letterSpacing: 0,
       textTransform: 'uppercase' as const,
       marginTop: 1,
     },

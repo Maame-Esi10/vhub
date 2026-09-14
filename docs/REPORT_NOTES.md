@@ -5253,3 +5253,80 @@ screens does the bar render over?", whose answer comes from the navigator's
 registration list, not from the screens' own source. **When a layout invariant
 depends on what a framework does implicitly, enumerate from the framework's
 configuration, never from the code that is supposed to comply with it.**
+
+## Confirmation moves from a link to a code, and the silent login is fixed (2026-09-14)
+
+**Two faults, one root.** After a successful registration and a successful
+confirmation through the emailed link, logging in did nothing at all — no
+error, no message, no movement.
+
+**Why login appeared to do nothing.** `signInWithPassword` SUCCEEDED. The
+failure was one layer further in: `useAuthGuard` then loads the profile, and
+for an account confirmed through the link there is no profile yet — `signUp`
+returns no session when confirmation is required, so the rows cannot be written
+at registration and are instead bootstrapped from `auth.users.user_metadata` on
+first login. When that bootstrap failed, `resolveProfile` returned a bare
+`{ status: 'error' }`, the handler deliberately did nothing with it, and the
+routing effect's response to a missing profile is — correctly — to stay put
+rather than guess a home route. The result: a valid session, no profile, the
+login screen still showing, and `signIn.error` null because signing in had
+genuinely worked. **Nothing in the app was capable of saying what had gone
+wrong, because the reason was discarded at the point of failure.**
+
+**The fix has three parts.**
+
+1. **The reason is kept.** `ProfileFetchOutcome`'s error variant now carries
+   `cause`, and every return site passes it. The app knew why it could not sign
+   somebody in and was throwing the answer away.
+2. **The two meanings of 'error' are separated.** A failure with no profile
+   already in the store is a *stuck fresh sign-in*: it now sets `authError`,
+   logs the cause, and signs out so the person can retry. A failure with a
+   profile already loaded is a *mid-session blip* and is still ignored, which
+   was always right — treating "couldn't fetch" as "profile incomplete" would
+   bounce an onboarded volunteer into the onboarding wizard mid-session.
+3. **`authStore.authError` is rendered by the login screen.** It deliberately
+   survives `reset()`, because `reset()` runs on the sign-out that the message
+   exists to explain; clearing it there would erase the explanation a moment
+   before the screen renders it.
+
+**Why the flow moved to a six-digit code.** The link route is: mail app →
+browser → landing page → back to V-HUB by hand → log in. Five steps across
+three apps, and V-HUB can observe none of them. When it broke, the person
+experienced a page that said "confirmed" followed by a login that did nothing.
+**A flow whose failures are invisible to the person in it cannot be reported**,
+and that — not the bug itself — is what made it worth replacing rather than
+patching.
+
+`verifyOtp` also removes the bootstrap gamble entirely, which is the deeper
+win. It returns a **real session** at the moment the code is accepted, so the
+profile rows are created right there, in a mutation, while somebody is looking
+at a screen that can report a failure. The link path can only create them much
+later, on a screen that has no idea it is happening.
+
+**`lib/profileRows.ts` is now the ONE implementation** of that insert, shared by
+`useSignUp`, `useConfirmSignUp` and the guard's bootstrap. Three copies of an
+insert whose column list is pinned by a GRANT is three places to forget the same
+thing. It throws rather than returning a status, because every caller needs the
+reason.
+
+**The link still works** and is now the fallback rather than the primary path.
+Confirming that way falls through to `useConfirmSignUp`'s `existing` branch.
+
+**What it costs:** the Supabase "Confirm signup" template must contain
+`{{ .Token }}`, exactly as the recovery template already does. Without that
+line the email arrives with no code in it.
+
+**`confirm-email` must never be added to `AUTH_ENTRY_SCREENS`**, and
+`hooks/__tests__/authEntryScreens.test.ts` asserts it. The guard bounces a
+signed-in user off those screens; since `verifyOtp` creates a session *before*
+the profile rows are written, adding it there would redirect the user into a tab
+group with no profile — recreating the dead end this work removed. The same
+applies to `reset-password`, for the same reason.
+
+**Generalisation for the write-up.** Two of this project's worst bugs now share
+a shape: the swallowed email failure and the swallowed profile failure. In both,
+a deliberate, defensible decision not to propagate an error (a mail outage must
+not fail a recorded decision; a network blip must not look like incomplete
+onboarding) was implemented by **discarding the error rather than routing it
+somewhere quieter**. The correct form of "do not fail loudly here" is "record it
+where it can still be read" — never "forget it".

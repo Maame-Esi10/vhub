@@ -3,6 +3,8 @@ import { useRouter, useSegments } from 'expo-router';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { createProfileRowsFromMetadata } from '@/lib/profileRows';
+import { humanError } from '@/lib/errorMessage';
 import { isAuthUserMetadata, type AuthUserMetadata } from '@/lib/auth-metadata';
 import { ROLE_GROUP, ROLE_GROUPS, ROLE_HOME } from '@/lib/roleRoutes';
 import { writeReturningUser } from '@/lib/launchState';
@@ -39,7 +41,14 @@ const PROFILE_REFRESH_EVENTS = new Set<AuthChangeEvent>(['SIGNED_IN', 'SIGNED_OU
 type ProfileFetchOutcome =
   | { status: 'found' | 'bootstrapped'; profile: Profile; volunteerProfile: VolunteerProfile | null }
   | { status: 'not_found' }
-  | { status: 'error' };
+  /**
+   * `cause` is the thing that was thrown or returned, kept so the failure can
+   * be explained. It used to be discarded: the app knew exactly why it could
+   * not sign somebody in and returned a bare status that threw the answer
+   * away, which is why a failed bootstrap was unexplainable to the user AND
+   * undiagnosable afterwards.
+   */
+  | { status: 'error'; cause: unknown };
 
 /**
  * Creates the profiles/volunteer_profiles/organisation_profiles rows from
@@ -52,49 +61,16 @@ async function bootstrapProfileFromMetadata(
   user: User,
   metadata: AuthUserMetadata
 ): Promise<ProfileFetchOutcome> {
-  const { data: insertedProfile, error: profileError } = await supabase
-    .from('profiles')
-    .insert({ id: user.id, role: metadata.role, full_name: metadata.full_name, email: user.email ?? null })
-    .select()
-    .single();
-
-  if (profileError || !insertedProfile) {
-    return { status: 'error' };
+  try {
+    const { profile, volunteerProfile } = await createProfileRowsFromMetadata(
+      user.id,
+      user.email ?? null,
+      metadata
+    );
+    return { status: 'bootstrapped', profile, volunteerProfile };
+  } catch (cause) {
+    return { status: 'error', cause };
   }
-
-  // AuthUserMetadata.role is SignupRole, so this is exhaustive: 'admin' can
-  // never arrive here, because nobody signs up as one.
-  if (metadata.role === 'organisation') {
-    const { error: organisationError } = await supabase.from('organisation_profiles').insert({
-      id: user.id,
-      org_name: metadata.full_name,
-      org_type: metadata.org_type ?? null,
-      description: metadata.description ?? null,
-      website: metadata.website ?? null,
-    });
-
-    if (organisationError) {
-      return { status: 'error' };
-    }
-
-    return { status: 'bootstrapped', profile: insertedProfile as Profile, volunteerProfile: null };
-  }
-
-  const { data: insertedVolunteerProfile, error: volunteerError } = await supabase
-    .from('volunteer_profiles')
-    .insert({ id: user.id })
-    .select()
-    .single();
-
-  if (volunteerError || !insertedVolunteerProfile) {
-    return { status: 'error' };
-  }
-
-  return {
-    status: 'bootstrapped',
-    profile: insertedProfile as Profile,
-    volunteerProfile: insertedVolunteerProfile as VolunteerProfile,
-  };
 }
 
 /**
@@ -139,7 +115,7 @@ async function resolveProfile(user: User): Promise<ProfileFetchOutcome> {
     .maybeSingle();
 
   if (profileError) {
-    return { status: 'error' };
+    return { status: 'error', cause: profileError };
   }
 
   if (!profile) {
@@ -165,7 +141,7 @@ async function resolveProfile(user: User): Promise<ProfileFetchOutcome> {
       .maybeSingle();
 
     if (organisationError) {
-      return { status: 'error' };
+      return { status: 'error', cause: organisationError };
     }
 
     if (!organisationProfile) {
@@ -194,7 +170,7 @@ async function resolveProfile(user: User): Promise<ProfileFetchOutcome> {
     .maybeSingle();
 
   if (volunteerError) {
-    return { status: 'error' };
+    return { status: 'error', cause: volunteerError };
   }
 
   if (!volunteerProfile) {
@@ -225,8 +201,17 @@ async function resolveProfile(user: User): Promise<ProfileFetchOutcome> {
 export function useAuthGuard() {
   const segments = useSegments();
   const router = useRouter();
-  const { user, profile, volunteerProfile, loading, setUser, setProfile, setVolunteerProfile, setLoading } =
-    useAuthStore();
+  const {
+    user,
+    profile,
+    volunteerProfile,
+    loading,
+    setUser,
+    setProfile,
+    setVolunteerProfile,
+    setLoading,
+    setAuthError,
+  } = useAuthStore();
   const initialized = useRef(false);
   // True while a profile fetch triggered by an auth-state change is
   // in-flight. Distinct from `loading` (which only covers the very first
@@ -264,6 +249,11 @@ export function useAuthGuard() {
           // guard's own !user branch then redirects to welcome.
           setProfile(null);
           setVolunteerProfile(null);
+          // SAY SO. This used to sign somebody out in silence, which from the
+          // login screen is indistinguishable from the button doing nothing.
+          setAuthError(
+            'Your account is missing its profile and we could not rebuild it. Please register again, or contact support if this keeps happening.'
+          );
           try {
             await supabase.auth.signOut();
           } catch {
@@ -272,13 +262,48 @@ export function useAuthGuard() {
             // fires. Swallow rather than let this reject loadProfileForUser
             // and leave profileLoading stuck true forever.
           }
+        } else if (outcome.status === 'error') {
+          /*
+            THE OUTCOME IS 'error', AND IT MEANS TWO DIFFERENT THINGS
+            (owner-reported, 2026-09-14).
+
+            (a) A FRESH SIGN-IN whose profile load or bootstrap failed. There
+                is no profile in the store, the routing effect below will
+                refuse to guess a home route, and the person is left holding a
+                valid session on the login screen with nothing said. This is
+                the reported bug: "Nothing happened. No error, no message."
+
+            (b) A MID-SESSION BLIP for somebody whose profile is already
+                loaded — a flaky network on a refetch. Here doing nothing is
+                exactly right, and was always deliberate: treating "couldn't
+                fetch" as "profile incomplete" would bounce an onboarded
+                volunteer back into the onboarding wizard mid-session.
+
+            The two are told apart by whether a profile is already in the
+            store. Only (a) is a dead end, so only (a) speaks and signs out —
+            leaving a session with no profile behind is what made the failure
+            unrecoverable without reinstalling.
+          */
+          const hadProfile = useAuthStore.getState().profile !== null;
+
+          // Always logged, both cases: this is the detail that makes a
+          // support report answerable, and console output is for developers.
+          console.warn('[auth] profile load failed:', outcome.cause);
+
+          if (!hadProfile) {
+            setAuthError(
+              humanError(
+                outcome.cause,
+                'We signed you in but could not load your profile. Check your connection and try again.'
+              )
+            );
+            try {
+              await supabase.auth.signOut();
+            } catch {
+              // Same reasoning as the not_found branch above.
+            }
+          }
         }
-        // 'error' (a transient fetch failure, e.g. a flaky network
-        // mid-session): deliberately leave the existing profile/
-        // volunteerProfile untouched rather than treating "couldn't fetch"
-        // as "profile incomplete" — otherwise a momentary network blip
-        // could bounce an already-onboarded volunteer back into the
-        // onboarding wizard mid-session.
       } catch {
         // resolveProfile itself is not expected to throw (every Supabase
         // call inside it is error-checked), but guard against it anyway so
