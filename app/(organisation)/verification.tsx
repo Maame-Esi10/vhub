@@ -40,13 +40,13 @@ const STATE_PRESENTATION: Record<
     tint: colors.textSecondary,
     label: 'Not verified',
     detail:
-      'You can prepare drafts, but an outreach cannot be published until V-HUB has verified your organisation.',
+      'You can prepare drafts, but an outreach cannot be published until VHub has verified your organisation.',
   },
   documents_submitted: {
     icon: 'clock-outline',
     tint: colors.warning,
     label: 'Waiting on review',
-    detail: 'Your submission is with V-HUB. You will be notified as soon as it is decided.',
+    detail: 'Your submission is with VHub. You will be notified as soon as it is decided.',
   },
   verified: {
     icon: 'shield-check',
@@ -64,13 +64,13 @@ const STATE_PRESENTATION: Record<
     icon: 'pause-octagon-outline',
     tint: colors.danger,
     label: 'Suspended',
-    detail: 'This organisation cannot publish outreaches at the moment. Contact V-HUB.',
+    detail: 'This organisation cannot publish outreaches at the moment. Contact VHub.',
   },
   banned: {
     icon: 'block-helper',
     tint: colors.danger,
     label: 'Removed',
-    detail: 'This organisation can no longer publish on V-HUB.',
+    detail: 'This organisation can no longer publish on VHub.',
   },
 };
 
@@ -186,7 +186,7 @@ export default function OrganisationVerification() {
         onSuccess: () => {
           setDocuments([]);
           setAttempted(false);
-          setToast('Submitted. V-HUB will review it and let you know.');
+          setToast('Submitted. VHub will review it and let you know.');
         },
       }
     );
@@ -241,9 +241,9 @@ export default function OrganisationVerification() {
 
         <View style={styles.explainCard}>
           <Text style={styles.explainText}>
-            V-HUB verifies organisations so volunteers know an outreach is real before they give up a
+            VHub verifies organisations so volunteers know an outreach is real before they give up a
             Saturday for it. Until yours is verified you can write and keep drafts, but you cannot
-            publish. Everything you send here is read by a V-HUB administrator and by nobody else.
+            publish. Everything you send here is read by a VHub administrator and by nobody else.
           </Text>
         </View>
 
@@ -338,7 +338,7 @@ export default function OrganisationVerification() {
             <Text style={styles.sectionHeading}>Documents</Text>
             <Text style={styles.sectionHint}>
               A photo or PDF of each registration certificate or letter. Make sure the text is legible
-              and the whole page is in frame. These are stored privately. Only a V-HUB administrator
+              and the whole page is in frame. These are stored privately. Only a VHub administrator
               can open them, and only through a link that expires.
             </Text>
 
@@ -404,7 +404,7 @@ export default function OrganisationVerification() {
                     ) : null}
                   </View>
                   <Text style={styles.consentAgree}>
-                    I understand this, and I agree to V-HUB storing these documents for verification.
+                    I understand this, and I agree to VHub storing these documents for verification.
                   </Text>
                 </Pressable>
               </View>

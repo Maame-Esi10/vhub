@@ -152,14 +152,14 @@ export default function ResetPassword() {
             >
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.textPrimary} />
             </Pressable>
-            <Text style={styles.wordmark}>V-HUB</Text>
+            <Text style={styles.wordmark}>VHub</Text>
             <View style={styles.backButton} />
           </View>
 
           <Text style={styles.title}>Check your email</Text>
           <Text style={styles.subtitle}>
             {email
-              ? `If ${email} has a V-HUB account, we have sent it a ${CODE_LENGTH}-digit code. Enter it below and choose a new password.`
+              ? `If ${email} has a VHub account, we have sent it a ${CODE_LENGTH}-digit code. Enter it below and choose a new password.`
               : `Enter the ${CODE_LENGTH}-digit code from your email and choose a new password.`}
           </Text>
 
@@ -344,7 +344,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
     fontSize: 20,
     color: colors.primary,
-    letterSpacing: 0.5,
+    // Zero, not 0.5: the half point was left over from the all-caps wordmark.
+    letterSpacing: 0,
   },
   title: {
     fontFamily: fontFamily.bold,

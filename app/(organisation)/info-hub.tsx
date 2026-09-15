@@ -41,9 +41,9 @@ export default function OrganisationInfoHub() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Info Hub" fallback="/(organisation)/profile" />
       <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
-        <Text style={styles.title}>How V-HUB works</Text>
+        <Text style={styles.title}>How VHub works</Text>
         <Text style={styles.intro}>
-          V-HUB ranks and scores the volunteers who apply to your outreaches. Here is exactly what
+          VHub ranks and scores the volunteers who apply to your outreaches. Here is exactly what
           those numbers mean, so you can weigh them properly against your own judgement.
         </Text>
 
@@ -96,7 +96,7 @@ export default function OrganisationInfoHub() {
 
           <InfoSubheading>Why two volunteers can word the same skill differently</InfoSubheading>
           <InfoBody>
-            V-HUB also checks whether differently-worded skills mean the same thing, so &quot;venipuncture&quot;
+            VHub also checks whether differently-worded skills mean the same thing, so &quot;venipuncture&quot;
             and &quot;blood draw&quot; both count, and a good candidate is not missed on vocabulary alone.
             If that check is ever unavailable, matching quietly falls back to exact skill overlap
             and keeps working; it never blocks an application.

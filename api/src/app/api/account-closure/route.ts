@@ -115,7 +115,7 @@ export async function POST(req: Request): Promise<Response> {
     */
     const consequences =
       profile.role === "organisation"
-        ? await stopOrganisation(admin, caller.userId, "The organisation closed its V-HUB account.")
+        ? await stopOrganisation(admin, caller.userId, "The organisation closed its VHub account.")
         : await stopVolunteer(admin, caller.userId);
 
     /*

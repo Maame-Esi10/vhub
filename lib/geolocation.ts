@@ -110,14 +110,14 @@ export async function requirePosition(): Promise<DevicePosition> {
     granted = status === Location.PermissionStatus.GRANTED;
   } catch {
     throw new LocationUnavailableError(
-      'V-HUB could not access location on this device.',
+      'VHub could not access location on this device.',
       false
     );
   }
 
   if (!granted) {
     throw new LocationUnavailableError(
-      'V-HUB needs location permission to mark where the venue is. You can enable it in Settings.',
+      'VHub needs location permission to mark where the venue is. You can enable it in Settings.',
       true
     );
   }

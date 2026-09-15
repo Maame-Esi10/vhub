@@ -41,11 +41,11 @@ export interface ConfirmDialogProps {
 }
 
 /**
- * V-HUB's in-app replacement for Alert.alert.
+ * VHub's in-app replacement for Alert.alert.
  *
  * The native alert renders as an Android/iOS system popup — square corners,
  * platform fonts, platform blue — which reads as "not part of this app"
- * against V-HUB's rounded, coral/navy Inter styling. This is a plain RN
+ * against VHub's rounded, coral/navy Inter styling. This is a plain RN
  * Modal styled from constants/theme so confirmations look like the rest of
  * the app on both platforms. Use it anywhere Alert.alert would otherwise
  * be reached for; nothing in the app should surface a system dialog.

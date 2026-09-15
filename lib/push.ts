@@ -40,7 +40,7 @@ let lastRegisteredToken: string | null = null;
 /**
  * Controls what happens to a push that lands while the app is FOREGROUNDED.
  * Without this, Android and iOS both suppress the banner entirely on the
- * assumption the UI is already showing the information -- which for V-HUB is
+ * assumption the UI is already showing the information -- which for VHub is
  * wrong: an acceptance can arrive while the volunteer is anywhere in the app.
  *
  * `shouldShowAlert` is deprecated in expo-notifications 57 and replaced by the
@@ -92,7 +92,7 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
     // the system files it under a default channel the app cannot style.
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-        name: 'V-HUB alerts',
+        name: 'VHub alerts',
         importance: Notifications.AndroidImportance.DEFAULT,
         lightColor: colors.primary,
       });

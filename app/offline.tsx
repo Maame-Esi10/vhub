@@ -19,7 +19,7 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
  * The offline screen from design-refs/Offline State.png.
  *
  * The design's own resource list ("Saved Prescriptions", "Emergency Contacts",
- * "Lab Reports") is generic health-app filler -- V-HUB has no such features.
+ * "Lab Reports") is generic health-app filler -- VHub has no such features.
  * The layout, iconography and copy structure are kept exactly; the rows are
  * remapped to the three things this app genuinely holds on device, which is
  * the allowlist in lib/offline.ts: cached outreaches, the user's own

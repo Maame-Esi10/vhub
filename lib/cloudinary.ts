@@ -74,7 +74,7 @@ export async function pickImages(
 ): Promise<MultiPickOutcome> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
-    throw new Error('V-HUB needs permission to open your photos.');
+    throw new Error('VHub needs permission to open your photos.');
   }
 
   const cropped = kind !== 'gallery';

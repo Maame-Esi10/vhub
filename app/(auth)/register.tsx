@@ -140,7 +140,7 @@ export default function Register() {
         // whose only moves were to resend the mail or go back to login -- so
         // finishing registration meant leaving the app, and everything that
         // happened out there was invisible to it. confirm-email.tsx takes the
-        // six-digit code instead and never leaves V-HUB.
+        // six-digit code instead and never leaves VHub.
         router.push({ pathname: '/(auth)/confirm-email', params: { email: email.trim() } });
         return;
       }
@@ -207,7 +207,7 @@ export default function Register() {
               <>
                 <Text style={styles.title}>Create your account</Text>
                 <Text style={styles.subtitle}>
-                  Enter your account details to get started with V-HUB and join our healthcare
+                  Enter your account details to get started with VHub and join our healthcare
                   mission.
                 </Text>
 
@@ -338,7 +338,7 @@ export default function Register() {
               </>
             ) : (
               <>
-                <Text style={styles.title}>Join V-HUB</Text>
+                <Text style={styles.title}>Join VHub</Text>
                 <Text style={styles.subtitle}>
                   Register your organization to start making an impact in the community.
                 </Text>

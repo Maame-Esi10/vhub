@@ -81,7 +81,7 @@ export function FlyerBackground({ uri, style, children }: FlyerBackgroundProps) 
           What is drawn: two soft off-edge discs and the app's own heart-pulse
           motif, all at low opacity in existing tokens. The motif is the mark
           the app already uses for an outreach, so an event with no flyer reads
-          as a V-HUB event rather than as a missing image. Nothing here is a new
+          as a VHub event rather than as a missing image. Nothing here is a new
           colour, and nothing is a placeholder icon of the "image not found"
           kind, which would tell an organisation something is wrong when
           nothing is.

@@ -583,7 +583,7 @@ export default function OutreachDetail() {
               */}
               {awaitingReview ? (
                 <Text style={[styles.gateBody, styles.gateBodySecond]}>
-                  Your document is with the V-HUB team. Applications to clinical roles open as soon
+                  Your document is with the VHub team. Applications to clinical roles open as soon
                   as it has been reviewed.
                 </Text>
               ) : null}

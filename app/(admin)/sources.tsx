@@ -94,7 +94,7 @@ export default function AdminSources() {
         <View style={styles.explainCard}>
           <MaterialCommunityIcons name="information-outline" size={20} color={colors.primary} />
           <Text style={styles.explainText}>
-            This is a record, not a feed. Nothing on this list is read by V-HUB, no listing is fetched
+            This is a record, not a feed. Nothing on this list is read by VHub, no listing is fetched
             from any of these sources, and no outreach is created from one. It exists so that the
             sources you would be willing to trust, and the reason each was accepted, are written
             down while you still remember them.

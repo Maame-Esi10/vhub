@@ -2,7 +2,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { env } from "./env";
 
 /**
- * SMTP transport for every email V-HUB sends itself.
+ * SMTP transport for every email VHub sends itself.
  *
  * WHY THIS EXISTS AT ALL, AND WHY IT IS NOT RESEND ANY MORE (2026-09-01).
  *
@@ -33,7 +33,7 @@ import { env } from "./env";
  * the authenticated address, unless the other address is a verified "Send mail
  * as" alias -- and verifying an alias means proving control of a domain, which
  * is the problem we are working around. Only the DISPLAY NAME is ours to set,
- * which is why `env.mailFrom` is built as `"V-HUB" <the gmail address>`.
+ * which is why `env.mailFrom` is built as `"VHub" <the gmail address>`.
  */
 
 /**

@@ -85,7 +85,7 @@ export function SplashView({ showLoading = true, variant = 'full' }: SplashViewP
           minimumFontScale={0.6}
           allowFontScaling={false}
         >
-          V-HUB
+          VHub
         </Text>
         <Text style={styles.title}>Volunteer Medical Outreach</Text>
         <Text style={styles.subtext}>
@@ -121,6 +121,13 @@ const styles = StyleSheet.create({
     // a printing error rather than as a palette. `colors.primary` stays the
     // interface accent everywhere else; this one colour answers to the artwork.
     color: colors.brandMark,
+    // NEGATIVE, because this is now mixed case at display size (2026-09-15).
+    // The old "V-HUB" carried positive tracking, which is what an all-caps
+    // logotype wants: capitals are drawn to sit apart. "VHub" has two
+    // lowercase letters, and lowercase is drawn to sit close -- open it up and
+    // the word visibly comes apart into "V H u b". A touch of negative
+    // tracking binds the four glyphs into one mark.
+    letterSpacing: -0.5,
     marginTop: spacing.base,
     marginBottom: spacing.base,
     flexShrink: 1,

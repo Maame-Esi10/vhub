@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
- * Serves the V-HUB mark at a stable public URL, for EMAIL CLIENTS.
+ * Serves the VHub mark at a stable public URL, for EMAIL CLIENTS.
  *
  * WHY THIS IS A ROUTE AND NOT A FILE IN `api/public/`.
  *

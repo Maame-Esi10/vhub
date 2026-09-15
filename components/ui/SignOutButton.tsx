@@ -13,7 +13,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 /**
  * Shared sign-out control for the volunteer and organisation profile
  * screens. Confirms via the in-app ConfirmDialog (never a native Alert —
- * a system popup doesn't match V-HUB's styling), then clears the Supabase
+ * a system popup doesn't match VHub's styling), then clears the Supabase
  * session + authStore — useAuthGuard picks up the cleared `user` and
  * redirects to (auth)/welcome.
  */
@@ -35,7 +35,7 @@ export function SignOutButton() {
         onPress={() => setConfirming(true)}
         disabled={signingOut}
         accessibilityRole="button"
-        accessibilityLabel="Sign out of V-HUB"
+        accessibilityLabel="Sign out of VHub"
         style={({ pressed }) => [styles.button, pressed && styles.pressed, signingOut && styles.disabled]}
       >
         {signingOut ? (
@@ -50,7 +50,7 @@ export function SignOutButton() {
         visible={confirming}
         icon="logout"
         tone="destructive"
-        title="Sign out of V-HUB?"
+        title="Sign out of VHub?"
         message="You'll need to sign in again to continue."
         confirmLabel="Sign Out"
         cancelLabel="Stay Signed In"

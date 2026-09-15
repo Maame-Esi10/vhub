@@ -253,7 +253,7 @@ export default function OrganisationCheckinQr() {
         icon="map-marker-radius-outline"
         title="Use this spot as the venue?"
         message={
-          `V-HUB will read this phone's location once and save it as the venue for "${outreach.title}". ` +
+          `VHub will read this phone's location once and save it as the venue for "${outreach.title}". ` +
           'Volunteers who scan nearby are then confirmed as on site. Only do this while you are actually at the venue, on the day of the event. A location saved on any other day is ignored.'
         }
         confirmLabel="Yes, I'm at the venue"

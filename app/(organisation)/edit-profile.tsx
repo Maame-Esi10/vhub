@@ -417,7 +417,7 @@ export default function EditOrganisationProfile() {
               <Text style={styles.verifiedText}>
                 {org?.verified
                   ? 'Your organisation is verified.'
-                  : 'Verification is reviewed by the V-HUB team and cannot be self-set.'}
+                  : 'Verification is reviewed by the VHub team and cannot be self-set.'}
               </Text>
             </View>
 

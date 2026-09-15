@@ -58,7 +58,7 @@ export default function Policy() {
           <View style={styles.highlight}>
             <MaterialCommunityIcons name="map-marker-off-outline" size={22} color={colors.primary} />
             <Text style={styles.highlightText}>
-              V-HUB reads your location once, at the moment you scan to check in, only to compare it
+              VHub reads your location once, at the moment you scan to check in, only to compare it
               with where the event is. The coordinates are never stored, and there is no record of
               where you have been.
             </Text>

@@ -511,7 +511,7 @@ export default function Welcome() {
       >
         <View style={styles.brand}>
           <Image source={LOGO} style={{ width: logoSize, height: logoSize }} resizeMode="contain" />
-          <Text style={styles.wordmark}>V-HUB</Text>
+          <Text style={styles.wordmark}>VHub</Text>
         </View>
         {resumingOnboarding ? null : (
           <Pressable
@@ -782,9 +782,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   wordmark: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 15,
-    letterSpacing: 2,
+    fontFamily: fontFamily.bold,
+    fontSize: 16,
+    // Was 15/semiBold with 2 points of tracking, which is an all-caps
+    // treatment. Mixed case at this size wants none of it; the weight and one
+    // extra point of size replace the presence the tracking was providing.
+    letterSpacing: 0,
     color: colors.white,
   },
   topBarAction: {

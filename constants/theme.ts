@@ -1,5 +1,5 @@
 /**
- * V-HUB design tokens.
+ * VHub design tokens.
  *
  * Single source of truth for color, spacing, radius, and typography values
  * used across every screen. Extracted from the Figma exports in
@@ -16,7 +16,7 @@ export const colors = {
 
   // The RED OF THE LOGO ITSELF, sampled from assets/logo.png (the mean of its
   // opaque pixels). It is NOT the coral above, and the difference matters in
-  // exactly one place: the splash, where the "V-HUB" wordmark sits two
+  // exactly one place: the splash, where the "VHub" wordmark sits two
   // millimetres under the mark. Drawn in coral the two reds were near enough
   // to read as a printing error rather than as a palette. Use this only for
   // type that has to belong to the artwork; `primary` remains the interface

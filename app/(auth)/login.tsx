@@ -122,7 +122,7 @@ export default function Login() {
                 resizeMode="contain"
               />
             </View>
-            <Text style={styles.wordmark}>V-HUB</Text>
+            <Text style={styles.wordmark}>VHub</Text>
             <Text style={styles.tagline}>Virtual Health Unified Bridge</Text>
           </View>
 
@@ -215,7 +215,7 @@ export default function Login() {
           </View>
 
           <View style={styles.signupRow}>
-            <Text style={styles.signupText}>New to V-HUB? </Text>
+            <Text style={styles.signupText}>New to VHub? </Text>
             <Pressable
               onPress={goToWelcome}
               hitSlop={8}
@@ -261,6 +261,9 @@ const styles = StyleSheet.create({
   wordmark: {
     fontFamily: fontFamily.bold,
     fontSize: 22,
+    // Slightly tight, so the capital V and the lowercase u-b read as one
+    // word rather than a letter followed by a word.
+    letterSpacing: -0.2,
     color: colors.textPrimary,
   },
   tagline: {

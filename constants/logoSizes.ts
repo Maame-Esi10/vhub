@@ -39,12 +39,21 @@ export function getLogoSize(variant: LogoVariant, screenWidth: number): number {
   return Math.min(max, Math.max(min, screenWidth * WIDTH_RATIO[variant]));
 }
 
-// Responsive size for the "V-HUB" splash wordmark, which sits under the `hero`
+// Responsive size for the "VHub" splash wordmark, which sits under the `hero`
 // logo mark on the splash screen. Same clamp pattern as getLogoSize, sized in
 // px so it stays legible on the smallest supported phone widths (~320-360dp)
 // without relying solely on adjustsFontSizeToFit as a safety net.
-const WORDMARK_WIDTH_RATIO = 0.11;
-const WORDMARK_CLAMP: [min: number, max: number] = [26, 40];
+//
+// SIZED UP WHEN THE NAME CHANGED (2026-09-15). These numbers were set for
+// "V-HUB": five glyphs, every one a capital, plus a hyphen, plus two points of
+// tracking. "VHub" is four glyphs, two of them lowercase, with the tracking
+// gone -- roughly a quarter narrower at the same point size. Left alone, the
+// wordmark stopped filling the space under the mark and the lockup read as
+// under-set rather than as a smaller word. The ratio and clamp are raised to
+// restore the optical width the composition was drawn around, NOT to make the
+// text bigger for its own sake.
+const WORDMARK_WIDTH_RATIO = 0.128;
+const WORDMARK_CLAMP: [min: number, max: number] = [30, 46];
 
 /** Font size (px) for the splash wordmark at the current screen width. */
 export function getSplashWordmarkFontSize(screenWidth: number): number {

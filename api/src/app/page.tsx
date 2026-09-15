@@ -42,7 +42,7 @@ import logo from "@/assets/logo.png";
  * and no Supabase client of its own.
  */
 
-/** Palette lifted from constants/theme.ts so the page is recognisably V-HUB. */
+/** Palette lifted from constants/theme.ts so the page is recognisably VHub. */
 const CORAL = "#FF6B6B";
 const TEXT = "#111827";
 const MUTED = "#6B7280";
@@ -138,7 +138,7 @@ export default function ConfirmationPage() {
         */}
         <img
           src={logo.src}
-          alt="V-HUB"
+          alt="VHub"
           width={64}
           height={64}
           style={{ display: "block", margin: "0 auto 24px" }}
@@ -155,11 +155,11 @@ export default function ConfirmationPage() {
               Your email is confirmed
             </h1>
             <p style={{ color: MUTED, fontSize: 15, lineHeight: 1.6, margin: "0 0 24px" }}>
-              Thank you. You can close this page, open the V-HUB app and log in with your
+              Thank you. You can close this page, open the VHub app and log in with your
               email and password.
             </p>
             <p style={{ color: MUTED, fontSize: 13, lineHeight: 1.6, margin: 0 }}>
-              V-HUB connects health volunteers with medical outreach organisations across
+              VHub connects health volunteers with medical outreach organisations across
               Ghana.
             </p>
           </>
@@ -173,7 +173,7 @@ export default function ConfirmationPage() {
             </p>
             <p style={{ color: MUTED, fontSize: 15, lineHeight: 1.6, margin: 0 }}>
               Confirmation links can only be used once and expire after a while. Open the
-              V-HUB app and try registering again with the same email to get a fresh one.
+              VHub app and try registering again with the same email to get a fresh one.
             </p>
             <div
               style={{

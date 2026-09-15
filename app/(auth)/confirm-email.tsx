@@ -30,7 +30,7 @@ const CODE_LENGTH = 6;
  * person through the mail app, a browser, a landing page and back again by
  * hand. The owner did exactly that, saw the landing page confirm successfully,
  * returned, tried to log in, and got nothing at all - because everything
- * between leaving V-HUB and coming back is invisible to V-HUB. A flow whose
+ * between leaving VHub and coming back is invisible to VHub. A flow whose
  * failures cannot be observed by the person in it is a flow that cannot be
  * reported, and that is what made the code worth building rather than
  * patching the link.
@@ -133,7 +133,7 @@ export default function ConfirmEmail() {
               ? `We sent a ${CODE_LENGTH}-digit code to ${email}. Enter it below to finish setting up your account.`
               : `Enter the ${CODE_LENGTH}-digit code from your email to finish setting up your account.`}
           </Text>
-          {/* The confirmation email is the most spam-prone message V-HUB
+          {/* The confirmation email is the most spam-prone message VHub
               sends: it goes to somebody who has never heard from the sender.
               Same wording as the reset-password screen, deliberately. */}
           <Text style={styles.hint}>Nothing arrived? Check your spam folder first.</Text>

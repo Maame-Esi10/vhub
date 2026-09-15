@@ -70,7 +70,7 @@ export default function OnboardingSkills() {
 
         <Text style={styles.heading}>My Expertise</Text>
         <Text style={styles.subtext}>
-          Select every healthcare or support skill you can offer. This helps V-HUB match you with
+          Select every healthcare or support skill you can offer. This helps VHub match you with
           missions where you can make the biggest impact.
         </Text>
 

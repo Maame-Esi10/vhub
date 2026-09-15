@@ -33,7 +33,7 @@ import { humanError } from '@/lib/errorMessage';
  */
 
 /**
- * How long a "that isn't a V-HUB code" hint stays up before the scanner will
+ * How long a "that isn't a VHub code" hint stays up before the scanner will
  * complain again. A camera sees every code in view, so without this a poster's
  * URL sitting next to the QR would flash the same warning many times a second.
  */
@@ -113,7 +113,7 @@ export default function VolunteerScanCheckin() {
           <MaterialCommunityIcons name="camera-off-outline" size={40} color={colors.textSecondary} />
           <Text style={styles.messageTitle}>Camera access needed</Text>
           <Text style={styles.messageBody}>
-            V-HUB uses the camera only to read the check-in code your organiser is showing at the
+            VHub uses the camera only to read the check-in code your organiser is showing at the
             venue.
           </Text>
           <Button
@@ -125,7 +125,7 @@ export default function VolunteerScanCheckin() {
           />
           {!permission.canAskAgain ? (
             <Text style={styles.footnote}>
-              Camera access was turned off for V-HUB. Enable it in your phone&apos;s Settings, then
+              Camera access was turned off for VHub. Enable it in your phone&apos;s Settings, then
               come back.
             </Text>
           ) : null}
@@ -198,11 +198,11 @@ export default function VolunteerScanCheckin() {
       </Text>
 
       {rejectHint ? (
-        <Text style={styles.hint}>That isn&apos;t a V-HUB check-in code. Keep the camera steady.</Text>
+        <Text style={styles.hint}>That isn&apos;t a VHub check-in code. Keep the camera steady.</Text>
       ) : null}
 
       <Text style={styles.footnote}>
-        V-HUB checks your location once, at the moment you scan, to confirm you are at the event. It
+        VHub checks your location once, at the moment you scan, to confirm you are at the event. It
         is never stored and you are never tracked. If location is off or unavailable, you are
         still checked in.
       </Text>

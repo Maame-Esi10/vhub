@@ -147,7 +147,7 @@ export async function POST(req: Request): Promise<Response> {
               : "Your account has been suspended",
         body:
           body.action === "reinstate"
-            ? "You can use V-HUB normally again. Anything cancelled while you were suspended stays cancelled."
+            ? "You can use VHub normally again. Anything cancelled while you were suspended stays cancelled."
             : body.reason,
         data: { kind: "moderation", state: nextState },
         tokens: (tokens ?? []).map((t) => t.expo_push_token as string),

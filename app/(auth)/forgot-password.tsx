@@ -106,7 +106,7 @@ export default function ForgotPassword() {
             >
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.textPrimary} />
             </Pressable>
-            <Text style={styles.wordmark}>V-HUB</Text>
+            <Text style={styles.wordmark}>VHub</Text>
             {/* Balances the back button so the wordmark sits centred. */}
             <View style={styles.backButton} />
           </View>
@@ -202,7 +202,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
     fontSize: 20,
     color: colors.primary,
-    letterSpacing: 0.5,
+    // Zero, not 0.5: the half point was left over from the all-caps wordmark.
+    letterSpacing: 0,
   },
   illustration: {
     height: 200,

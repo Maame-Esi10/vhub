@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "V-HUB",
+    "name": "VHub",
     "slug": "vhub",
     "scheme": "vhub",
     "version": "1.0.0",
@@ -48,20 +48,20 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "V-HUB needs access to your photos so you can set a profile picture and add a flyer to an outreach.",
-          "cameraPermission": "V-HUB needs camera access so you can photograph a credential document for verification."
+          "photosPermission": "VHub needs access to your photos so you can set a profile picture and add a flyer to an outreach.",
+          "cameraPermission": "VHub needs camera access so you can photograph a credential document for verification."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "V-HUB needs camera access so you can scan the check-in code at an outreach."
+          "cameraPermission": "VHub needs camera access so you can scan the check-in code at an outreach."
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "V-HUB checks your location once, only when you scan a check-in code, to confirm you are at the event. Your location is never stored or tracked."
+          "locationAlwaysAndWhenInUsePermission": "VHub checks your location once, only when you scan a check-in code, to confirm you are at the event. Your location is never stored or tracked."
         }
       ]
     ],

@@ -58,7 +58,7 @@ export default function OrganisationSettings() {
         </View>
 
         {/*
-          Deliberately NOT here: "Edit Profile" and "How V-HUB works". Both
+          Deliberately NOT here: "Edit Profile" and "How VHub works". Both
           live on the Profile tab. Settings holds app and account state only —
           duplicating them in two places made it unclear which was canonical.
         */}
@@ -104,7 +104,7 @@ export default function OrganisationSettings() {
         <SettingsRow
           icon="shield-lock-outline"
           label="Privacy Policy"
-          value="What V-HUB knows, and what it never keeps"
+          value="What VHub knows, and what it never keeps"
           onPress={() => router.push('/policy')}
         />
         <SettingsRow

@@ -9,8 +9,8 @@ import type { Metadata, Viewport } from "next";
  */
 
 export const metadata: Metadata = {
-  title: "V-HUB",
-  description: "V-HUB - connecting health volunteers with medical outreach organisations across Ghana.",
+  title: "VHub",
+  description: "VHub - connecting health volunteers with medical outreach organisations across Ghana.",
   // The page exists to be landed on from an email link, never to be found in a
   // search result, and it briefly carries auth tokens in its URL fragment.
   robots: { index: false, follow: false },

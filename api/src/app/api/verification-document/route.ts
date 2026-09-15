@@ -87,7 +87,7 @@ export async function POST(req: Request): Promise<Response> {
     }
     if (volunteer.verification_status === "verified") {
       throw Errors.badRequest(
-        "Your identity is already verified, so this document cannot be changed or removed. Contact V-HUB if it needs to be updated."
+        "Your identity is already verified, so this document cannot be changed or removed. Contact VHub if it needs to be updated."
       );
     }
 

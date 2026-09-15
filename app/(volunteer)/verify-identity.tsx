@@ -72,7 +72,7 @@ const STATUS_PRESENTATION = {
     fg: colors.warning,
     bg: 'rgba(245, 158, 11, 0.12)',
     label: 'In review',
-    detail: 'Your documents are with the V-HUB team. We will let you know the outcome.',
+    detail: 'Your documents are with the VHub team. We will let you know the outcome.',
   },
   unverified: {
     icon: 'shield-alert-outline' as const,
@@ -156,7 +156,7 @@ export default function VolunteerVerifyIdentity() {
 
   function handleShare() {
     Share.share({
-      message: 'I just joined V-HUB to volunteer at medical outreaches across Ghana. Join me!',
+      message: 'I just joined VHub to volunteer at medical outreaches across Ghana. Join me!',
     }).catch(() => {
       // no-op: share sheet dismissal/failure isn't actionable here
     });
@@ -260,7 +260,7 @@ export default function VolunteerVerifyIdentity() {
           <>
             <Text style={styles.body}>
               Upload your licence, degree certificate or council registration as a PDF or photo.
-              A person on the V-HUB team reviews it, because Ghana has no public licensing-registry API,
+              A person on the VHub team reviews it, because Ghana has no public licensing-registry API,
               so a self-entered licence number would prove nothing.
             </Text>
 
@@ -362,7 +362,7 @@ export default function VolunteerVerifyIdentity() {
                     ) : null}
                   </View>
                   <Text style={styles.consentAgree}>
-                    I understand this, and I agree to V-HUB storing my document for verification.
+                    I understand this, and I agree to VHub storing my document for verification.
                   </Text>
                 </Pressable>
 
@@ -504,7 +504,7 @@ export default function VolunteerVerifyIdentity() {
                 onPress={handleShare}
                 style={({ pressed }) => [styles.shareButton, pressed && styles.documentPressed]}
                 accessibilityRole="button"
-                accessibilityLabel="Share V-HUB"
+                accessibilityLabel="Share VHub"
               >
                 <MaterialCommunityIcons
                   name="share-variant-outline"
@@ -522,7 +522,7 @@ export default function VolunteerVerifyIdentity() {
         icon="file-remove-outline"
         tone="destructive"
         title="Remove this document?"
-        message="Your verification goes back to Not verified and the file is deleted, so nobody at V-HUB can read it. You can upload a different one whenever you like."
+        message="Your verification goes back to Not verified and the file is deleted, so nobody at VHub can read it. You can upload a different one whenever you like."
         confirmLabel="Remove document"
         cancelLabel="Keep it"
         busy={deleteCredential.isPending}
@@ -606,7 +606,7 @@ function DocumentPreview({
               {loadError
                 ? 'Tap to try again.'
                 : isLoadingUrl
-                  ? 'It is stored privately, so V-HUB is unlocking it for you.'
+                  ? 'It is stored privately, so VHub is unlocking it for you.'
                   : 'One moment.'}
             </Text>
           </View>
@@ -655,7 +655,7 @@ function DocumentPreview({
         </View>
       ) : (
         <Text style={styles.documentLockedNote}>
-          Your document is locked now that you are verified. Contact V-HUB if it needs updating.
+          Your document is locked now that you are verified. Contact VHub if it needs updating.
         </Text>
       )}
     </View>

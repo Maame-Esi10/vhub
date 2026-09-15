@@ -118,7 +118,7 @@ export default function VolunteerFeedback() {
           setDisputing(null);
           setStatement('');
           setAttempted(false);
-          setDisputeToast('Sent. V-HUB will look at it and tell you and the organiser the outcome.');
+          setDisputeToast('Sent. VHub will look at it and tell you and the organiser the outcome.');
         },
       }
     );
@@ -248,8 +248,8 @@ export default function VolunteerFeedback() {
         }
         message={
           disputing?.type === 'attendance'
-            ? `Tell V-HUB what happened at ${disputing.title}. Anything that helps: whether you scanned the code, who you worked with, when you arrived.`
-            : `Tell V-HUB why the review of ${disputing?.title ?? 'this event'} is not fair. Both you and the organiser will be told the outcome and the reason.`
+            ? `Tell VHub what happened at ${disputing.title}. Anything that helps: whether you scanned the code, who you worked with, when you arrived.`
+            : `Tell VHub why the review of ${disputing?.title ?? 'this event'} is not fair. Both you and the organiser will be told the outcome and the reason.`
         }
         confirmLabel="Send it"
         cancelLabel="Not now"
@@ -270,7 +270,7 @@ export default function VolunteerFeedback() {
           multiline
           error={
             attempted && statement.trim().length < 10
-              ? 'Give V-HUB something to go on, a sentence or two at least.'
+              ? 'Give VHub something to go on, a sentence or two at least.'
               : undefined
           }
         />
@@ -419,7 +419,7 @@ function ReviewCard({
           />
           <Text style={styles.disputeStateText}>
             {dispute.status === 'open'
-              ? 'You have disputed this. V-HUB is looking at it.'
+              ? 'You have disputed this. VHub is looking at it.'
               : dispute.status === 'upheld'
                 ? `Upheld. ${dispute.resolution ?? ''}`
                 : `Not upheld. ${dispute.resolution ?? ''}`}

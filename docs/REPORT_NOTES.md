@@ -5443,3 +5443,44 @@ running to renew it, and the failure then surfaces somewhere unrelated to
 authentication. It is also why the pending-confirmation screen only updated
 after a full close and reopen: nothing ran when the app returned to the front,
 so a cold start was the only thing that re-read the session.
+
+## A recorded fact is not a recorded consequence (2026-09-14/15)
+
+**Two of this project's worst bugs have the same shape, and it is not
+carelessness.** In both, the information needed to prevent the bug was already
+written down, in the right place, by someone who understood it. What was
+missing was the second step: asking what the recorded fact *costs*.
+
+**The login dead end.** `AUTH_ENTRY_SCREENS`' own docstring said: *"A volunteer
+with incomplete onboarding never reaches this check at all - the
+onboardingIncomplete branch below returns first."* Entirely accurate. Nobody
+asked the follow-up: *then what moves such a volunteer off the login screen?*
+Nothing did, and every newly registered volunteer signed in to no visible
+result at all.
+
+**The tab bar clearance.** The rule "every tab screen must pad its scroll
+content" was in CLAUDE.md and was followed, on the fourteen screens the author
+understood "tab screen" to mean. The unasked question was *which screens does
+the bar actually render over?* The answer was forty-three, and it came from the
+navigator's registration list rather than from the screens themselves.
+
+**Why an audit does not catch this class.** Both were verified by looking for
+the thing that was already known: a grep for `tabBarClearance` returns the
+screens that already call it, and re-reading the docstring confirms the
+docstring. **A check that starts from what you believe can only ever confirm
+it.** The tab bar audit reported "14 screens, 14 padded, correct" and the
+arithmetic was right.
+
+**What actually works, and it is the same move both times:** enumerate from the
+authority rather than from the code that is supposed to comply with it - the
+navigator's screen list, the AST rather than a regex over source, the database
+rather than a plausible story about the database. Then assert it mechanically,
+so the question is re-asked on every run rather than once by whoever happened
+to be reading.
+
+**The general form for the write-up.** Documentation records what is true.
+Tests record what must *stay* true. A fact written in a comment has no
+mechanism to notice when something else changes around it - which is exactly
+when the consequence bites. Three of this project's standing guards
+(`tabBarClearance.test.ts`, `authEntryScreens.test.ts`, `userFacingText.test.ts`)
+exist because a correct comment was not enough.

@@ -478,7 +478,7 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
             {closureDetailOpen ? (
               <>
                 <Text style={styles.dangerBody}>
-                  This removes you from V-HUB straight away. Your name, contact details, photo and
+                  This removes you from VHub straight away. Your name, contact details, photo and
                   everything you have written about yourself are cleared, any document you uploaded
                   is destroyed, and you will not be able to sign in again.
                 </Text>
@@ -512,7 +512,7 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
         icon="alert-circle-outline"
         tone="destructive"
         title="Close your account?"
-        message="This cannot be undone, by you or by anybody at V-HUB. Type CLOSE to confirm."
+        message="This cannot be undone, by you or by anybody at VHub. Type CLOSE to confirm."
         confirmLabel="Close my account"
         cancelLabel="Keep my account"
         busy={closeAccount.isPending}

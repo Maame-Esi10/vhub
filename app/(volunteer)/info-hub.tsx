@@ -24,7 +24,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 /**
- * Info Hub — the plain-language explanation of the two numbers V-HUB shows
+ * Info Hub — the plain-language explanation of the two numbers VHub shows
  * volunteers: their match score on each outreach, and their V-Score.
  *
  * Every figure here is read from the same constants the engine actually uses
@@ -46,7 +46,7 @@ export default function InfoHub() {
       */}
       <ScreenHeader title="Info Hub" fallback="/(volunteer)/profile" />
       <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
-        <Text style={styles.title}>How V-HUB works</Text>
+        <Text style={styles.title}>How VHub works</Text>
         <Text style={styles.intro}>
           Two numbers shape what you see and who you get matched with. Neither is a judgement of you
           as a person. Here is exactly what each one measures.
@@ -98,7 +98,7 @@ export default function InfoHub() {
             <Text style={styles.calloutText}>
               Skills are also compared for meaning, not just spelling. If you wrote “blood draw” and
               an event asks for “venipuncture”, that still counts as a match. When that comparison
-              isn&apos;t available, V-HUB falls back to exact wording, so your feed is always ranked,
+              isn&apos;t available, VHub falls back to exact wording, so your feed is always ranked,
               never blank.
             </Text>
           </View>
@@ -183,7 +183,7 @@ export default function InfoHub() {
             other volunteer can: your name, profession, skills, region and V-Score.
           </Text>
           <Text style={styles.body}>
-            Scores are calculated on V-HUB&apos;s servers, never on your phone, and neither you nor an
+            Scores are calculated on VHub&apos;s servers, never on your phone, and neither you nor an
             organisation can edit a V-Score directly.
           </Text>
         </Section>

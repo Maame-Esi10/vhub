@@ -17,8 +17,8 @@ export interface ConfirmSignUpParams {
  * ---------------------------------------------------------------------------
  * WHY THE CODE REPLACED THE LINK AS THE PRIMARY PATH (owner, 2026-09-14).
  *
- * The link route sends a person OUT of V-HUB: mail app -> browser -> landing
- * page -> back to V-HUB by hand -> log in. Five steps across three apps, and
+ * The link route sends a person OUT of VHub: mail app -> browser -> landing
+ * page -> back to VHub by hand -> log in. Five steps across three apps, and
  * the app can see none of them. When it broke, what the owner experienced was
  * a confirmation page that said it had worked, followed by a login that did
  * nothing -- because the failure happened in a part of the journey that has no

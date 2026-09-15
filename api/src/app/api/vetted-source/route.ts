@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  *
  * It goes through an endpoint rather than a client insert for one reason: every
  * add and every removal writes an audit row. A whitelist is an editorial
- * decision about what V-HUB would be willing to republish, and the record of
+ * decision about what VHub would be willing to republish, and the record of
  * who decided and why is the more valuable half of it.
  */
 

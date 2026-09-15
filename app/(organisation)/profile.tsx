@@ -95,11 +95,11 @@ export default function OrganisationProfile() {
         style={({ pressed }) => [styles.rowCard, pressed && styles.rowCardPressed]}
         onPress={() => router.push('/(organisation)/info-hub')}
         accessibilityRole="button"
-        accessibilityLabel="How V-HUB works"
+        accessibilityLabel="How VHub works"
       >
         <MaterialCommunityIcons name="help-circle-outline" size={22} color={colors.primary} />
         <View style={styles.rowText}>
-          <Text style={styles.rowTitle}>How V-HUB works</Text>
+          <Text style={styles.rowTitle}>How VHub works</Text>
           <Text style={styles.rowBody}>
             Matching, applications, V-Score and post-event reviews explained.
           </Text>

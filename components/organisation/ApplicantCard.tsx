@@ -184,7 +184,7 @@ export function ApplicantCard({
           <Text style={styles.credentialText}>
             {volunteer?.verification_status === 'verified'
               ? 'View their credential'
-              : 'View their credential (not yet verified by V-HUB)'}
+              : 'View their credential (not yet verified by VHub)'}
           </Text>
           <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textSecondary} />
         </Pressable>

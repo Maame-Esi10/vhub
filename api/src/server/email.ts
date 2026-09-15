@@ -1,7 +1,7 @@
 import { sendMail, sendMailBatch, type MailMessage } from "./mailer";
 
 /**
- * The transactional emails V-HUB sends about an application.
+ * The transactional emails VHub sends about an application.
  *
  * WAS server/resend.ts UNTIL 2026-09-01. The wording of every message below is
  * unchanged; only the transport underneath it moved, from Resend's API to the
@@ -35,13 +35,13 @@ export interface ApplicationStatusEmailParams {
 function subjectFor(kind: ApplicationStatusEmailKind, outreachTitle: string): string {
   switch (kind) {
     case "accepted":
-      return `You're confirmed for ${outreachTitle} - V-HUB`;
+      return `You're confirmed for ${outreachTitle} - VHub`;
     case "rejected":
-      return `Update on your application to ${outreachTitle} - V-HUB`;
+      return `Update on your application to ${outreachTitle} - VHub`;
     case "waitlisted":
-      return `You're on the waitlist for ${outreachTitle} - V-HUB`;
+      return `You're on the waitlist for ${outreachTitle} - VHub`;
     case "cancelled":
-      return `${outreachTitle} has been cancelled - V-HUB`;
+      return `${outreachTitle} has been cancelled - VHub`;
   }
 }
 
@@ -57,15 +57,15 @@ function bodyFor(params: ApplicationStatusEmailParams): string {
         `Please make sure you're available and arrive a little early on the day. If you can no longer make it, ` +
         `withdraw from the app as early as possible so another volunteer can take your place.\n\n` +
         `Thank you for supporting health outreach in Ghana.\n\n` +
-        `-- The V-HUB Team`
+        `-- The VHub Team`
       );
     case "rejected":
       return (
         `Hi ${params.volunteerName},\n\n` +
         `Thank you for applying to volunteer at "${params.outreachTitle}"${where} on ${when}. ` +
         `The organising team has decided not to move forward with your application this time.\n\n` +
-        `This isn't a reflection of your standing on V-HUB -- please keep applying to outreaches that match your skills.\n\n` +
-        `-- The V-HUB Team`
+        `This isn't a reflection of your standing on VHub -- please keep applying to outreaches that match your skills.\n\n` +
+        `-- The VHub Team`
       );
     case "waitlisted":
       return (
@@ -73,16 +73,16 @@ function bodyFor(params: ApplicationStatusEmailParams): string {
         `Your application to volunteer at "${params.outreachTitle}"${where} on ${when} has been placed on the WAITLIST.\n\n` +
         `If a confirmed volunteer's slot opens up, the highest-matching waitlisted volunteer is automatically promoted ` +
         `and you will be notified immediately by email and push notification. No action is needed from you right now.\n\n` +
-        `-- The V-HUB Team`
+        `-- The VHub Team`
       );
     case "cancelled":
       return (
         `Hi ${params.volunteerName},\n\n` +
         `"${params.outreachTitle}"${where} on ${when} has been CANCELLED and will not take place. ` +
         `You do not need to attend.\n\n` +
-        `Nothing about this affects your standing on V-HUB -- it was not your decision and it is not ` +
+        `Nothing about this affects your standing on VHub -- it was not your decision and it is not ` +
         `counted against you. Please do keep applying to other outreaches.\n\n` +
-        `-- The V-HUB Team`
+        `-- The VHub Team`
       );
   }
 }

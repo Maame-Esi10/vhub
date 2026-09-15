@@ -37,7 +37,7 @@ export const env = {
     return process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
   },
   /**
-   * The dedicated Gmail account every V-HUB email is sent through, and the
+   * The dedicated Gmail account every VHub email is sent through, and the
    * Google APP PASSWORD authenticating it -- a 16-character credential that
    * grants full access to that mailbox, which is exactly why the account is a
    * dedicated one holding nothing. Replaced RESEND_API_KEY / RESEND_FROM on
@@ -51,7 +51,7 @@ export const env = {
   },
   /** Optional. The only part of the sender that is ours to choose. */
   get mailFromName(): string {
-    return process.env.MAIL_FROM_NAME?.trim() || "V-HUB";
+    return process.env.MAIL_FROM_NAME?.trim() || "VHub";
   },
   /**
    * Gmail overwrites the From header with the authenticated account unless the

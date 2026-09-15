@@ -73,9 +73,9 @@ const KNOWN: readonly (readonly [pattern: string, human: string])[] = [
   ['failed to fetch', 'No connection. Check your internet and try again.'],
   ['fetch failed', 'No connection. Check your internet and try again.'],
   ['enotfound', 'No connection. Check your internet and try again.'],
-  ['econnrefused', 'Cannot reach V-HUB right now. Try again in a moment.'],
-  ['connectexception', 'Cannot reach V-HUB right now. Try again in a moment.'],
-  ['failed to connect', 'Cannot reach V-HUB right now. Try again in a moment.'],
+  ['econnrefused', 'Cannot reach VHub right now. Try again in a moment.'],
+  ['connectexception', 'Cannot reach VHub right now. Try again in a moment.'],
+  ['failed to connect', 'Cannot reach VHub right now. Try again in a moment.'],
   ['econnreset', 'The connection dropped. Try again.'],
   ['connection reset', 'The connection dropped. Try again.'],
   ['software caused connection abort', 'The connection dropped. Try again.'],
@@ -181,7 +181,7 @@ export function humanError(error: unknown, fallback = 'Something went wrong. Ple
     // decides whether trying again is worth their time.
     const status = /"status"\s*:\s*(\d{3})/.exec(raw)?.[1];
     if (status && status.startsWith('5')) {
-      return 'V-HUB had a problem at our end. Nothing was saved. Please try again in a few minutes.';
+      return 'VHub had a problem at our end. Nothing was saved. Please try again in a few minutes.';
     }
     return fallback;
   }

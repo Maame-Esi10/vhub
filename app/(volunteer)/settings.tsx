@@ -22,7 +22,7 @@ import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
  * Volunteer Settings, per design-refs/Settings.png: avatar + identity block,
  * grouped rows, destructive sign-out at the bottom.
  *
- * Two rows in that PNG remain deliberately NOT built, because V-HUB has no
+ * Two rows in that PNG remain deliberately NOT built, because VHub has no
  * such features and a row that goes nowhere is worse than no row:
  *   - "Linked Accounts" — there is no OAuth/social linking; auth is
  *     email+password through Supabase only.
@@ -30,7 +30,7 @@ import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
  *     the control would have exactly one option.
  * "Account & Security" now exists and opens the shared screen that changes
  * both the login email and the password; 2FA is still not offered.
- * The PNG's "Premium Member" subtitle was likewise dropped: V-HUB has no
+ * The PNG's "Premium Member" subtitle was likewise dropped: VHub has no
  * paid tier. The V-Score band shown in its place is a real status this
  * volunteer actually has.
  */
@@ -66,7 +66,7 @@ export default function VolunteerSettings() {
         </View>
 
         {/*
-          Deliberately NOT here: "Edit Profile" and "How V-HUB works". Both
+          Deliberately NOT here: "Edit Profile" and "How VHub works". Both
           live on the Profile tab. Settings holds app and account state only —
           duplicating them in two places made it unclear which was canonical.
         */}
@@ -113,7 +113,7 @@ export default function VolunteerSettings() {
         <SettingsRow
           icon="shield-lock-outline"
           label="Privacy Policy"
-          value="What V-HUB knows, and what it never keeps"
+          value="What VHub knows, and what it never keeps"
           onPress={() => router.push('/policy')}
         />
         <SettingsRow

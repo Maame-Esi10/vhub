@@ -139,7 +139,7 @@ export function observeError(observed: ObservedError): void {
     const send = withTimeout(
       sendMail({
         to: alertTo,
-        subject: `V-HUB API error: ${observed.route} (${observed.status})`,
+        subject: `VHub API error: ${observed.route} (${observed.status})`,
         text: body,
       }),
       ALERT_SEND_TIMEOUT_MS

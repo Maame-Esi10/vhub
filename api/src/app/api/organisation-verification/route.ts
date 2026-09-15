@@ -97,10 +97,10 @@ export async function POST(req: Request): Promise<Response> {
       // A verified organisation resubmitting would have to be un-verified to
       // be re-decided, and that would quietly revoke a badge volunteers are
       // relying on right now, on the organisation's own say-so. Changing
-      // details after approval is a conversation with V-HUB, not a form.
+      // details after approval is a conversation with VHub, not a form.
       if (current.verification_state === "verified") {
         throw Errors.badRequest(
-          "Your organisation is already verified. Contact V-HUB if your details have changed."
+          "Your organisation is already verified. Contact VHub if your details have changed."
         );
       }
       if (current.verification_state === "banned") {
@@ -241,7 +241,7 @@ export async function POST(req: Request): Promise<Response> {
         title: body.decision === "approve" ? "Your organisation is verified" : "Verification not approved",
         body:
           body.decision === "approve"
-            ? "You can now publish outreaches on V-HUB."
+            ? "You can now publish outreaches on VHub."
             : `${body.reason} You can update your details and submit again.`,
         data: { kind: "organisation_verification", decision: body.decision },
         tokens: (tokens ?? []).map((t) => t.expo_push_token as string),

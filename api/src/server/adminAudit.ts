@@ -42,7 +42,7 @@ export interface AdminActionInput {
 /** Throws 403 unless the caller is an admin. Every admin route calls this first. */
 export function assertAdmin(caller: AuthedCaller): void {
   if (caller.role !== "admin") {
-    throw Errors.forbidden("This action is for V-HUB administrators only.");
+    throw Errors.forbidden("This action is for VHub administrators only.");
   }
 }
 
@@ -85,7 +85,7 @@ export async function recordAdminAction(
 
   if (error) {
     throw Errors.internal(
-      "The decision was applied but could not be recorded in the audit log. Tell the V-HUB owner before making further decisions."
+      "The decision was applied but could not be recorded in the audit log. Tell the VHub owner before making further decisions."
     );
   }
 }

@@ -93,7 +93,7 @@ export default function AdminSettings() {
         <View style={styles.note}>
           <Text style={styles.noteText}>
             {mailHealth.isSuccess
-              ? 'The Gmail app password is valid and V-HUB can authenticate to send mail. If Supabase still cannot send a confirmation email, the fault is in its own SMTP settings rather than the password.'
+              ? 'The Gmail app password is valid and VHub can authenticate to send mail. If Supabase still cannot send a confirmation email, the fault is in its own SMTP settings rather than the password.'
               : mailHealth.isError
                 ? humanError(
                     mailHealth.error,
@@ -115,7 +115,7 @@ export default function AdminSettings() {
         <SettingsRow
           icon="shield-lock-outline"
           label="Privacy Policy"
-          value="What V-HUB knows, and what it never keeps"
+          value="What VHub knows, and what it never keeps"
           onPress={() => router.push('/policy')}
         />
         <SettingsRow

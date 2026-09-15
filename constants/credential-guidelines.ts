@@ -80,7 +80,7 @@ export const CREDENTIAL_GENERAL_RULES: { icon: string; text: string }[] = [
   },
   {
     icon: 'account-outline',
-    text: 'Your full name has to be visible, and it has to be the name on your V-HUB profile.',
+    text: 'Your full name has to be visible, and it has to be the name on your VHub profile.',
   },
   {
     icon: 'calendar-clock',
@@ -99,15 +99,15 @@ export const CREDENTIAL_GENERAL_RULES: { icon: string; text: string }[] = [
 /** The consent text. Shown at the point of upload, never buried in terms. */
 export const CREDENTIAL_CONSENT_POINTS: string[] = [
   'The document you upload is stored privately. It is not part of your public profile and no volunteer or visitor can reach it.',
-  'A V-HUB administrator opens it to check that it is genuine, and an organisation can open it only if you have applied to one of its outreaches.',
-  'It is used to verify who you are and nothing else: never for advertising, never sold, never shared with anyone outside V-HUB.',
+  'A VHub administrator opens it to check that it is genuine, and an organisation can open it only if you have applied to one of its outreaches.',
+  'It is used to verify who you are and nothing else: never for advertising, never sold, never shared with anyone outside VHub.',
   'You can replace it or withdraw it yourself at any time before you are verified, and withdrawing it deletes the file.',
 ];
 
 /** The organisation's version. Same shape, different reader. */
 export const ORGANISATION_CONSENT_POINTS: string[] = [
   'Your documents are stored privately. They are not shown on your public profile and volunteers cannot reach them.',
-  'Only a V-HUB administrator opens them, and only to decide whether to verify your organisation.',
-  'They are used for that decision and nothing else: never for advertising, never sold, never shared outside V-HUB.',
+  'Only a VHub administrator opens them, and only to decide whether to verify your organisation.',
+  'They are used for that decision and nothing else: never for advertising, never sold, never shared outside VHub.',
   'What volunteers see is the outcome: a verified badge, or nothing.',
 ];

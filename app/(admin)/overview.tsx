@@ -154,7 +154,7 @@ export default function AdminOverview() {
             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
           </View>
           <Text style={styles.cardBody}>
-            Bodies whose public outreach listings V-HUB would be willing to trust, and why each was
+            Bodies whose public outreach listings VHub would be willing to trust, and why each was
             accepted. A record only. Nothing is fetched from any of them.
           </Text>
         </Pressable>

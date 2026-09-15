@@ -40,7 +40,7 @@ export function ModerationBanner() {
         </Text>
         <Text style={styles.body}>
           {profile?.moderation_reason ??
-            'Contact V-HUB if you think this is a mistake.'}
+            'Contact VHub if you think this is a mistake.'}
         </Text>
         <Text style={styles.footnote}>
           {banned
