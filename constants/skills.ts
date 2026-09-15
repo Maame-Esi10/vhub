@@ -169,6 +169,31 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
     ],
   },
   {
+    /*
+      ADDED 2026-09-15, because the gap was found the hard way: an organisation
+      creating a "Mental Health Awareness" outreach asked for suggestions and
+      got none. Gemini was right -- there was nothing in this list to suggest.
+      Every "counselling" entry was bound to some other clinical context (HIV,
+      donors, medication, immunisation, family planning), so a mental health
+      day had no vocabulary at all on a platform for community outreach in
+      Ghana, where these campaigns are common and growing.
+
+      Deliberately modest and non-clinical in tone: these are the things a
+      community outreach volunteer actually does, not a psychiatric scope of
+      practice. Diagnosis and treatment are not on this list and should not be.
+    */
+    name: 'Mental Health & Wellbeing',
+    icon: 'head-heart-outline',
+    skills: [
+      'Mental health awareness education',
+      'Psychological first aid',
+      'Active listening and support',
+      'Stress and coping education',
+      'Substance use awareness',
+      'Referral to mental health services',
+    ],
+  },
+  {
     name: 'General Support',
     icon: 'hand-heart-outline',
     skills: [

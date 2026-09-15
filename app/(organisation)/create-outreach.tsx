@@ -676,7 +676,11 @@ export default function CreateOutreach() {
               */}
               <SkillSuggestBox
                 label="Not sure which skills to pick?"
-                sourceText={state.description}
+                // TITLE AND DESCRIPTION, not description alone (owner, 2026-09-15:
+                // "my outreach title was Mental Health Awareness and it returned
+                // nothing"). The title is the most concentrated statement of what
+                // an event is, and an organisation reasonably expects it to count.
+                sourceText={[state.title, state.description].filter(Boolean).join('. ')}
                 onSuggestions={setSuggestedSkills}
               />
 

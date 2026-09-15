@@ -1,42 +1,50 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, StyleSheet, View, type ColorValue } from 'react-native';
+import {
+  Platform,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type ColorValue,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
 /**
- * How far the bar floats in from the left and right edges of the screen.
+ * How far the bar floats in from the left and right edges.
  *
- * 28, NOT spacing.base (owner-reported twice, 2026-09-14: "the navbar still
- * touches both edges" and "too much space between the icons"). Those are one
- * complaint, not two.
+ * A PROPORTION OF THE SCREEN, NOT A FIXED NUMBER (owner, reported three times:
+ * "it still spans the full width... I want space OUTSIDE the container").
  *
- * It WAS spacing.base, deliberately, so the pill lined up with the content
- * gutter on the screens behind it. That reasoning was wrong for a floating
- * control: matching the content's own margin is exactly what makes a bar read
- * as part of the layout rather than as something sitting on top of it, so at
- * 16 the pill looked full-width with rounded ends. A floating element has to
- * be inset MORE than the content it floats over, or the eye has nothing to
- * separate the two.
+ * The history is the useful part. It was `spacing.base` (16) so the pill lined
+ * up with the content gutter, which is exactly what made it read as part of
+ * the page rather than as something floating on it. Raising it to 28 helped
+ * and was still not enough, because 28 on a 400dp screen is a bar 86% of the
+ * width -- which the eye reads as full-width with rounded ends, not as a pill.
  *
- * It also fixes the icon spacing, because the two are the same measurement.
- * React Navigation gives every tab `flex: 1`, so the gap between icons is just
- * the bar's width divided by the number of tabs. Nothing can pull the icons
- * together except making the bar narrower.
+ * `(-------)` is wrong. `(   -------   )` is right.
  *
- * 28 rather than spacing.xxl (32) is where the five-tab bars stop fitting:
- * the organisation and admin bars carry five labels, and "CREDENTIALS" is the
- * longest. At 32 it truncates; the label size below is reduced to buy back
- * what this costs. See the note on tabBarLabelStyle.
+ * 12% a side puts the bar at roughly three quarters of the screen, which is
+ * the point where it stops touching and starts floating. Clamped so it does
+ * not collapse on a small handset or drift absurdly wide on a tablet.
+ *
+ * THE LABELS ARE WHAT MADE THIS IMPOSSIBLE BEFORE, and they are gone: see
+ * tabBarShowLabel below. Five labelled tabs cannot fit in three quarters of a
+ * phone screen at a legible size, which is why two earlier attempts only
+ * nudged the number.
  */
-const BAR_INSET = spacing.xl + spacing.xs;
+function barInset(screenWidth: number): number {
+  return Math.min(Math.max(screenWidth * 0.12, 28), 72);
+}
 
 /** Clearance between the bottom of the bar and the gesture bar or screen edge. */
 const BAR_LIFT = spacing.md;
 
-/** The bar's own height, before the label and icon are measured into it. */
-const BAR_HEIGHT = 64;
+/** The bar's own height. 58 rather than 64: with the labels gone there is
+ * nothing under the glyph to leave room for, and a shorter bar reads more like
+ * a pill and less like a strip. */
+const BAR_HEIGHT = 58;
 
 /**
  * Shared tab bar chrome for the volunteer, organisation and admin groups, so
@@ -69,6 +77,8 @@ const BAR_HEIGHT = 64;
  */
 export function useTabBarScreenOptions() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const inset = barInset(width);
 
   return {
     headerShown: false,
@@ -76,8 +86,8 @@ export function useTabBarScreenOptions() {
     tabBarInactiveTintColor: colors.textSecondary,
     tabBarStyle: {
       position: 'absolute' as const,
-      left: BAR_INSET,
-      right: BAR_INSET,
+      left: inset,
+      right: inset,
       bottom: insets.bottom + BAR_LIFT,
       height: BAR_HEIGHT,
       paddingTop: spacing.sm,
@@ -100,6 +110,25 @@ export function useTabBarScreenOptions() {
       shadowRadius: 16,
       shadowOffset: { width: 0, height: 6 },
     },
+    /*
+      ICONS ONLY (owner, 2026-09-15).
+
+      This is the trade the short bar required, and it is a real one. Five
+      labelled tabs need roughly the full width of a phone at a legible size,
+      so every previous attempt to inset the pill was capped by the longest
+      word on the admin bar ("CREDENTIALS"). Dropping the labels is what makes
+      three-quarter width possible at all.
+
+      What it costs: a first-time user identifies a tab by its glyph rather
+      than by reading it. The glyphs are the conventional ones for exactly
+      these destinations -- house, document, calendar, person, and a filled
+      coral disc for Create -- and the accessibility label on every tab still
+      speaks its name, so a screen reader is unaffected.
+
+      Putting labels back is this one line. The inset would have to come down
+      with it.
+    */
+    tabBarShowLabel: false,
     tabBarLabelStyle: {
       fontFamily: fontFamily.semiBold,
       // 9/0 rather than 9.5/0.2, which was itself down from 10/0.5. Each
@@ -230,7 +259,9 @@ export function useTabBarFooterOffset(): { marginBottom: number } {
  */
 export function tabBarIcon(focusedName: IconName, unfocusedName: IconName) {
   return function TabBarIcon({ color, focused }: { color: ColorValue; focused: boolean }) {
-    return <Ionicons name={focused ? focusedName : unfocusedName} size={23} color={color} />;
+    // Larger than before, because with the labels gone the glyph is the only
+    // thing naming the destination.
+    return <Ionicons name={focused ? focusedName : unfocusedName} size={26} color={color} />;
   };
 }
 
@@ -268,8 +299,12 @@ const styles = StyleSheet.create({
     marginTop: Platform.OS === 'ios' ? -1 : 0,
   },
   createDiscIdle: {
-    // Still coral when unselected, only quieter: the point of the disc is that
-    // this action is always findable, which a grey one would undo.
+    // NOT CORAL WHEN INACTIVE (owner, 2026-09-15). It used to stay coral at
+    // 55% opacity on the reasoning that the primary action should always be
+    // findable -- but on a bar where coral is what says "you are here", a
+    // permanently coral tab says you are on Create when you are not. The disc
+    // shape still makes it findable; the colour is now free to mean selected.
+    backgroundColor: colors.textSecondary,
     opacity: 0.55,
   },
 });

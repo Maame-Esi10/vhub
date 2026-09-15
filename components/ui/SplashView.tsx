@@ -166,6 +166,13 @@ const styles = StyleSheet.create({
   },
   textBlock: {
     paddingHorizontal: spacing.xl,
+    // STRETCH, so the lines below centre against the SCREEN rather than
+    // against their own content box (owner, 2026-09-15: "centre-align the
+    // tagline"). The parent row sets alignItems:'center', which makes a Text
+    // shrink to fit its longest line -- a wrapped tagline then centres inside
+    // that narrower box, which reads as very slightly off-centre rather than
+    // as centred. alignSelf:'stretch' on the children removes the ambiguity.
+    alignSelf: 'stretch',
   },
   wordmark: {
     fontFamily: fontFamily.bold,
@@ -184,6 +191,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   tagline: {
+    alignSelf: 'stretch',
     fontFamily: fontFamily.semiBold,
     fontSize: 17,
     lineHeight: 24,
@@ -195,6 +203,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl + spacing.md,
   },
   intro: {
+    alignSelf: 'stretch',
     fontFamily: fontFamily.regular,
     fontSize: 14,
     lineHeight: 21,

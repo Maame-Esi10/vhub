@@ -10,6 +10,31 @@ const MAX_SUGGESTIONS = 8;
 const MAX_DESCRIPTION_CHARS = 1200;
 
 /**
+ * What to offer when nothing in the vocabulary matches the TOPIC.
+ *
+ * WHY THIS EXISTS (owner, 2026-09-15: "returning nothing is not acceptable").
+ * A "Mental Health Awareness" outreach produced no suggestions and a message
+ * telling the organisation to browse the list -- which is the app shrugging.
+ *
+ * Two separate faults sat behind that, and both are fixed. The vocabulary
+ * genuinely had no mental health entries, so Gemini was right to return
+ * nothing; a Mental Health & Wellbeing category now exists. And the empty
+ * answer itself was useless, which is this.
+ *
+ * EVERY OUTREACH NEEDS THESE, whatever its topic: somebody has to register
+ * people, manage the queue, explain what is happening and write it down. They
+ * are a truthful answer to "we could not match your topic" rather than a
+ * filler, and the screen labels them as general rather than as topical.
+ */
+const UNIVERSAL_SUPPORT_SKILLS: readonly string[] = [
+  'Patient registration',
+  'Crowd and queue management',
+  'Health education',
+  'Data entry',
+  'Community mobilisation',
+];
+
+/**
  * Ranks the EXISTING skills vocabulary against a piece of free text.
  *
  * WHAT THIS IS FOR, AND WHY IT IS NOT THE OTHER LAYER 2 (owner, 2026-09-15).
@@ -81,7 +106,10 @@ export async function suggestSkills(description: string): Promise<string[] | nul
     const parsed = JSON.parse(raw) as { skills?: unknown };
     if (!Array.isArray(parsed.skills)) return null;
 
-    return matchBackToVocabulary(parsed.skills);
+    const matched = matchBackToVocabulary(parsed.skills);
+    // A topic with no match in the vocabulary still has an honest answer: the
+    // work every outreach needs regardless of subject.
+    return matched.length > 0 ? matched : [...UNIVERSAL_SUPPORT_SKILLS];
   } catch {
     return null;
   } finally {

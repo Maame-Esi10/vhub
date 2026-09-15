@@ -118,7 +118,14 @@ export function SkillSuggestBox({
         </Text>
       ) : null}
 
-      {empty ? <Text style={styles.hint}>Nothing obvious. Browse the list below.</Text> : null}
+      {/*
+        The endpoint now always answers with something: a topical match where
+        one exists, and otherwise the work every outreach needs. This only
+        fires if that changes.
+      */}
+      {empty ? (
+        <Text style={styles.hint}>No close match. The full list is below.</Text>
+      ) : null}
 
       {suggest.isError ? (
         <Text style={styles.hint}>
