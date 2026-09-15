@@ -345,6 +345,78 @@ describe('computeLayer1MatchScore weighting', () => {
   });
 });
 
+describe('support-role SKILLS override', () => {
+  /*
+    Owner-approved 2026-09-15. A support role is registration, crowd flow,
+    health talks, data entry. Ranking a volunteer on clinical skills for that
+    work, across the largest component of the score, punished exactly the
+    students and willing helpers the platform exists to include.
+
+    It was live rather than hypothetical: the wizard used to require at least
+    one skill on EVERY outreach, so support events carried requirements nobody
+    meant, and rows created before that changed still do.
+  */
+  const thinVolunteer: Layer1VolunteerInput = {
+    category: 'other',
+    skill_tags: [], // no skills at all
+    experience_level: null,
+    availability_slots: [],
+    region: 'Northern',
+    district: 'Tamale Metropolitan',
+  };
+
+  it('gives full skill points on a support outreach to a volunteer with no skills', () => {
+    const result = computeLayer1MatchScore(thinVolunteer, {
+      required_skills: ['Venipuncture', 'Triage', 'Physical examination'],
+      role_type: 'support',
+    });
+    expect(result.skills.raw).toBe(1);
+    expect(result.skills.weighted).toBe(35);
+  });
+
+  it('does NOT override for a clinical outreach', () => {
+    const result = computeLayer1MatchScore(thinVolunteer, {
+      required_skills: ['Venipuncture', 'Triage', 'Physical examination'],
+      role_type: 'clinical',
+    });
+    expect(result.skills.raw).toBe(0);
+  });
+
+  it('scores skills strictly when role_type is absent (backwards-compatible)', () => {
+    const result = computeLayer1MatchScore(thinVolunteer, {
+      required_skills: ['Venipuncture'],
+    });
+    expect(result.skills.raw).toBe(0);
+  });
+
+  it('does not advantage a broad profile over a thin one on a support event', () => {
+    // The whole point: both are equally suited to a registration desk.
+    const broad: Layer1VolunteerInput = {
+      ...thinVolunteer,
+      skill_tags: ['Venipuncture', 'Triage', 'Physical examination', 'Wound dressing'],
+    };
+    const outreach = { required_skills: ['Venipuncture'], role_type: 'support' as const };
+
+    expect(computeLayer1MatchScore(thinVolunteer, outreach).skills.weighted).toBe(
+      computeLayer1MatchScore(broad, outreach).skills.weighted
+    );
+  });
+
+  it('leaves a thin profile unpenalised on a clinical event it DOES match', () => {
+    // The denominator was never the problem: skillsScore divides by the
+    // REQUIRED skills, so three matching skills beat twenty unrelated ones.
+    const three: Layer1VolunteerInput = {
+      ...thinVolunteer,
+      skill_tags: ['Venipuncture', 'Triage', 'Data entry'],
+    };
+    const result = computeLayer1MatchScore(three, {
+      required_skills: ['Venipuncture', 'Triage'],
+      role_type: 'clinical',
+    });
+    expect(result.skills.raw).toBe(1);
+  });
+});
+
 describe('support-role category override', () => {
   // Owner-approved: a `support` outreach forces the category component to 1.0
   // for every volunteer, regardless of their category or the required one.

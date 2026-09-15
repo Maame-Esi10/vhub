@@ -523,10 +523,40 @@ export function computeLayer1MatchScore(
     weighted: roundTo(raw * weight, 4),
   });
 
-  const skills = build(
-    skillsScore(volunteer.skill_tags, outreach.required_skills, options?.skillEquivalences),
-    LAYER1_WEIGHTS.skills
-  );
+  /*
+    SUPPORT-ROLE SKILLS OVERRIDE (owner-approved 2026-09-15).
+
+    A support role is registration, crowd flow, health talks, data entry. The
+    volunteer was still ranked on clinical skills across 35 of the 100 points,
+    which is the largest component -- so a student who ticked three skills, or
+    somebody who simply wants to help and identifies with none, ranked low for
+    a registration desk they would have been perfectly good at. They then see
+    fewer events, apply less, and stop.
+
+    It was not a hypothetical: the wizard REQUIRED at least one skill on every
+    outreach, so support events carried requirements the organisation never
+    really meant and the matcher scored against them. (That requirement is now
+    lifted for support events, but existing rows still carry skills, so this
+    override is what fixes the data already in the database.)
+
+    WHY AN OVERRIDE HERE AND NOT A CHANGE TO skillsScore: exactly the reasoning
+    the category override already carries a few lines down. `skillsScore` stays
+    a pure skills-vs-skills comparison that knows nothing about role type, and
+    the policy decision sits in one visible place beside the other one.
+
+    THE ORGANISATION STILL SEES THE SKILLS. They are on the applicant card,
+    which is where that information belongs -- this changes the ranking, not
+    what anybody is shown.
+
+    NOTE the denominator was never the problem. `skillsScore` divides by the
+    REQUIRED skills, never by the volunteer's own set, so a thin profile has
+    never been penalised for being thin. See the note on skillsScore.
+  */
+  const skillsRaw =
+    outreach.role_type === 'support'
+      ? 1
+      : skillsScore(volunteer.skill_tags, outreach.required_skills, options?.skillEquivalences);
+  const skills = build(skillsRaw, LAYER1_WEIGHTS.skills);
   // Support-role category override (owner-approved, docs/REPORT_NOTES.md):
   // a `support` outreach needs no specific profession, so every volunteer
   // fully satisfies its category component. Clinical outreaches score category

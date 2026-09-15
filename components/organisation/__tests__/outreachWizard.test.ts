@@ -36,22 +36,57 @@ function stateWith(overrides: Partial<OutreachWizardState>): OutreachWizardState
   return { ...INITIAL_WIZARD_STATE, title: 'Screening day', days: days(FUTURE_DATE), ...overrides };
 }
 
-describe('required skills are not optional', () => {
-  it('refuses an outreach with no required skills', () => {
-    // Skills are 35 of the 100 match points, and an empty requirement scores
-    // 1.0 for EVERY applicant — so publishing with none does not relax the
+/** A clinical role, since INITIAL_WIZARD_STATE seeds a support one. */
+const CLINICAL_ROLES = [
+  { category: null, roleType: 'clinical' as const, minExperienceLevel: null, slotsTotal: 2 },
+];
+
+describe('required skills follow the WORK, not every outreach', () => {
+  /*
+    Changed 2026-09-15, owner-approved. Skills used to be required on every
+    outreach. Forcing an organisation to name skills for a registration desk
+    asks for data that then does nothing -- and it is how support events ended
+    up carrying requirements nobody meant, which the matcher scored against
+    across the largest component of the score.
+
+    The matcher no longer scores skills on a support outreach at all (see the
+    support-role skills override in lib/matching/layer1.ts), so a requirement
+    here would be collected, stored, shown and ignored.
+  */
+  it('refuses a CLINICAL outreach with no required skills', () => {
+    // Still 35 of the 100 match points there, and an empty requirement scores
+    // 1.0 for EVERY applicant -- so publishing with none does not relax the
     // match, it stops the largest component discriminating at all.
-    expect(validateWizard(stateWith({ requiredSkills: [] })).requiredSkills).toBeDefined();
+    const state = stateWith({ requiredSkills: [], roles: CLINICAL_ROLES });
+    expect(validateWizard(state).requiredSkills).toBeDefined();
   });
 
-  it('accepts a single skill', () => {
-    expect(
-      validateWizard(stateWith({ requiredSkills: ['Vital Signs'] })).requiredSkills
-    ).toBeUndefined();
+  it('accepts a single skill on a clinical outreach', () => {
+    const state = stateWith({ requiredSkills: ['Vital signs monitoring'], roles: CLINICAL_ROLES });
+    expect(validateWizard(state).requiredSkills).toBeUndefined();
   });
 
-  it('applies when EDITING too, so an outreach posted before this rule gets repaired', () => {
-    const state = stateWith({ requiredSkills: [], days: days(PAST_DATE) });
+  it('ALLOWS a support outreach with no required skills', () => {
+    // The whole point of the change: a registration desk needs no skill list.
+    expect(validateWizard(stateWith({ requiredSkills: [] })).requiredSkills).toBeUndefined();
+  });
+
+  it('still allows a support outreach to name skills if it wants to', () => {
+    const state = stateWith({ requiredSkills: ['Patient registration'] });
+    expect(validateWizard(state).requiredSkills).toBeUndefined();
+  });
+
+  it('treats ANY clinical role as making the whole outreach clinical', () => {
+    // Same summarising rule outreaches.role_type already follows.
+    const mixed = [
+      { category: 'nurse' as const, roleType: 'clinical' as const, minExperienceLevel: null, slotsTotal: 3 },
+      { category: 'other' as const, roleType: 'support' as const, minExperienceLevel: null, slotsTotal: 6 },
+    ];
+    expect(validateWizard(stateWith({ requiredSkills: [], roles: mixed })).requiredSkills).toBeDefined();
+  });
+
+  it('applies when EDITING too, so a clinical outreach posted before this rule gets repaired', () => {
+    const state = stateWith({ requiredSkills: [], roles: CLINICAL_ROLES, days: days(PAST_DATE) });
     expect(validateOutreachEdit(state, [PAST_DATE]).requiredSkills).toBeDefined();
   });
 });
@@ -515,7 +550,9 @@ describe('a failed step points at the right place', () => {
   });
 
   it('reports only the errors belonging to the step being shown', () => {
-    const errors = validateWizard(stateWith({ title: '', requiredSkills: [] }));
+    // CLINICAL, because skills are only required there now -- this test is
+    // about which STEP an error is reported on, so it needs one to report.
+    const errors = validateWizard(stateWith({ title: '', requiredSkills: [], roles: CLINICAL_ROLES }));
     expect(errorsForStep(errors, 1).title).toBeDefined();
     expect(errorsForStep(errors, 1).requiredSkills).toBeUndefined();
     expect(errorsForStep(errors, 3).requiredSkills).toBeDefined();

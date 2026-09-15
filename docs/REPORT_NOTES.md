@@ -5678,3 +5678,78 @@ survives being seen fifty times, which is the test a permanent hint has to pass.
 The volunteer feed carries a second line, because nothing told a volunteer that
 the skills on their profile decide what the feed shows them -- so a thin profile
 read as a quiet platform rather than a fixable setting.
+
+## Support roles stop being scored on clinical skills (owner-approved 2026-09-15)
+
+**The unfairness was real, but not where it was thought to be.**
+
+The owner's reading was that a volunteer who ticks three skills is capped below
+one who ticks twenty. **That is not true, and has not been since August.**
+`skillsScore` divides by the REQUIRED skills, never by the volunteer's own set:
+
+```ts
+return matched / requiredSet.size;
+```
+
+Holding twenty skills confers no advantage unless they are the required ones.
+Three matching skills out of three required scores a full 35/35. The August fix
+protects both directions of the same division.
+
+**The actual fault was that support outreaches were scored on skills at all.**
+`role_type === 'support'` already forced the Category component to 1.0 for
+everyone, on exactly this reasoning -- a registration desk needs no particular
+profession. Skills, the LARGEST component at 35 points, had no such override.
+
+**And it was live, not theoretical.** The wizard required at least one skill on
+every outreach, so support events carried requirements the organisation never
+really meant, and the matcher ranked volunteers against them. A student who
+ticked what they knew this semester, or somebody who simply wants to help and
+identifies with no skill, ranked low for work they would have been perfectly
+good at, saw fewer events, and stopped.
+
+**Two changes, and they have to go together.** The matcher now forces the
+skills component to 1.0 on a support outreach, beside the category override and
+for the same stated reason. The wizard now requires skills only when some role
+is clinical. Without the first, existing support rows keep their accidental
+requirements; without the second, organisations keep being asked for data that
+is then ignored.
+
+**The organisation still sees the skills**, on the applicant card. This changes
+the ranking, not what anybody is shown.
+
+**Not done, deliberately:** redistributing the 35 points across the other four
+components on a support event. It is arguably more correct and it would move
+every stored score, so it stays a separate decision.
+
+## Three bugs, one shape: a guard that hides what it guards against
+
+**Worth collecting, because it has now happened three times in a week.**
+
+- **The tab bar clearance.** A rule in CLAUDE.md was followed on the fourteen
+  screens its author took it to mean, and the audit that checked it grepped for
+  the helper -- which can only ever return the screens already correct.
+- **The login dead end.** A docstring stated the interaction exactly ("a
+  volunteer with incomplete onboarding never reaches this check") and nobody
+  asked what the stated fact cost.
+- **The skill affinity table.** Nine of its entries named skills that do not
+  exist, because it was written from memory rather than from the file.
+  `companionSkills` filters anything not in the live vocabulary -- correct
+  runtime behaviour, and precisely what made the mistake invisible: the feature
+  worked, quietly, with a third of its table dead.
+
+**The common shape is not carelessness.** In each case a defensive mechanism
+was doing its job, and doing its job is what removed the symptom that would
+have revealed the fault. A filter that drops bad input, a router that declines
+to guess, a rule applied to the cases its reader recognised -- all three are
+right, and all three are silent.
+
+**The fix is the same move every time: enumerate from the authority, not from
+the code that is supposed to comply with it** -- the navigator's registration
+list, the AST rather than a regex, the vocabulary rather than memory, the
+database rather than a plausible story about it. Then assert it mechanically,
+so the question is re-asked on every run.
+
+Four standing guards now exist for this reason: `tabBarClearance.test.ts`,
+`authEntryScreens.test.ts`, `userFacingText.test.ts` and
+`skillAffinities.test.ts`. Each one exists because something correct was also
+silent.

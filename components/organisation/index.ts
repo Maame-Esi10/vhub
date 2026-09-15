@@ -30,6 +30,7 @@ export {
   validateRoles,
   validateOutreachEdit,
   hasWizardErrors,
+  hasClinicalRole,
   wizardStateFromOutreach,
   toStoragePayload,
   rolesChanged,

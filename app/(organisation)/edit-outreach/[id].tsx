@@ -34,6 +34,7 @@ import {
   daysChanged,
   firstDay,
   hasWizardErrors,
+  hasClinicalRole,
   roleKey,
   rolesChanged,
   swapAdjacent,
@@ -796,10 +797,15 @@ export default function EditOutreach() {
             WHO YOU NEED
           </Text>
           <View style={styles.section}>
+            {/* Required for clinical, optional for support. See the wizard. */}
             <MultiSelectField
               label="Required Skills"
-              placeholder="Select the skills volunteers need"
-              required
+              placeholder={
+                hasClinicalRole(state.roles)
+                  ? 'Select the skills volunteers need'
+                  : 'Optional for support work'
+              }
+              required={hasClinicalRole(state.roles)}
               selected={state.requiredSkills}
               sections={SKILL_SECTIONS}
               error={errors.requiredSkills}

@@ -259,11 +259,41 @@ export function validateWizard(state: OutreachWizardState): WizardFieldError {
     errors.endTime = 'Set an end time.';
   }
 
-  if (state.requiredSkills.length === 0) {
+  /*
+    SKILLS ARE REQUIRED FOR CLINICAL WORK AND OPTIONAL FOR SUPPORT
+    (owner-approved 2026-09-15).
+
+    Forcing an organisation to name skills for a registration desk asks for
+    data that then does nothing, and it is HOW SUPPORT EVENTS ENDED UP CARRYING
+    REQUIREMENTS NOBODY MEANT -- which the matcher then scored against, across
+    the largest component of the score, ranking students and willing helpers
+    low for work they would have been perfectly good at.
+
+    The matcher no longer scores skills on a support outreach at all (see the
+    support-role skills override in lib/matching/layer1.ts), so a requirement
+    here would be collected, stored, shown, and ignored.
+
+    Clinical keeps the rule, and the reason above still holds there: an empty
+    requirement scores 1.0 for every applicant, so the biggest component stops
+    discriminating and the ranking collapses to location and availability.
+  */
+  if (hasClinicalRole(state.roles) && state.requiredSkills.length === 0) {
     errors.requiredSkills = 'Pick at least one skill.';
   }
 
   return errors;
+}
+
+/**
+ * True when any role on this outreach is clinical.
+ *
+ * ANY, not all: a drive needing three nurses and six helpers is a clinical
+ * event as far as the credential gate and the skills requirement are
+ * concerned, which is the same summarising rule `outreaches.role_type` already
+ * follows.
+ */
+export function hasClinicalRole(roles: readonly RoleDraft[]): boolean {
+  return roles.some((role) => role.roleType === 'clinical');
 }
 
 /**

@@ -37,6 +37,7 @@ import {
   firstFieldWithError,
   firstStepWithError,
   hasWizardErrors,
+  hasClinicalRole,
   summariseStepErrors,
   swapAdjacent,
   toStoragePayload,
@@ -92,7 +93,6 @@ function withSuggestions(suggested: readonly string[]) {
 export default function CreateOutreach() {
   const [suggestedSkills, setSuggestedSkills] = useState<string[]>([]);
   const suggestedSections = useMemo(() => withSuggestions(suggestedSkills), [suggestedSkills]);
-
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const organisationId = useAuthStore((s) => s.user)?.id;
@@ -124,6 +124,8 @@ export default function CreateOutreach() {
     instant you fix it.
   */
   const [attempted, setAttempted] = useState<Record<number, boolean>>({});
+  // Skills are required for clinical work and optional for support: see validateWizard.
+  const clinical = hasClinicalRole(state.roles);
   const liveErrors = useMemo(() => validateWizard(state), [state]);
   const errors = useMemo<WizardFieldError>(
     () =>
@@ -680,10 +682,20 @@ export default function CreateOutreach() {
               />
 
               <View onLayout={(event) => captureFieldTop('requiredSkills', event)}>
+                {/*
+                  REQUIRED FOR CLINICAL, OPTIONAL FOR SUPPORT. The asterisk has
+                  to follow the rule or it states something untrue, and the
+                  placeholder says what happens when it is left empty -- an
+                  organisation should not have to discover that by trying.
+                */}
                 <MultiSelectField
                   label="Required Skills"
-                  required
-                  placeholder="Select the skills volunteers need"
+                  required={clinical}
+                  placeholder={
+                    clinical
+                      ? 'Select the skills volunteers need'
+                      : 'Optional for support work'
+                  }
                   selected={state.requiredSkills}
                   sections={suggestedSections}
                   error={errors.requiredSkills}
