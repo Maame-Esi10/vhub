@@ -73,7 +73,7 @@ export default function AdminActivity() {
           <View style={styles.header}>
             <Text style={styles.title}>Activity</Text>
             <Text style={styles.subtitle}>
-              Every admin decision, in the order it happened. Entries cannot be edited or removed — a
+              Every admin decision, in the order it happened. Entries cannot be edited or removed. A
               correction is recorded as a new entry.
             </Text>
           </View>
@@ -84,7 +84,7 @@ export default function AdminActivity() {
           <EmptyState
             icon="clipboard-text-clock-outline"
             title="Nothing recorded yet"
-            message="No admin decision has been made on this platform. Entries will appear here from the first one onwards — approving an organisation, reviewing a credential, suspending an account or settling a dispute."
+            message="No admin decision has been made on this platform. Entries will appear here from the first one onwards: approving an organisation, reviewing a credential, suspending an account or settling a dispute."
           />
         }
       />

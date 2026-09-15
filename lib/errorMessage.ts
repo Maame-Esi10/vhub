@@ -33,10 +33,10 @@ const KNOWN: readonly (readonly [pattern: string, human: string])[] = [
   // "try again" is genuinely the right advice.
   [
     'error sending confirmation email',
-    'We could not send your confirmation email, so your account was not created. This is a problem on our side — please try again in a few minutes.',
+    'We could not send your confirmation email, so your account was not created. This is a problem on our side. Please try again in a few minutes.',
   ],
   ['invalid login credentials', 'That email and password do not match an account.'],
-  ['email not confirmed', 'Confirm your email address first — check your inbox for the link we sent.'],
+  ['email not confirmed', 'Confirm your email address first. Check your inbox for the code we sent.'],
   ['user already registered', 'There is already an account with that email address. Try logging in instead.'],
   ['already been registered', 'There is already an account with that email address. Try logging in instead.'],
   ['email address is invalid', 'That does not look like a valid email address.'],
@@ -46,9 +46,46 @@ const KNOWN: readonly (readonly [pattern: string, human: string])[] = [
   ['for security purposes', 'Too many attempts just now. Wait a minute and try again.'],
   ['rate limit', 'Too many attempts just now. Wait a minute and try again.'],
 
-  // Network. React Native's wording, which means nothing to a volunteer.
-  ['network request failed', 'Cannot reach V-HUB. Check your connection and try again.'],
-  ['failed to fetch', 'Cannot reach V-HUB. Check your connection and try again.'],
+  // ---- Network -----------------------------------------------------------
+  //
+  // THE MOST COMMON ERROR ANY MOBILE APP PRODUCES, and until 2026-09-14 the
+  // one shape this function could not catch. A volunteer on the onboarding
+  // identity step was shown, verbatim:
+  //
+  //   fetch failed: java.net.UnknownHostException: Unable to resolve host
+  //   "<project>.supabase.co": No address associated with hostname
+  //
+  // The screen was doing the right thing -- it goes through humanError like
+  // everything else. The table simply had the wrong two strings in it:
+  // 'network request failed' is React Native's OLD wording and 'failed to
+  // fetch' is the BROWSER's. Android's real message is "fetch failed", the
+  // same two words reversed, wrapped around a Java exception class. Neither
+  // matched, and the message is short and brace-free so it read as a perfectly
+  // good sentence on the way out.
+  //
+  // These now cover the families rather than two exact strings. Ghana's
+  // mobile networks make every one of them a routine event, not an edge case.
+  ['unable to resolve host', 'No connection. Check your internet and try again.'],
+  ['no address associated', 'No connection. Check your internet and try again.'],
+  ['unknownhostexception', 'No connection. Check your internet and try again.'],
+  ['network request failed', 'No connection. Check your internet and try again.'],
+  ['network is unreachable', 'No connection. Check your internet and try again.'],
+  ['failed to fetch', 'No connection. Check your internet and try again.'],
+  ['fetch failed', 'No connection. Check your internet and try again.'],
+  ['enotfound', 'No connection. Check your internet and try again.'],
+  ['econnrefused', 'Cannot reach V-HUB right now. Try again in a moment.'],
+  ['connectexception', 'Cannot reach V-HUB right now. Try again in a moment.'],
+  ['failed to connect', 'Cannot reach V-HUB right now. Try again in a moment.'],
+  ['econnreset', 'The connection dropped. Try again.'],
+  ['connection reset', 'The connection dropped. Try again.'],
+  ['software caused connection abort', 'The connection dropped. Try again.'],
+  ['sockettimeout', 'That took too long. Check your connection and try again.'],
+  ['etimedout', 'That took too long. Check your connection and try again.'],
+  ['timed out', 'That took too long. Check your connection and try again.'],
+  ['timeout', 'That took too long. Check your connection and try again.'],
+  ['sslhandshake', 'Could not make a secure connection. Try again.'],
+  ['ssl handshake', 'Could not make a secure connection. Try again.'],
+  ['certpathvalidator', 'Could not make a secure connection. Try again.'],
   ['aborted', 'That took too long and was stopped. Try again.'],
 
   // Postgres reaching the client. Both of these mean the same thing to a user
@@ -70,6 +107,17 @@ function looksMachineGenerated(message: string): boolean {
   if (/^https?:\/\//i.test(trimmed)) return true;
   // A stack trace that arrived as a message.
   if (/\n\s*at\s/.test(trimmed)) return true;
+  // A JVM or Android exception class name. THIS IS THE BELT-AND-BRACES HALF
+  // of the network fix above: the table can only match families somebody has
+  // thought of, and a platform that says "java.net.UnknownHostException" today
+  // will say "javax.net.ssl.SSLHandshakeException" or something nobody has seen
+  // tomorrow. Any message naming a Java class is machine output whatever else
+  // it looks like, so an unrecognised one falls back to the caller sentence
+  // rather than being printed at a nurse.
+  if (/\b(?:java|javax|android|kotlin)\.[a-z0-9_.]*[A-Z][A-Za-z0-9_]*/.test(trimmed)) return true;
+  // A bare hostname in quotes -- infrastructure detail, and in this app it is
+  // always the Supabase project ref, which is not a user concern.
+  if (/"[a-z0-9-]+\.[a-z0-9.-]+\.[a-z]{2,}"/i.test(trimmed)) return true;
   // A bare error code: SCREAMING_SNAKE, or a Postgres SQLSTATE.
   if (/^[A-Z][A-Z0-9_]{2,}$/.test(trimmed)) return true;
   if (/^\d{5}$/.test(trimmed)) return true;
@@ -133,7 +181,7 @@ export function humanError(error: unknown, fallback = 'Something went wrong. Ple
     // decides whether trying again is worth their time.
     const status = /"status"\s*:\s*(\d{3})/.exec(raw)?.[1];
     if (status && status.startsWith('5')) {
-      return 'V-HUB had a problem at our end. Nothing was saved — please try again in a few minutes.';
+      return 'V-HUB had a problem at our end. Nothing was saved. Please try again in a few minutes.';
     }
     return fallback;
   }

@@ -154,7 +154,7 @@ export default function AdminDisputes() {
 
                   <Text style={styles.limitNote}>
                     Upholding records the correction and tells both parties. It does not recalculate the
-                    volunteer’s V-Score — that change is separate and is not switched on.
+                    volunteer’s V-Score. That change is separate and is not switched on.
                   </Text>
 
                   <Input
@@ -257,7 +257,7 @@ function EvidenceBody({
       {evidence.review ? (
         <>
           <Text style={styles.evidenceLine}>
-            Reliability {evidence.review.reliability_score ?? '—'}/5 · Clinical{' '}
+            Reliability {evidence.review.reliability_score ?? '-'}/5 · Clinical{' '}
             {evidence.review.clinical_score ?? 'not rated'}
           </Text>
           {evidence.review.notes ? (
@@ -279,7 +279,7 @@ function EvidenceBody({
       {evidence.history ? (
         <Text style={styles.evidenceLine}>
           Across the platform: {evidence.history.eventsAttended} events attended, V-Score{' '}
-          {evidence.history.vScore != null ? Math.round(evidence.history.vScore) : '—'}.
+          {evidence.history.vScore != null ? Math.round(evidence.history.vScore) : '-'}.
         </Text>
       ) : null}
     </View>

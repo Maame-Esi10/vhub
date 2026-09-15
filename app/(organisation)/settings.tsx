@@ -29,7 +29,7 @@ const VERIFICATION_ROW_VALUE: Record<string, string> = {
   unverified: 'Not submitted',
   documents_submitted: 'Waiting on review',
   verified: 'Verified',
-  rejected: 'Not approved — tap to fix',
+  rejected: 'Not approved, tap to fix',
   suspended: 'Suspended',
   banned: 'Removed',
 };

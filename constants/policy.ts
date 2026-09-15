@@ -67,8 +67,8 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
     paragraphs: [
       'You can see and edit everything on your profile from the app, and you can withdraw a credential document at any time.',
       'You can close your account yourself, from Settings then Account & Security. It happens immediately. Your name, contact details, photo and everything you have written about yourself are cleared, any document you uploaded is destroyed, and you will not be able to sign in again.',
-      'Anything still ahead of you is cancelled first, and anyone affected is told — an organisation’s upcoming outreaches, or the places a volunteer was holding.',
-      'Records of events you actually took part in — that you attended, and reviews written about that work — are kept, with your name removed. They are kept because an organisation’s record of who worked at its clinic is its record too, not only yours, and because other people’s V-Scores are worked out from those same records. Deleting them would quietly change somebody else’s score.',
+      'Anything still ahead of you is cancelled first, and anyone affected is told: an organisation’s upcoming outreaches, or the places a volunteer was holding.',
+      'Records of events you actually took part in, that you attended, and reviews written about that work, are kept, with your name removed. They are kept because an organisation’s record of who worked at its clinic is its record too, not only yours, and because other people’s V-Scores are worked out from those same records. Deleting them would quietly change somebody else’s score.',
     ],
   },
 ];
@@ -83,7 +83,7 @@ export const TERMS_SECTIONS: PolicySection[] = [
   {
     heading: 'What you promise',
     paragraphs: [
-      'That what you tell V-HUB about yourself is true — your name, your profession, your qualifications, and any document you upload.',
+      'That what you tell V-HUB about yourself is true: your name, your profession, your qualifications, and any document you upload.',
       'That when you accept a place, you intend to turn up. If you cannot, you withdraw as early as you can so somebody else can take it.',
       'That you work within what you are actually trained and licensed to do, and that you follow the instructions of the organisation running the outreach.',
     ],
@@ -106,7 +106,7 @@ export const TERMS_SECTIONS: PolicySection[] = [
   {
     heading: 'When an account is stopped',
     paragraphs: [
-      'V-HUB can suspend or close an account that breaks these terms — a false credential, an outreach that does not exist, or treating volunteers or organisers badly.',
+      'V-HUB can suspend or close an account that breaks these terms: a false credential, an outreach that does not exist, or treating volunteers or organisers badly.',
       'A suspension stops what has not happened yet. It never rewrites the past: events you attended stay attended, and reviews already written stay written.',
       'You are told the reason. A suspension can be lifted; a closure cannot.',
     ],

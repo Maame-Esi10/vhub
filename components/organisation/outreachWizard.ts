@@ -387,7 +387,7 @@ export function validateRoles(roles: readonly RoleDraft[]): string | null {
   for (const role of roles) {
     const key = `${role.category ?? 'any'}|${role.minExperienceLevel ?? 'any'}`;
     if (seen.has(key)) {
-      return 'Two roles are identical — combine them.';
+      return 'Two roles are identical. Combine them.';
     }
     seen.add(key);
   }

@@ -163,7 +163,7 @@ export default function Applications() {
           */
           setToast(
             result.penalty
-              ? `Withdrawn. That cost ${Math.abs(result.penalty.points)} V-Score points — you were holding a place. Your score is now ${Math.round(result.penalty.newScore)}.`
+              ? `Withdrawn. That cost ${Math.abs(result.penalty.points)} V-Score points because you were holding a place. Your score is now ${Math.round(result.penalty.newScore)}.`
               : 'Withdrawn.'
           );
         },

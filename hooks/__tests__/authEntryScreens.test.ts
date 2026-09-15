@@ -70,3 +70,47 @@ describe('profile-load failures are explainable', () => {
     expect(source).toContain('setAuthError');
   });
 });
+
+/**
+ * The login dead end (owner-reported 2026-09-14: "I tried to log in. Nothing
+ * happened. No error, no message.").
+ *
+ * THE REAL CAUSE, which was not the one first proposed. The profile rows were
+ * fine; the SQL confirmed both existed. A brand-new volunteer has
+ * `category === null` until the onboarding wizard's last step writes it, so
+ * they are `onboardingIncomplete` by definition the moment they confirm their
+ * email. That branch used to say "anywhere inside (auth) is fine" and return,
+ * which is correct for welcome and for every wizard step and WRONG for login:
+ * login is the screen you are standing on when you sign in, so leaving the
+ * user there means a successful sign-in produces no visible result at all.
+ *
+ * Nothing errored, so nothing was shown. The rule that exists to move a
+ * signed-in user off an entry screen sat twenty lines below and never ran,
+ * because this branch returned first -- an interaction the file's own comment
+ * had recorded without anyone drawing the consequence from it.
+ *
+ * Asserted on the source because the alternative is mounting expo-router.
+ */
+describe('a signed-in volunteer is never stranded on login', () => {
+  const branch = /if \(onboardingIncomplete\) \{[\s\S]*?\n    \}/.exec(source)?.[0] ?? '';
+
+  it('has an onboardingIncomplete branch', () => {
+    expect(branch).not.toBe('');
+  });
+
+  it('pulls them off an entry screen rather than leaving them there', () => {
+    expect(branch).toContain('AUTH_ENTRY_SCREENS');
+    expect(branch).toContain("router.replace('/(auth)/welcome')");
+  });
+
+  it('still excludes welcome, which would otherwise redirect to itself', () => {
+    // welcome IS in AUTH_ENTRY_SCREENS, so without this the redirect loops.
+    expect(branch).toMatch(/atWelcome|'welcome'/);
+  });
+
+  it('leaves the onboarding wizard alone', () => {
+    // The wizard steps are inside (auth) but are NOT entry screens, so the
+    // new condition must not touch them.
+    expect(branch).toContain('onEntryScreen');
+  });
+});

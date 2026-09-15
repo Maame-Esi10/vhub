@@ -32,35 +32,35 @@ export const CREDENTIAL_GUIDELINES: Record<VolunteerCategory, CredentialGuidelin
     icon: 'stethoscope',
     what: 'Your Medical and Dental Council registration certificate, or your current practising certificate.',
     accepted:
-      'It must show your full name, your registration number and a date that has not passed — or the equivalent document from wherever you are registered.',
+      'It must show your full name, your registration number and a date that has not passed, or the equivalent document from wherever you are registered.',
   },
   nurse: {
     icon: 'medical-bag',
     what: 'Your Nursing and Midwifery Council registration certificate, or your PIN card.',
     accepted:
-      'Your full name and registration number must be readable, and the registration must be current — or the equivalent from wherever you are registered.',
+      'Your full name and registration number must be readable, and the registration must be current, or the equivalent from wherever you are registered.',
   },
   midwife: {
     icon: 'baby-face-outline',
     what: 'Your Nursing and Midwifery Council midwifery registration, or your PIN card.',
     accepted:
-      'Your full name and registration number must be readable, and the registration must be current — or the equivalent from wherever you are registered.',
+      'Your full name and registration number must be readable, and the registration must be current, or the equivalent from wherever you are registered.',
   },
   pharmacist: {
     icon: 'pill',
     what: 'Your Pharmacy Council registration certificate or current licence to practise.',
     accepted:
-      'Your full name and registration number must be readable, and it must not have expired — or the equivalent from wherever you are registered.',
+      'Your full name and registration number must be readable, and it must not have expired, or the equivalent from wherever you are registered.',
   },
   student: {
     icon: 'school-outline',
     what: 'Your student identity card, or a letter from your school confirming you are enrolled.',
     accepted:
-      'It must name you, name the school and the programme, and show that you are enrolled now — a card from a year you have finished is not enough on its own.',
+      'It must name you, name the school and the programme, and show that you are enrolled now. A card from a year you have finished is not enough on its own.',
   },
   first_aider: {
     icon: 'bandage',
-    what: 'Your first-aid certificate — Red Cross, St John Ambulance, or the training your employer put you through.',
+    what: 'Your first-aid certificate: Red Cross, St John Ambulance, or the training your employer put you through.',
     accepted:
       'It must name you and the body that trained you, and it must still be within its validity period if it has one.',
   },
@@ -100,7 +100,7 @@ export const CREDENTIAL_GENERAL_RULES: { icon: string; text: string }[] = [
 export const CREDENTIAL_CONSENT_POINTS: string[] = [
   'The document you upload is stored privately. It is not part of your public profile and no volunteer or visitor can reach it.',
   'A V-HUB administrator opens it to check that it is genuine, and an organisation can open it only if you have applied to one of its outreaches.',
-  'It is used to verify who you are and nothing else — never for advertising, never sold, never shared with anyone outside V-HUB.',
+  'It is used to verify who you are and nothing else: never for advertising, never sold, never shared with anyone outside V-HUB.',
   'You can replace it or withdraw it yourself at any time before you are verified, and withdrawing it deletes the file.',
 ];
 
@@ -108,6 +108,6 @@ export const CREDENTIAL_CONSENT_POINTS: string[] = [
 export const ORGANISATION_CONSENT_POINTS: string[] = [
   'Your documents are stored privately. They are not shown on your public profile and volunteers cannot reach them.',
   'Only a V-HUB administrator opens them, and only to decide whether to verify your organisation.',
-  'They are used for that decision and nothing else — never for advertising, never sold, never shared outside V-HUB.',
+  'They are used for that decision and nothing else: never for advertising, never sold, never shared outside V-HUB.',
   'What volunteers see is the outcome: a verified badge, or nothing.',
 ];

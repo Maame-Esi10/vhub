@@ -96,7 +96,7 @@ export default function AdminSources() {
           <Text style={styles.explainText}>
             This is a record, not a feed. Nothing on this list is read by V-HUB, no listing is fetched
             from any of these sources, and no outreach is created from one. It exists so that the
-            sources you would be willing to trust — and the reason each was accepted — are written
+            sources you would be willing to trust, and the reason each was accepted, are written
             down while you still remember them.
           </Text>
         </View>
@@ -114,7 +114,7 @@ export default function AdminSources() {
           <EmptyState
             icon="link-variant"
             title="No sources yet"
-            message="Add the bodies whose public outreach listings you would be willing to trust — a ministry, a teaching hospital, an NGO umbrella, a professional council."
+            message="Add the bodies whose public outreach listings you would be willing to trust: a ministry, a teaching hospital, an NGO umbrella, a professional council."
           />
         ) : (
           <View style={styles.list}>
@@ -230,7 +230,7 @@ export default function AdminSources() {
         icon="link-off"
         tone="destructive"
         title={removing ? `Remove ${removing.name}?` : ''}
-        message="The entry goes, but the record of it — including why it was accepted in the first place — stays in the activity log."
+        message="The entry goes, but the record of it, including why it was accepted in the first place, stays in the activity log."
         confirmLabel="Remove"
         cancelLabel="Keep it"
         busy={remove.isPending}

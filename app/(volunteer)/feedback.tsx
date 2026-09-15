@@ -201,7 +201,7 @@ export default function VolunteerFeedback() {
               <View style={styles.deductions}>
                 <Text style={styles.deductionsTitle}>Score deductions</Text>
                 <Text style={styles.deductionsBody}>
-                  Points taken off your V-Score for something other than a review — cancelling a
+                  Points taken off your V-Score for something other than a review: cancelling a
                   place you had been given, or dropping a day you had committed to inside 24 hours
                   of it. Each one says what it was for. Later events pull your score back up.
                 </Text>
@@ -248,7 +248,7 @@ export default function VolunteerFeedback() {
         }
         message={
           disputing?.type === 'attendance'
-            ? `Tell V-HUB what happened at ${disputing.title}. Anything that helps — whether you scanned the code, who you worked with, when you arrived.`
+            ? `Tell V-HUB what happened at ${disputing.title}. Anything that helps: whether you scanned the code, who you worked with, when you arrived.`
             : `Tell V-HUB why the review of ${disputing?.title ?? 'this event'} is not fair. Both you and the organiser will be told the outcome and the reason.`
         }
         confirmLabel="Send it"
@@ -270,7 +270,7 @@ export default function VolunteerFeedback() {
           multiline
           error={
             attempted && statement.trim().length < 10
-              ? 'Give V-HUB something to go on — a sentence or two at least.'
+              ? 'Give V-HUB something to go on, a sentence or two at least.'
               : undefined
           }
         />
@@ -434,7 +434,7 @@ function ReviewCard({
         >
           <MaterialCommunityIcons name="scale-balance" size={16} color={colors.textSecondary} />
           <Text style={styles.disputeLabel}>
-            {noShow ? 'I was there — dispute this' : 'I think this is unfair'}
+            {noShow ? 'I was there, dispute this' : 'I think this is unfair'}
           </Text>
         </Pressable>
       )}

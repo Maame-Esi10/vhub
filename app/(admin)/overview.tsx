@@ -102,7 +102,7 @@ export default function AdminOverview() {
             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
           </View>
           <Text style={styles.cardBody}>
-            Every admin decision is written here as it is made — who did it, when, what it was about and
+            Every admin decision is written here as it is made: who did it, when, what it was about and
             the reason they gave. The record cannot be edited or deleted, by anyone; a correction is a new
             entry saying what was corrected.
           </Text>
@@ -138,7 +138,7 @@ export default function AdminOverview() {
           </View>
           <Text style={styles.cardBody}>
             Points taken off a volunteer for a cancelled place or a day dropped late. Reversing one
-            rebuilds their score without it and tells them why — the record itself is never deleted.
+            rebuilds their score without it and tells them why. The record itself is never deleted.
           </Text>
         </Pressable>
 
@@ -155,7 +155,7 @@ export default function AdminOverview() {
           </View>
           <Text style={styles.cardBody}>
             Bodies whose public outreach listings V-HUB would be willing to trust, and why each was
-            accepted. A record only — nothing is fetched from any of them.
+            accepted. A record only. Nothing is fetched from any of them.
           </Text>
         </Pressable>
 

@@ -85,7 +85,7 @@ export default function InfoHub() {
           <WeightRow
             label="Availability"
             weight={LAYER1_WEIGHTS.availability}
-            detail="Full points when the event falls in a day and time slot you marked yourself free for. If it runs over several days, you are scored on how many of them you can make — full points once you can cover half or more, and part points below that, so being free for some of a long event is always worth more than none."
+            detail="Full points when the event falls in a day and time slot you marked yourself free for. If it runs over several days, you are scored on how many of them you can make. Full points once you can cover half or more, and part points below that, so being free for some of a long event is always worth more than none."
           />
           <WeightRow
             label="Experience"
@@ -120,7 +120,7 @@ export default function InfoHub() {
           }
         >
           <Text style={styles.body}>
-            Your V-Score is a 0–100 measure of how dependable you are once you&apos;ve committed to an
+            Your V-Score is a 0 to 100 measure of how dependable you are once you&apos;ve committed to an
             event. Organisations see it when they review your application, so it is the main thing
             that builds trust before anyone has met you.
           </Text>

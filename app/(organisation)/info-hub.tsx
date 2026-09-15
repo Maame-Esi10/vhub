@@ -170,7 +170,7 @@ export default function OrganisationInfoHub() {
         >
           <InfoBody>
             After an outreach finishes, you review each volunteer who was accepted: whether they
-            attended, and a 1–5 rating for reliability and (for clinical roles) clinical work.
+            attended, and a 1 to 5 rating for reliability and (for clinical roles) clinical work.
           </InfoBody>
           <InfoBody>
             That review is what moves their V-Score. The new score is mostly their existing history

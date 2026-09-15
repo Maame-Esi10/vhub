@@ -82,7 +82,7 @@ export function DayCommitmentPicker({
       </View>
 
       <Text style={styles.hint}>
-        This runs over {days.length} days. Tick only the ones you can attend — you are counted
+        This runs over {days.length} days. Tick only the ones you can attend. You are counted
         against the days you pick and nothing else.
       </Text>
 

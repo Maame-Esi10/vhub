@@ -149,6 +149,11 @@ describe('validateDays', () => {
   });
 });
 
+/*
+  The range separator is a PLAIN HYPHEN, not an en dash (2026-09-14). Owner's
+  standing rule: no typographic dashes in anything a user can read. Enforced by
+  lib/__tests__/userFacingText.test.ts, which will fail if it is changed back.
+*/
 describe('formatDaySpan', () => {
   it('reads as one date when there is one day', () => {
     expect(formatDaySpan(['2026-10-12'])).toBe('Mon, Oct 12 2026');
@@ -156,7 +161,7 @@ describe('formatDaySpan', () => {
 
   it('reads as a range when the days are consecutive', () => {
     expect(formatDaySpan(['2026-10-12', '2026-10-13', '2026-10-14'])).toBe(
-      'Mon, Oct 12 – Wed, Oct 14 2026 · 3 days'
+      'Mon, Oct 12 - Wed, Oct 14 2026 · 3 days'
     );
   });
 
@@ -203,7 +208,7 @@ describe('formatDaySpan', () => {
 
   it('sorts before formatting, so the order they were added in does not matter', () => {
     expect(formatDaySpan(['2026-10-14', '2026-10-12', '2026-10-13'])).toBe(
-      'Mon, Oct 12 – Wed, Oct 14 2026 · 3 days'
+      'Mon, Oct 12 - Wed, Oct 14 2026 · 3 days'
     );
   });
 

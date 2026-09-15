@@ -151,7 +151,7 @@ export function DayScheduleField({
     <View style={styles.container}>
       <Text style={styles.label}>Days</Text>
       <Text style={styles.hint}>
-        Most outreaches run on one day. Add more if yours runs over several — volunteers then
+        Most outreaches run on one day. Add more if yours runs over several. Volunteers then
         choose which of them they can make.
       </Text>
 
@@ -245,7 +245,7 @@ export function DayScheduleField({
               ? 'This day runs to its own hours.'
               : `This day runs to the event's hours${
                   inheritedLabel(eventStartTime, eventEndTime)
-                    ? ` — ${inheritedLabel(eventStartTime, eventEndTime)}`
+                    ? `, ${inheritedLabel(eventStartTime, eventEndTime)}`
                     : ''
                 }. Set a start or an end below only if it differs.`}
           </Text>

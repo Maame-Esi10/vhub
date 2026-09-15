@@ -229,7 +229,7 @@ async function recordScan(
       cancelled: "You withdrew from this outreach.",
     };
     throw Errors.forbidden(
-      `${explanation[application.status] ?? "Your application is not accepted."} Only confirmed volunteers can check in — speak to the organiser if you think this is wrong.`
+      `${explanation[application.status] ?? "Your application is not accepted."} Only confirmed volunteers can check in. Speak to the organiser if you think this is wrong.`
     );
   }
 

@@ -269,7 +269,7 @@ export default function OrganisationVerification() {
               error={attempted ? (errors.officialEmail ?? undefined) : undefined}
             />
             <Text style={styles.fieldHint}>
-              An address on your own domain if you have one. This is not shown to volunteers — your
+              An address on your own domain if you have one. This is not shown to volunteers. Your
               public enquiries address stays on your profile.
             </Text>
             <Input
@@ -291,7 +291,7 @@ export default function OrganisationVerification() {
 
             <Text style={styles.sectionHeading}>Registration</Text>
             <Text style={styles.sectionHint}>
-              Whatever your organisation actually holds — Registrar-General, the NGO Board, a
+              Whatever your organisation actually holds: Registrar-General, the NGO Board, a
               teaching-hospital affiliation, a district health directorate letter. Name the scheme in
               your own words; there is no fixed list.
             </Text>
@@ -338,7 +338,7 @@ export default function OrganisationVerification() {
             <Text style={styles.sectionHeading}>Documents</Text>
             <Text style={styles.sectionHint}>
               A photo or PDF of each registration certificate or letter. Make sure the text is legible
-              and the whole page is in frame. These are stored privately — only a V-HUB administrator
+              and the whole page is in frame. These are stored privately. Only a V-HUB administrator
               can open them, and only through a link that expires.
             </Text>
 

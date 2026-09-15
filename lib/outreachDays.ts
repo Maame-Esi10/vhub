@@ -248,7 +248,7 @@ export function validateDays(
   }
 
   if (days.length > MAX_OUTREACH_DAYS) {
-    return `That is more than ${MAX_OUTREACH_DAYS} days — check the last date.`;
+    return `That is more than ${MAX_OUTREACH_DAYS} days. Check the last date.`;
   }
 
   if (days.some((day) => !parseCalendarDate(day))) {
@@ -361,7 +361,7 @@ export function formatDaySpan(days: readonly string[]): string {
 
   const consecutive = isConsecutive(sorted);
   if (consecutive) {
-    return `${formatDayShort(first)} – ${formatFullDay(last)} · ${sorted.length} days`;
+    return `${formatDayShort(first)} - ${formatFullDay(last)} · ${sorted.length} days`;
   }
 
   // Named days, then a count of whatever did not fit. The year rides on the

@@ -339,7 +339,7 @@ export default function CreateOutreach() {
                 error instanceof Error ? error.message : error
               );
               setRoleError(
-                "The outreach was saved, but the hours you set for individual days were not. Open it from the dashboard and set them again — every day is currently running to the event's hours."
+                "The outreach was saved, but the hours you set for individual days were not. Open it from the dashboard and set them again. Every day is currently running to the event's hours."
               );
               return;
             }

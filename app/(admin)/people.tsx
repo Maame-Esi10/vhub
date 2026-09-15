@@ -79,7 +79,7 @@ export default function AdminPeople() {
           // click.
           setToast(
             consequences.length > 0
-              ? `Done — ${consequences.join(', ')}.`
+              ? `Done. ${consequences.join(', ')}.`
               : 'Done. Nothing was scheduled, so nothing was cancelled.'
           );
           setPending(null);
@@ -98,7 +98,7 @@ export default function AdminPeople() {
         ]} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>People</Text>
         <Text style={styles.subtitle}>
-          Suspending an account stops what has not happened yet. It never changes the past — attendance
+          Suspending an account stops what has not happened yet. It never changes the past: attendance
           stays recorded, reviews stay written, and V-Scores keep meaning what they meant.
         </Text>
 
@@ -202,7 +202,7 @@ export default function AdminPeople() {
 /** Exactly what this action will do, spelled out before it is taken. */
 function consequenceText(row: ModerationSearchRow, action: 'suspend' | 'ban' | 'reinstate'): string {
   if (action === 'reinstate') {
-    return 'They can post and apply again from now on. Anything cancelled or withdrawn while they were stopped stays that way — the people affected were already told.';
+    return 'They can post and apply again from now on. Anything cancelled or withdrawn while they were stopped stays that way. The people affected were already told.';
   }
 
   const permanence =

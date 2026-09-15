@@ -5330,3 +5330,116 @@ not fail a recorded decision; a network blip must not look like incomplete
 onboarding) was implemented by **discarding the error rather than routing it
 somewhere quieter**. The correct form of "do not fail loudly here" is "record it
 where it can still be read" — never "forget it".
+
+## The login dead end: the first diagnosis was wrong (2026-09-14)
+
+**Worth recording as a method failure, not just a bug.** Login appeared to do
+nothing after a successful registration and confirmation. The first diagnosis
+was that the profile-row bootstrap had failed. The owner ran a query against
+the account and it came back `confirmed: true, profile_exists: true` --
+contradicting that explanation outright, and prompting a second look rather
+than a fix aimed at the wrong thing.
+
+**The real cause.** A volunteer's `volunteer_profiles.category` is null until
+the onboarding wizard's final step writes it, so a volunteer who has just
+confirmed their email is `onboardingIncomplete` by definition. That branch of
+the routing effect read:
+
+```ts
+if (onboardingIncomplete) {
+  if (!inAuthGroup && !atOffline) router.replace('/(auth)/welcome');
+  return;
+}
+```
+
+Correct for welcome and for every wizard step. **Wrong for login**, which is
+the screen you are standing on at the moment you sign in: "leave them where
+they are" means a successful sign-in produces no visible result whatever.
+Nothing errored, so no message appeared either. The rule twenty lines below
+that exists precisely to move a signed-in user off an entry screen never ran,
+because this branch returns first.
+
+**The interaction was already written down.** `AUTH_ENTRY_SCREENS`' own
+docstring said: "A volunteer with incomplete onboarding never reaches this
+check at all -- the onboardingIncomplete branch below returns first." The fact
+was recorded; the consequence was never drawn from it. **A comment that states
+a fact is not the same as a comment that states what the fact costs**, and this
+is the clearest example of that distinction the project has produced.
+
+**It affected every newly registered volunteer, deterministically** -- not an
+edge case, and not dependent on a network failure. Organisations were
+unaffected, because `onboardingIncomplete` is volunteer-only, which is why it
+survived earlier testing on an organisation account.
+
+**Fix.** The branch now also pulls a user off an entry screen, excluding
+welcome (which is the destination, so redirecting from it to itself loops).
+`hooks/__tests__/authEntryScreens.test.ts` asserts all four properties.
+
+**The earlier work was not wasted, and is not a fix aimed at the wrong thing.**
+`authError` addresses a real second gap: a profile load that genuinely fails
+still had no way to speak. It simply was not the cause of this symptom. Both
+are now closed.
+
+## No typographic dashes in user-facing text (2026-09-14)
+
+**63 em and en dashes across 29 files**, in screen copy, empty states, toasts,
+the Info Hub, the privacy policy, the credential guidelines, and two push and
+email templates. Each was rewritten rather than character-swapped: a dash
+joining two independent clauses became a full stop, a dash introducing a list
+became a colon, a parenthetical pair became commas, and ranges became a plain
+hyphen or the word "to".
+
+**The guard is a test, not a convention**, for the same reason the tab bar
+clearance is: prose is written faster than any convention is read, and a dash
+is invisible in review because it looks like correct typography.
+
+**It parses rather than greps, and that mattered.** The same character is fine
+in a JSDoc block explaining a decision and wrong eight lines later in a button
+label. A first attempt used a hand-written comment stripper and produced two
+false positives from JSDoc and four false negatives -- exactly how a guard earns
+a reputation for crying wolf and gets switched off. `scripts/findUserText.js`
+walks the TypeScript AST and inspects only string literals, template literals
+and JSX text, so comments are excluded structurally rather than by pattern. The
+script is shared with `lib/__tests__/userFacingText.test.ts`, so the tool a
+person runs by hand and the test that fails the build can never disagree.
+
+## humanError could not recognise a network failure (2026-09-14)
+
+A volunteer on the onboarding identity step was shown, verbatim:
+
+```
+fetch failed: java.net.UnknownHostException: Unable to resolve host
+"<project>.supabase.co": No address associated with hostname
+```
+
+**The screen was doing the right thing** -- it routes through `humanError()`
+like everything else. The table simply had the wrong two strings in it:
+`'network request failed'` is React Native's OLD wording and `'failed to fetch'`
+is the BROWSER's. Android says **"fetch failed"**, the same two words reversed,
+wrapped around a Java exception class. Neither matched, and the message is short
+and brace-free, so `looksMachineGenerated` passed it through as a perfectly good
+sentence.
+
+**This was the worst possible gap for that function to have**: a network failure
+is the single most common error any mobile app produces, and on Ghanaian mobile
+networks it is routine rather than exceptional.
+
+**Two fixes, and the second is the important one.** The table now covers the
+families (`unable to resolve host`, `unknownhostexception`, `sockettimeout`,
+`econnrefused`, `sslhandshake` and the rest). But a table can only match what
+somebody thought of, so `looksMachineGenerated` now also rejects **any message
+naming a JVM or Android class** -- a dotted path with a capitalised leaf -- which
+means an unrecognised platform exception falls back to the caller's sentence
+instead of being printed at a nurse. A test asserts that prose merely mentioning
+"java" still survives.
+
+## The session refresh timer was never tied to the app being in front (2026-09-14)
+
+`autoRefreshToken: true` was set and nothing else was. There was **no `AppState`
+listener anywhere in the app**, which is the arrangement Supabase documents for
+React Native. Android throttles and eventually kills background timers, so an
+app left in the background comes back holding a token that expired with nothing
+running to renew it, and the failure then surfaces somewhere unrelated to
+authentication. It is also why the pending-confirmation screen only updated
+after a full close and reopen: nothing ran when the app returned to the front,
+so a cold start was the only thing that re-read the session.

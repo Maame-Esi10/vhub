@@ -343,7 +343,7 @@ export default function Schedule() {
                   <View style={styles.eventDot} />
                   <Text style={styles.eventTime}>
                     {startLabel}
-                    {endLabel ? ` – ${endLabel}` : ''}
+                    {endLabel ? ` - ${endLabel}` : ''}
                   </Text>
                   {isCancelled ? (
                     <View style={styles.cancelledPill}>

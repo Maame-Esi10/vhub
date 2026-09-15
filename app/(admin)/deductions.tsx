@@ -75,7 +75,7 @@ export default function AdminDeductions() {
           // moves depends on what was filed after it — an admin who is told
           // only "done" cannot tell a working reversal from a no-op.
           setToast(
-            `Reversed. ${result.pointsReturned} points back — V-Score ${Math.round(result.oldScore)} → ${Math.round(result.newScore)}.`
+            `Reversed. ${result.pointsReturned} points back. V-Score ${Math.round(result.oldScore)} → ${Math.round(result.newScore)}.`
           );
           setPending(null);
           setReason('');
@@ -92,7 +92,7 @@ export default function AdminDeductions() {
       <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
           Every deduction that was not a review: a cancelled place, or a committed day dropped inside
-          24 hours of it. A no-show is not here — that is expressed by the organisation&apos;s review,
+          24 hours of it. A no-show is not here. That is expressed by the organisation&apos;s review,
           so it can only ever be counted once.
         </Text>
         <Text style={styles.intro}>
@@ -147,7 +147,7 @@ export default function AdminDeductions() {
               <>
                 <Text style={styles.sectionHeading}>Reversed ({reversed.length})</Text>
                 <Text style={styles.emptyLine}>
-                  Kept on the record. A reversal cannot itself be undone — re-applying a deduction
+                  Kept on the record. A reversal cannot itself be undone. Re-applying a deduction
                   would be a new decision, with its own reason.
                 </Text>
                 <View style={styles.list}>

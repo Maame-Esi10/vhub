@@ -98,13 +98,13 @@ export default function AdminStats() {
         <Card
           icon="target"
           question="Does the matching work?"
-          value={fillPercent === null ? '—' : `${fillPercent}%`}
+          value={fillPercent === null ? '-' : `${fillPercent}%`}
           unit="of places filled"
           tone="calm"
         >
           <Text style={styles.detail}>
             {data.fillRate
-              ? `${data.fillRate.filled} of ${data.fillRate.total} places across every event that has recruited. Drafts and cancelled events are not counted — an empty draft is not a matching failure.`
+              ? `${data.fillRate.filled} of ${data.fillRate.total} places across every event that has recruited. Drafts and cancelled events are not counted. An empty draft is not a matching failure.`
               : 'No outreach has offered a place yet, so there is nothing to measure.'}
           </Text>
         </Card>
@@ -119,7 +119,7 @@ export default function AdminStats() {
           <NoShowBars trend={data.noShowTrend} />
           <Text style={styles.detail}>
             No-shows recorded per month over the last six. The direction matters more than any single
-            month — a count on its own says nothing about whether the deterrent is working.
+            month. A count on its own says nothing about whether the deterrent is working.
           </Text>
         </Card>
 

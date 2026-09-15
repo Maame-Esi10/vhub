@@ -79,3 +79,54 @@ describe('humanError — a message that is already a sentence is left alone', ()
     expect(humanError(error)).toBe('That code has already been used.');
   });
 });
+
+/**
+ * The exact strings a real Android device produced, kept verbatim.
+ *
+ * These are regression tests for a specific failure: on 2026-09-14 the first
+ * message below was shown to the owner on the onboarding identity step, Java
+ * class, Supabase hostname and all. The screen was already routing through
+ * humanError; the table simply had React Native's OLD wording ('network
+ * request failed') and the BROWSER's ('failed to fetch'), and Android says
+ * neither.
+ */
+describe('network failures never reach a user raw', () => {
+  const REAL_DEVICE_MESSAGES = [
+    'fetch failed: java.net.UnknownHostException: Unable to resolve host "hgjorvhbwlrjawbwazky.supabase.co": No address associated with hostname',
+    'java.net.SocketTimeoutException: timeout',
+    'javax.net.ssl.SSLHandshakeException: Chain validation failed',
+    'Network request failed',
+    'TypeError: Failed to fetch',
+    'java.net.ConnectException: Failed to connect to /10.0.2.2:54321',
+  ];
+
+  it.each(REAL_DEVICE_MESSAGES)('turns %s into a sentence', (message) => {
+    const result = humanError(new Error(message), 'FALLBACK');
+
+    // Nothing from the machine survives.
+    expect(result).not.toContain('java');
+    expect(result).not.toContain('Exception');
+    expect(result).not.toContain('supabase.co');
+    expect(result).not.toContain('10.0.2.2');
+    // And it is a real sentence, not the generic fallback.
+    expect(result).not.toBe('FALLBACK');
+    expect(result.endsWith('.')).toBe(true);
+  });
+
+  it('falls back rather than printing an unrecognised Java exception', () => {
+    // The families above cannot cover everything, so the second defence is
+    // that ANY message naming a Java class is treated as machine output.
+    const result = humanError(
+      new Error('java.lang.IllegalStateException: something nobody has seen before'),
+      'Could not save. Please try again.'
+    );
+    expect(result).toBe('Could not save. Please try again.');
+  });
+
+  it('does not swallow an ordinary sentence that merely mentions java', () => {
+    // The guard keys on a CLASS NAME (a dotted path with a capitalised leaf),
+    // not the bare word, so prose survives.
+    const result = humanError(new Error('Your java certificate has expired'), 'FALLBACK');
+    expect(result).toBe('Your java certificate has expired');
+  });
+});

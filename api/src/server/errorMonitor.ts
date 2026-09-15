@@ -127,7 +127,7 @@ export function observeError(observed: ObservedError): void {
         ? `Also:     ${decision.alsoReporting} more of the same since the last alert.`
         : null,
       "",
-      "Nothing else about the request is included here on purpose — no request",
+      "Nothing else about the request is included here on purpose: no request",
       "body, no identifiers. The matching server log line carries the rest.",
       "",
       "No more alerts about this particular failure will be sent for the next",

@@ -106,7 +106,7 @@ export default function AdminSettings() {
         <View style={styles.note}>
           <Text style={styles.noteText}>
             Admin access is not something the app can give or take away. There is no invite, no promotion
-            screen and no admin option at sign-up — the role is set directly on the database, which is what
+            screen and no admin option at sign-up. The role is set directly on the database, which is what
             stops anyone granting it to themselves.
           </Text>
         </View>

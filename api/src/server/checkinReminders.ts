@@ -194,7 +194,7 @@ export async function sendCheckinReminders(): Promise<CheckinReminderResult> {
         title: "Remember to check in",
         body: `You're volunteering at ${outreach.title} today${
           outreach.location_name ? ` at ${outreach.location_name}` : ""
-        }. Scan the organiser's check-in code before you leave — it's what records your attendance.`,
+        }. Scan the organiser's check-in code before you leave. It is what records your attendance.`,
         outreachId,
         // `stage` + `outreachDayId` are the dedupe key read back above. Keep
         // both in step: nothing else distinguishes this from the 24-hour

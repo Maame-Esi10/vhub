@@ -190,7 +190,7 @@ export default function AdminOrganisationDetail() {
             <Text style={styles.sectionTitle}>Your decision</Text>
             <Text style={styles.decisionHint}>
               The reason is required either way. If you reject, this exact text is sent to the
-              organisation so it knows what to fix — write it to be read by them, not by us.
+              organisation so it knows what to fix. Write it to be read by them, not by us.
             </Text>
             <Input
               label="Reason"

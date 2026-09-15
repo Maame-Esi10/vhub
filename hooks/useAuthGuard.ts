@@ -16,7 +16,11 @@ import type { Profile, VolunteerProfile } from '@/types/database';
  * excluded so a mid-onboarding session doesn't get yanked into the tabs
  * before the volunteer/organisation profile is complete. (A volunteer with
  * incomplete onboarding never reaches this check at all — the
- * onboardingIncomplete branch below returns first.)
+ * onboardingIncomplete branch below returns first, and handles the entry
+ * screens itself. That interaction was recorded here long before anyone drew
+ * the consequence from it: because this check was unreachable for such a
+ * volunteer, LOGIN had no rule moving them off it, and signing in did nothing
+ * at all. Both branches must therefore keep handling the entry screens.)
  */
 const AUTH_ENTRY_SCREENS = new Set(['welcome', 'login', 'register']);
 
@@ -428,9 +432,30 @@ export function useAuthGuard() {
     const onboardingIncomplete = profile.role === 'volunteer' && volunteerProfile?.category == null;
 
     if (onboardingIncomplete) {
-      // Anywhere inside (auth) is fine — welcome, login, register, and every
-      // wizard step. Only pull them out of the root or a tab group.
-      if (!inAuthGroup && !atOffline) {
+      /*
+        LOGIN AND REGISTER ARE NOT RESTING PLACES, AND THAT WAS THE BUG
+        (owner-reported 2026-09-14: "I tried to log in. Nothing happened.").
+
+        This used to read "anywhere inside (auth) is fine" and leave the user
+        exactly where they were. For the wizard steps and welcome that is
+        right. For LOGIN it is not: login is the screen you are standing on at
+        the moment you sign in, so "leave them alone" means the successful
+        sign-in produces no visible result whatever. Nothing errored, so no
+        message was shown either.
+
+        It affected every newly registered volunteer, deterministically:
+        `category` is null until the wizard's final step writes it, so a
+        volunteer who has just confirmed their email is onboardingIncomplete by
+        definition. The rule below that exists to move a signed-in user off an
+        entry screen never ran, because this branch returns before it.
+
+        WELCOME IS EXCLUDED from the pull, and must stay excluded: it is the
+        destination, so redirecting from it to itself is an infinite loop.
+      */
+      const onEntryScreen = inAuthGroup && !!authScreen && AUTH_ENTRY_SCREENS.has(authScreen);
+      const atWelcome = authScreen === 'welcome';
+
+      if ((!inAuthGroup && !atOffline) || (onEntryScreen && !atWelcome)) {
         router.replace('/(auth)/welcome');
       }
       return;

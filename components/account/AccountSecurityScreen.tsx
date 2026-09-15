@@ -483,7 +483,7 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
                   is destroyed, and you will not be able to sign in again.
                 </Text>
                 <Text style={styles.dangerBody}>
-                  Events you actually took part in stay on record — that you attended, and reviews
+                  Events you actually took part in stay on record: that you attended, and reviews
                   written about that work. An organisation’s record of who worked at its clinic is
                   its record too, not only yours, so it is kept without your name on it.
                 </Text>
