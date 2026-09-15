@@ -5,30 +5,41 @@
  * never stretched (callers must resize with resizeMode="contain" and equal
  * width/height so the aspect ratio stays locked).
  */
-export type LogoVariant = 'hero' | 'heroCompact' | 'medium' | 'small';
+export type LogoVariant = 'hero' | 'medium' | 'small';
 
 const WIDTH_RATIO: Record<LogoVariant, number> = {
-  hero: 0.32, // the mark ALONE on the dark ground — nothing else to share with
   /*
-    The mark on the FULL splash, where it sits above the wordmark, the title
-    and the subtitle. It is smaller than `hero` and that is the whole point:
-    at 0.32 it was about three times the height of the wordmark directly under
-    it, so it dominated the screen and crowded the text block instead of
-    introducing it. 0.22 puts it at roughly twice the wordmark, which reads as
-    a lockup rather than a logo with captions.
+    THE SPLASH MARK, one size for BOTH splash variants (2026-09-15).
 
-    `hero` is deliberately untouched — on the returning-user splash the mark is
-    the only thing on screen, has nothing to be out of proportion with, and the
-    owner approved it as it is.
+    There used to be a second, smaller `heroCompact` (0.22) for the full
+    splash, on the reasoning -- recorded here at the time -- that at 0.32 the
+    mark "dominated the screen and crowded the text block instead of
+    introducing it".
+
+    THAT WAS TRUE OF THE OLD COMPOSITION AND IS NOT TRUE OF THIS ONE, which is
+    why the constant is gone rather than merely unused. The crowding came from
+    a flex column with a similar gap between every element: at 0.32 the mark
+    sat a few pixels above a wordmark it was three times the height of, and the
+    text had nowhere to be. The splash is now a lockup (mark + wordmark, 4px
+    apart) with a deliberate 36px boundary before the text block, so the mark
+    is no longer adjacent to the thing it was out of proportion with.
+
+    Two sizes also had a cost the note did not anticipate: the mark-only splash
+    and the full splash showed the mark at different sizes in different places,
+    so the app's two loading screens read as two screens from two different
+    apps (owner, 2026-09-15). One constant is what makes them agree.
+
+    0.32 rather than a compromise value, because the mark-only screen is the
+    one the owner approved and nothing there should shrink. If the full splash
+    reads as crowded on a small handset, this single number is the dial.
   */
-  heroCompact: 0.22,
+  hero: 0.32,
   medium: 0.09, // auth headers (welcome, login, register)
   small: 0.055, // in-app top bar / nav header
 };
 
 const CLAMP: Record<LogoVariant, [min: number, max: number]> = {
   hero: [96, 160],
-  heroCompact: [72, 104],
   medium: [32, 40],
   small: [20, 26],
 };

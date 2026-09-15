@@ -45,8 +45,26 @@ const queryClient = new QueryClient({
 
 configureOnlineManager();
 
-/** Minimum time the JS splash stays up, even if fonts/session resolve sooner. */
+/*
+  Minimum time the JS splash stays up, even if fonts and the session resolve
+  sooner -- and it depends on WHICH splash, because the two have different
+  amounts to say (owner, 2026-09-15: "I can barely read what is on it").
+
+  The full splash now carries a wordmark, a two-clause tagline and an
+  explaining sentence: about twenty words. At 1500ms a new user saw it, could
+  not finish it, and it was gone -- which is worse than not showing it, because
+  the app looks like it flashed something at you.
+
+  The mark-only splash has nothing to read. Holding it longer would be a
+  deliberate delay in front of a returning volunteer who just wants the app, so
+  it keeps the old value.
+
+  Neither is a maximum. `ready` also waits on fonts and the session, so a slow
+  cold start still takes as long as it takes; this only stops a fast one
+  blinking.
+*/
 const MIN_SPLASH_DISPLAY_MS = 1500;
+const MIN_INTRO_SPLASH_DISPLAY_MS = 3200;
 
 /*
  * The native OS splash screen (configured via the expo-splash-screen plugin in
@@ -102,9 +120,14 @@ function RootNavigator() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => setMinDisplayElapsed(true), MIN_SPLASH_DISPLAY_MS);
+    // Waits for `returningUser` because that is what decides which splash is
+    // shown, and therefore how long it needs to be up. Starting a timer before
+    // the answer arrives would use the wrong duration on every cold start.
+    if (returningUser === null) return;
+    const hold = returningUser ? MIN_SPLASH_DISPLAY_MS : MIN_INTRO_SPLASH_DISPLAY_MS;
+    const timer = setTimeout(() => setMinDisplayElapsed(true), hold);
     return () => clearTimeout(timer);
-  }, []);
+  }, [returningUser]);
 
   const ready = (fontsLoaded || !!fontError) && !authLoading && minDisplayElapsed;
 

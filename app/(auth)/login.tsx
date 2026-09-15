@@ -18,6 +18,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
+import { APP_TAGLINE } from '@/constants/brand';
 import { useSignIn } from '@/hooks';
 import { useAuthStore } from '@/stores/authStore';
 import { humanErrorOrNull } from '@/lib/errorMessage';
@@ -123,7 +124,7 @@ export default function Login() {
               />
             </View>
             <Text style={styles.wordmark}>VHub</Text>
-            <Text style={styles.tagline}>Virtual Health Unified Bridge</Text>
+            <Text style={styles.tagline}>{APP_TAGLINE}</Text>
           </View>
 
           <Text style={styles.title}>Welcome back</Text>

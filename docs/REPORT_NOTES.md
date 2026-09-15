@@ -5484,3 +5484,94 @@ mechanism to notice when something else changes around it - which is exactly
 when the consequence bites. Three of this project's standing guards
 (`tabBarClearance.test.ts`, `authEntryScreens.test.ts`, `userFacingText.test.ts`)
 exist because a correct comment was not enough.
+
+## The splash becomes a composition (2026-09-15)
+
+**The fault was spacing, and it was the Profile screen's fault repeated.** The
+splash was a flex column of four things -- mark, wordmark, title, subtext --
+with a similar gap between each, and a spinner floating below them. Four evenly
+spaced elements are four elements, not a design. When the space BETWEEN groups
+equals the space INSIDE them, nothing reads as grouped, which is exactly the
+diagnosis the owner made about the Profile screen a day earlier and made again
+here unprompted.
+
+**The composition now states its own grouping:**
+
+- Mark and wordmark sit **4px** apart. One lockup, read as a single object.
+- **36px** of air before the tagline. The group boundary, and it must be much
+  larger than the gap above it or the lockup dissolves back into a list.
+- **8px** between tagline and intro sentence, because those two are one group.
+- The spinner is pinned near the bottom, far from everything, so it reads as
+  machinery rather than as a fifth line of the composition.
+
+**Placement is 42% of screen height, not 50%.** A composition centred on the
+exact middle of a tall screen reads as adrift, because the eye takes the
+optical centre to sit a little above the mathematical one.
+
+**ONE mark size now serves both splash variants, and that reverses a recorded
+decision.** `heroCompact` (0.22) existed because at 0.32 the mark "dominated the
+screen and crowded the text block" -- true of the old flex column, where the
+mark sat a few pixels above a wordmark it was three times the height of. It is
+not true of a composition with a 36px boundary before the text. Two sizes also
+had a cost the original note did not anticipate: the mark-only splash and the
+full splash drew the mark at different sizes in different places, so the app's
+two loading screens read as two screens from two different apps. The constant
+was deleted rather than left unused.
+
+**Decoration came from a dependency that was already there.** `react-native-svg`
+is in the project for the check-in QR code, so real gradients were available
+without a gated dependency change: a vertical gradient lifting the middle of
+the field toward navy, and a radial glow behind the mark in the mark's own red
+at 22%. The alternative -- stacked translucent discs, the technique the drawn
+illustrations use -- bands visibly at this size, because a 300px halo built
+from four discs has four edges in it.
+
+**The hold now depends on which splash is showing.** 1500ms was fine for a
+wordmark and became wrong the moment the screen carried about twenty words: a
+new user saw it, could not finish it, and it was gone, which is worse than not
+showing it because the app looks like it flashed something. The intro splash
+holds 3200ms; the mark-only splash keeps 1500ms, because holding a returning
+volunteer in front of a screen with nothing to read is a deliberate delay.
+
+**Accepted limitation:** the native splash (app.json) can only draw a flat
+colour and a centred image, so the glow appears and the mark rises about 3% of
+the screen height at the native-to-JS handover. `imageWidth` was raised from
+110 to 125 to match the JS mark. Expo's splash config has no vertical offset,
+so the residual shift cannot be removed -- but it is a fraction of the jump it
+replaces, which was a size change AND a position change.
+
+## Brand strings get one home (2026-09-15)
+
+`constants/brand.ts` holds the name, the tagline and the intro sentence,
+because they had already drifted: the splash said "Volunteer Medical Outreach"
+over "Connecting compassionate volunteers with communities in need of medical
+care" while the login screen said "Virtual Health Unified Bridge" -- two
+different descriptions of the same product, on two screens a new user sees
+within seconds of each other.
+
+**The two lines do different jobs and copy added later must keep them apart.**
+`APP_TAGLINE` is what VHub IS: two short clauses at display weight under the
+wordmark. `APP_INTRO` is what VHub DOES: a full sentence, quieter and smaller.
+A tagline that explains is not a tagline, and an explanation compressed to
+tagline length explains nothing.
+
+## The carousel loses a slide and gains a test (2026-09-15)
+
+Cut from three slides to two. The removed first slide made the same promise as
+the one after it in weaker words, and three screens of copy before a Register
+button is two screens more than anybody reads.
+
+**The interesting part is what the cut exposed.** The bounce rule -- reverse at
+each end rather than rewind, so every move is one slide wide and can travel at
+a constant readable speed -- lived inline in two callbacks, where the only way
+to check it was to watch the screen for twelve seconds. Asked whether the dots,
+the auto-advance and the reversal still behaved at two slides, there was no way
+to answer except by reasoning out loud.
+
+It is now eight lines in `lib/carousel.ts` with no React in them, and
+`lib/__tests__/carousel.test.ts` walks a two-slide carousel through a full
+cycle. **With two slides every slide is an end**, which is precisely the case
+worth having covered, and the tests confirm it ping-pongs 0,1,0,1 without ever
+producing an out-of-range index. The dots needed no test: `PagerDots` renders
+`SLIDES.length` of them and interpolates each off the scroll position, so it is
+correct for any count by construction.

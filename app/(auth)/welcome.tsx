@@ -21,6 +21,7 @@ import { Button, SplashView } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { useSignOut } from '@/hooks';
+import { directionAfterSettle, nextCarouselIndex } from '@/lib/carousel';
 import { useAuthStore } from '@/stores/authStore';
 
 interface Slide {
@@ -32,12 +33,19 @@ interface Slide {
 // Slide order below matches the active-dot position seen in the Figma
 // exports (design-refs/Onboarding-2.png -> Onboarding-1.png -> Onboarding.png),
 // which is the definitive sequence signal (filename suffixes are not in order).
+//
+// CUT TO TWO (owner, 2026-09-15). The first slide, "Lend a Hand, Lift a Heart",
+// was removed: it made the same promise as the one after it in weaker words,
+// and three screens of copy before a Register button is two screens more than
+// anybody reads. The carousel machinery is count-agnostic -- the dots are
+// generated from SLIDES.length and the auto-advance bounces off both ends by
+// arithmetic rather than by a hard-coded last index -- so nothing below this
+// needed to change. It does assume at least two: with one slide the bounce has
+// nowhere to go.
+//
+// assets/images/onboarding-1.jpg is left in the repo but is no longer
+// require()d, so it is not bundled. Putting the slide back is two edits.
 const SLIDES: Slide[] = [
-  {
-    key: 'onboarding-1',
-    headline: 'Lend a Hand, Lift a Heart',
-    subtext: "Step into a community that brings care and support where it's needed most",
-  },
   {
     key: 'onboarding-2',
     headline: 'Healing begins with a hand held.',
@@ -51,7 +59,7 @@ const SLIDES: Slide[] = [
 ];
 
 // Each key must have a matching file under assets/images/ — require() paths
-// are static, so the app will fail to bundle until all three exist.
+// are static, so the app will fail to bundle until every one exists.
 //
 // ALL THREE ARE JPEG, AND THAT IS PART OF THE SMOOTHNESS FIX, NOT HOUSEKEEPING.
 // Slides 1 and 2 were photographs saved as PNG, 2.3MB and 2.2MB. PNG is
@@ -62,7 +70,6 @@ const SLIDES: Slide[] = [
 // carousel was released while its own images were still downloading. The three
 // together are now ~530KB.
 const SLIDE_IMAGES: Record<string, ImageSourcePropType> = {
-  'onboarding-1': require('../../assets/images/onboarding-1.jpg'),
   'onboarding-2': require('../../assets/images/onboarding-2.jpg'),
   'onboarding-3': require('../../assets/images/onboarding-3.jpg'),
 };
@@ -130,7 +137,7 @@ const MAX_GLIDE_STRETCH = 1.6;
 const PREFETCH_TIMEOUT_MS = 1500;
 
 /**
- * Warms the image cache for all three slides before the carousel renders.
+ * Warms the image cache for every slide before the carousel renders.
  *
  * These are `require()`d assets, which behave very differently by build:
  * in a production bundle they resolve to a local file and decode almost
@@ -287,10 +294,15 @@ export default function Welcome() {
    * what makes a constant, readable speed possible at all. The alternative —
    * a true infinite loop — means cloning the first and last slides and silently
    * teleporting the offset when they come into view, which is a lot of
-   * machinery and one more thing to get wrong, for three slides that the user
+   * machinery and one more thing to get wrong, for a couple of slides the user
    * sees once.
+   *
+   * The arithmetic itself lives in lib/carousel.ts so it can be tested at any
+   * slide count -- see lib/__tests__/carousel.test.ts, which walks a two-slide
+   * carousel through a full cycle. With two slides every slide is an end, which
+   * is the case worth having covered.
    */
-  const directionRef = useRef(1);
+  const directionRef = useRef<1 | -1>(1);
 
   const pauseAutoplay = useCallback(() => {
     if (autoplayTimer.current) {
@@ -302,12 +314,9 @@ export default function Welcome() {
   const startAutoplay = useCallback(() => {
     pauseAutoplay();
     autoplayTimer.current = setInterval(() => {
-      let next = activeIndexRef.current + directionRef.current;
-      if (next >= SLIDES.length || next < 0) {
-        directionRef.current *= -1;
-        next = activeIndexRef.current + directionRef.current;
-      }
-      glideTo(next);
+      const step = nextCarouselIndex(activeIndexRef.current, directionRef.current, SLIDES.length);
+      directionRef.current = step.direction;
+      glideTo(step.index);
     }, AUTOPLAY_INTERVAL_MS);
   }, [pauseAutoplay, glideTo]);
 
@@ -333,8 +342,7 @@ export default function Welcome() {
       activeIndexRef.current = index;
       // Carry on AWAY from whichever end the user landed on, rather than
       // marching them straight back into the wall they just swiped up against.
-      if (index >= SLIDES.length - 1) directionRef.current = -1;
-      else if (index <= 0) directionRef.current = 1;
+      directionRef.current = directionAfterSettle(index, directionRef.current, SLIDES.length);
     },
     [width]
   );
