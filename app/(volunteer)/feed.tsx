@@ -11,7 +11,7 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar, EmptyState, ErrorState, FilterChips, ListSkeleton, SelectField, ModerationBanner } from '@/components/ui';
+import { Avatar, EmptyState, ErrorState, FilterChips, ListSkeleton, SelectField, ModerationBanner, HintRow } from '@/components/ui';
 import type { FilterChipOption, SelectOption } from '@/components/ui';
 import { MatchBreakdownSheet, OutreachFeedCard } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
@@ -165,6 +165,31 @@ export default function Feed() {
         </Pressable>
       </View>
 
+      {/*
+        THE TWO THINGS NOBODY FINDS ON THEIR OWN. A volunteer had no way of
+        knowing that the skills on their profile decide what this list shows,
+        so a thin profile read as a quiet platform rather than a fixable
+        setting -- and nobody opens the Info Hub unprompted, so the screen
+        explaining clinical versus support reached only the people who least
+        needed it.
+      */}
+      <View style={styles.hints}>
+        <HintRow
+          icon="tune-variant"
+          text="Your skills and availability shape these matches."
+          actionLabel="Edit profile"
+          accessibilityLabel="Edit your profile to change what you are matched with"
+          onPress={() => router.push('/(volunteer)/edit-profile')}
+        />
+        <HintRow
+          icon="help-circle-outline"
+          text="Clinical or support? How scores work?"
+          actionLabel="Info Hub"
+          accessibilityLabel="Open the Info Hub"
+          onPress={() => router.push('/(volunteer)/info-hub')}
+        />
+      </View>
+
       <View style={styles.filters}>
         <SelectField
           label="Region"
@@ -287,6 +312,7 @@ export default function Feed() {
 }
 
 const styles = StyleSheet.create({
+  hints: { paddingHorizontal: spacing.xl, gap: spacing.sm, marginBottom: spacing.base },
   container: {
     flex: 1,
     backgroundColor: colors.background,

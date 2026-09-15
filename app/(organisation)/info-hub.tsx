@@ -4,15 +4,13 @@ import {
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  InfoBandRow,
+import { InfoBandRow,
   InfoBody,
   InfoCallout,
   InfoSection,
   InfoSubheading,
   InfoWeightRow,
-  ScreenHeader,
-} from '@/components/ui';
+  ScreenHeader, GlanceGrid, RoleTypeExplainer } from '@/components/ui';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { LAYER1_WEIGHTS } from '@/lib/matching/layer1';
 import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS } from '@/lib/vscore';
@@ -43,9 +41,37 @@ export default function OrganisationInfoHub() {
       <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
         <Text style={styles.title}>How VHub works</Text>
         <Text style={styles.intro}>
-          VHub ranks and scores the volunteers who apply to your outreaches. Here is exactly what
-          those numbers mean, so you can weigh them properly against your own judgement.
+          VHub ranks the volunteers who apply. Here is what the numbers mean, so you can weigh them
+          against your own judgement.
         </Text>
+
+        {/*
+          THE MAP, BEFORE THE DETAIL. Every section below is collapsed, so
+          without this the screen is a table of contents written as furniture.
+        */}
+        <GlanceGrid
+          items={[
+            { icon: 'target', term: 'Match score', meaning: 'How well a volunteer fits this event' },
+            { icon: 'shield-check-outline', term: 'V-Score', meaning: 'How dependable they have been' },
+            { icon: 'stethoscope', term: 'Clinical role', meaning: 'Hands-on care. Needs verification' },
+            { icon: 'account-group-outline', term: 'Support role', meaning: 'Runs the event. Open to all' },
+          ]}
+        />
+
+        {/*
+          FIRST AND OPEN, because this is the distinction an organisation gets
+          wrong in the costliest direction: ticking "support" to stop the
+          verification gate blocking applicants takes the credential check off
+          work that needed it.
+        */}
+        <InfoSection
+          icon="compare-horizontal"
+          title="Clinical or support?"
+          subtitle="Choose by what the work is"
+          defaultOpen
+        >
+          <RoleTypeExplainer audience="organisation" />
+        </InfoSection>
 
         <InfoSection
           icon="target"

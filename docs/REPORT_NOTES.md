@@ -5575,3 +5575,106 @@ worth having covered, and the tests confirm it ping-pongs 0,1,0,1 without ever
 producing an out-of-range index. The dots needed no test: `PagerDots` renders
 `SLIDES.length` of them and interpolates each off the scroll position, so it is
 correct for any count by construction.
+
+## Gemini gets a second, more useful job (2026-09-15)
+
+**What Layer 2 actually does, and how little it changes.** `gemini.ts` answers
+one question for the matcher: are these two skill strings the same skill?
+"venipuncture" and "blood draw", yes. The payload is pairs of skill strings and
+nothing else.
+
+**In practice it almost never fires usefully, and the reason is structural.**
+Both sides pick from the same fixed vocabulary in `constants/skills.ts` --
+seventy-five entries, closed list, no free text anywhere. An organisation
+cannot ask for "blood draw", because it is not an option; it picks
+"Venipuncture" from the list, and so does the volunteer. Literal comparison
+therefore already catches every real overlap, and Layer 2 spends quota
+confirming that "Venipuncture" equals "Venipuncture". It earns its place only
+against `RETIRED_SKILLS` and against rows written before the vocabulary
+settled. **It is kept because it costs nothing when it agrees and is the
+documented fallback path, not because it moves scores.**
+
+**No personally identifying data reaches Google, and the policy already says
+so.** The prompt carries skill strings and the fixed vocabulary. No name, no
+email, no id, no free text about a person. `constants/policy.ts` already
+carried an accurate paragraph -- it needed no correction.
+
+**The genuinely useful job was the opposite one.** Not "are these the same?"
+but "given what somebody just wrote, which of our skills do they mean?" An
+organisation typing "breast cancer screening" finds nothing by search, because
+"breast cancer" is not a skill and never will be, while clinical breast
+examination, breast self-examination teaching and referral coordination all sit
+in the list unfound. That is a gap no keyword search can close.
+
+`server/geminiSkills.ts` + `/api/skill-suggest` do that, with three rules
+enforced in code rather than trusted to the model: the reply is matched back
+against `ALL_SKILLS` and anything invented is dropped; it RANKS rather than
+filters, so the full list stays browsable underneath; and it never applies
+anything. One call per press, never per keystroke, on a 10/min bucket.
+
+**Unavailable is a 200 with an empty array, not an error.** No key, timeout,
+quota gone and nothing relevant are the same answer to a screen: show the
+picker it was going to show anyway.
+
+## Prompting beats scoring for thin skill profiles (2026-09-15)
+
+Somebody who ticks three skills is usually not less capable than somebody who
+ticks twenty. They read the list, recognised the three they would say out loud,
+and stopped. The rest goes unticked because nothing prompted them.
+
+`SKILL_AFFINITIES` in `constants/skills.ts` holds the sets that genuinely
+travel together at a Ghanaian outreach -- the screening table, the front desk,
+the needle set, the maternal set. It needs no Gemini, works offline, spends no
+quota and cannot invent anything.
+
+**The first draft named nine skills that do not exist** ("Crowd control",
+"Immunisation", "Pharmacy dispensing" and others), because it was written from
+memory rather than from the file. `companionSkills` drops unknown entries,
+which is correct at runtime and is exactly what hid the mistake -- the feature
+"worked" while a third of the table was dead. `constants/__tests__/
+skillAffinities.test.ts` now asserts every suggestion exists in the live
+vocabulary.
+
+## Clinical and support stop meaning verified and unverified (2026-09-15)
+
+Both words had only ever appeared beside verification, which taught everyone
+that clinical means verified and support means unverified. It does not.
+Clinical is hands-on care; support is what makes the event run; verification is
+a CONSEQUENCE of the first, never its definition.
+
+**Two real costs.** A verified nurse reads "support" as beneath her and never
+applies, when support roles are where an extra pair of trained hands is most
+useful. And an organisation ticks "support" to stop the gate blocking
+applicants, taking the credential check off work that needed it.
+
+**It is a diagram, not a paragraph.** `RoleTypeExplainer` puts the two side by
+side with four examples each -- a comparison is the thing a paragraph is worst
+at. The verification line sits UNDERNEATH both columns rather than inside the
+clinical one, because attaching it to that column is how the misreading was
+taught in the first place.
+
+**Placed before the choice is made**, not after: the volunteer's first
+onboarding step, and `RoleBuilder`, which is the control where an organisation
+picks role type.
+
+## The Info Hubs get a map (2026-09-15)
+
+Both hubs were a stack of collapsed sections, which is a table of contents
+written as furniture: to find out whether the screen answered your question you
+had to open things. Somebody unsure what they wanted opened nothing and left.
+
+`GlanceGrid` names every idea on the screen in two words and a handful, so the
+decision to keep reading takes two seconds. It is deliberately **not
+tappable**: it makes no navigation promise it would have to keep, and the
+sections it describes are directly underneath.
+
+**Nobody visits either hub unprompted**, which made the placement the real
+problem rather than the content. `HintRow` puts one quiet line on each home
+screen. Not a card, which would compete with the outreaches the screen exists
+for, and not dismissible, which needs somewhere to remember the dismissal and
+hands the least engaged user a way to remove the thing aimed at them. One line
+survives being seen fifty times, which is the test a permanent hint has to pass.
+
+The volunteer feed carries a second line, because nothing told a volunteer that
+the skills on their profile decide what the feed shows them -- so a thin profile
+read as a quiet platform rather than a fixable setting.

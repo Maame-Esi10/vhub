@@ -4,11 +4,18 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Input, OnboardingStepFooter, OnboardingStepHeader } from '@/components/ui';
+import {
+  Button,
+  Input,
+  OnboardingStepFooter,
+  OnboardingStepHeader,
+  RoleTypeExplainer,
+} from '@/components/ui';
 import { SkillPicker, type SkillGroup } from '@/components/onboarding/SkillPicker';
 import { colors, fontFamily, spacing } from '@/constants/theme';
-import { SKILL_CATEGORIES } from '@/constants/skills';
+import { SKILL_CATEGORIES, companionSkills } from '@/constants/skills';
 import { useOnboardingStore } from '@/stores/onboardingStore';
+import { SkillSuggestBox } from '@/components/skills/SkillSuggestBox';
 
 const GROUPS: SkillGroup[] = SKILL_CATEGORIES.map((category) => ({
   title: category.name,
@@ -22,6 +29,7 @@ export default function OnboardingSkills() {
   const initialSkillTags = useOnboardingStore((state) => state.skillTags);
   const [selected, setSelected] = useState<Set<string>>(new Set(initialSkillTags));
   const [query, setQuery] = useState('');
+  const [suggested, setSuggested] = useState<string[]>([]);
 
   // Opens on the category the volunteer already has something in, so returning
   // to this step shows their own answers rather than the first card.
@@ -33,13 +41,54 @@ export default function OnboardingSkills() {
   });
 
   const groups = useMemo(() => {
+    /*
+      RECOMMENDED GOES ON TOP; NOTHING IS TAKEN AWAY. The nine real categories
+      follow untouched, so one sentence can never narrow what this volunteer is
+      able to find -- and their skills are what the matcher reads, so a
+      narrowed profile is a narrowed feed for as long as it stands.
+
+      It also respects the search: a recommendation that does not match what is
+      being typed would sit at the top contradicting the query.
+    */
     const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return GROUPS;
-    return GROUPS.map((group) => ({
-      ...group,
-      data: group.data.filter((skill) => skill.toLowerCase().includes(trimmed)),
-    })).filter((group) => group.data.length > 0);
-  }, [query]);
+    const base = trimmed
+      ? GROUPS.map((group) => ({
+          ...group,
+          data: group.data.filter((skill) => skill.toLowerCase().includes(trimmed)),
+        })).filter((group) => group.data.length > 0)
+      : GROUPS;
+
+    const shortlist = trimmed
+      ? suggested.filter((skill) => skill.toLowerCase().includes(trimmed))
+      : suggested;
+
+    /*
+      COMPANIONS NEED NO GEMINI. Somebody who ticks three skills is usually not
+      less capable than somebody who ticks twenty -- they read the list,
+      recognised the three they would say out loud, and stopped. The rest goes
+      unticked because nothing prompted them. constants/skills.ts holds the
+      sets that genuinely travel together at an outreach, so this works
+      offline, spends no quota and cannot invent anything.
+
+      Gemini's shortlist comes first when there is one: it read what this
+      person actually wrote, which is better evidence than what they have
+      ticked so far.
+    */
+    const companions = companionSkills(Array.from(selected)).filter(
+      (skill) => !shortlist.includes(skill) && (!trimmed || skill.toLowerCase().includes(trimmed))
+    );
+
+    const extras: SkillGroup[] = [];
+    if (shortlist.length > 0) {
+      extras.push({ title: 'Recommended for you', icon: 'lightbulb-on-outline', data: shortlist });
+    }
+    if (companions.length > 0) {
+      extras.push({ title: 'Often chosen together', icon: 'link-variant', data: companions });
+    }
+
+    if (extras.length === 0) return base;
+    return [...extras, ...base];
+  }, [query, suggested, selected]);
 
   const matchCount = useMemo(
     () => groups.reduce((sum, group) => sum + group.data.length, 0),
@@ -70,8 +119,7 @@ export default function OnboardingSkills() {
 
         <Text style={styles.heading}>My Expertise</Text>
         <Text style={styles.subtext}>
-          Select every healthcare or support skill you can offer. This helps VHub match you with
-          missions where you can make the biggest impact.
+          Pick everything you can offer, clinical or support. You can change this any time.
         </Text>
 
         <Input
@@ -90,6 +138,29 @@ export default function OnboardingSkills() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/*
+            BOTH OF THESE SCROLL AWAY. They belong above the list in reading
+            order, and putting them in the fixed header instead would leave a
+            seventy-five-entry picker about a third of a screen tall.
+
+            The explainer comes FIRST and before anything is chosen, because
+            its job is to stop a volunteer reading "support" as "not for me" and
+            ticking only clinical skills -- which is the decision this screen is
+            about to ask them to make.
+          */}
+          {!query.trim() ? (
+            <>
+              <RoleTypeExplainer audience="volunteer" />
+              <View style={styles.explainerGap} />
+              <SkillSuggestBox
+                editable
+                label="Describe what you do"
+                placeholder="e.g. I take blood pressure at community clinics"
+                onSuggestions={setSuggested}
+              />
+            </>
+          ) : null}
+
           {query.trim() && groups.length === 0 ? (
             <Text style={styles.noMatches}>
               Nothing matches &quot;{query.trim()}&quot;. Try a shorter word.
@@ -135,6 +206,7 @@ export default function OnboardingSkills() {
 }
 
 const styles = StyleSheet.create({
+  explainerGap: { height: spacing.lg },
   container: {
     flex: 1,
     backgroundColor: colors.background,

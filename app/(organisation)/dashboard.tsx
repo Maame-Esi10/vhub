@@ -11,16 +11,14 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  Avatar,
+import { Avatar,
   Button,
   EmptyState,
   ErrorState,
   FilterChips,
   ListSkeleton,
   MetricCard,
-  ModerationBanner,
-} from '@/components/ui';
+  ModerationBanner, HintRow } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { OutreachCard } from '@/components/organisation';
 import { colors, fontFamily, spacing } from '@/constants/theme';
@@ -192,6 +190,23 @@ export default function Dashboard() {
         </Pressable>
       </View>
 
+      {/*
+        NOBODY OPENS THE INFO HUB UNPROMPTED, so the screen explaining clinical
+        versus support was read by the organisations that least needed it -- and
+        the costly mistake here is ticking "support" to stop the verification
+        gate blocking applicants, which takes the credential check off work
+        that needed it.
+      */}
+      <View style={styles.hintWrap}>
+        <HintRow
+          icon="help-circle-outline"
+          text="Clinical or support? How volunteers are ranked?"
+          actionLabel="Info Hub"
+          accessibilityLabel="Open the Info Hub"
+          onPress={() => router.push('/(organisation)/info-hub')}
+        />
+      </View>
+
       {outreachesQuery.data ? (
         <View style={styles.metricsGrid}>
           <View style={styles.metricsRow}>
@@ -293,6 +308,7 @@ export default function Dashboard() {
 }
 
 const styles = StyleSheet.create({
+  hintWrap: { marginBottom: spacing.lg },
   container: {
     flex: 1,
     backgroundColor: colors.background,

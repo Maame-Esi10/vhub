@@ -230,3 +230,82 @@ export function skillSectionsFor(selected: readonly string[]): SkillCategory[] {
   if (held.length === 0) return SKILL_CATEGORIES;
   return [...SKILL_CATEGORIES, { name: 'No longer offered', icon: 'archive-outline', skills: held }];
 }
+
+/**
+ * Skills that are habitually done by the same person at the same event.
+ *
+ * WHY THIS EXISTS, AND WHY IT IS NOT GEMINI (owner, 2026-09-15). A volunteer
+ * who ticks three skills is not less capable than one who ticks twenty; they
+ * are usually someone who read the list, recognised the three they would name
+ * out loud, and stopped. The rest of what they actually do sits unticked
+ * because nobody prompted them. That is a prompting problem, not a matching
+ * problem, and prompting from a fixed table costs nothing, works offline,
+ * spends no quota and cannot invent anything.
+ *
+ * Each group is a set of skills that genuinely travel together at a Ghanaian
+ * outreach: if you are doing one, you are very often doing the others. They are
+ * SUGGESTIONS SHOWN AT THE TOP OF THE PICKER, never applied and never implied.
+ * Holding one has no effect whatsoever on any score.
+ *
+ * Keep groups small and honest. A group that lumps in everything adjacent
+ * stops being a prompt and becomes noise, and the volunteer goes back to
+ * ticking three.
+ */
+const SKILL_AFFINITIES: readonly (readonly string[])[] = [
+  // The screening table: you rarely take one of these without the others.
+  ['Vital signs monitoring', 'Blood pressure measurement', 'Temperature measurement', 'Pulse oximetry'],
+  // Anyone running a diabetes or NCD station.
+  ['Blood glucose testing', 'Blood pressure measurement', 'Anthropometric measurement'],
+  // The front desk of any outreach, and the reason a "support" volunteer is
+  // not an unskilled one.
+  ['Patient registration', 'Data entry', 'Crowd and queue management', 'Record keeping'],
+  // Whoever talks to the community tends to do all of it.
+  ['Health education', 'Community mobilisation', 'Translation/interpretation'],
+  // Needle work travels as a set.
+  ['Venipuncture', 'Injection administration', 'Infection control', 'Sterile technique'],
+  // Anyone handling medicines.
+  ['Medication dispensing', 'Patient counselling on medication', 'Prescription review', 'Dosage calculation'],
+  // The examination pair, and the registration that always precedes it.
+  ['Physical examination', 'Patient history taking', 'Patient registration'],
+  // Maternal and child work.
+  ['Antenatal care', 'Postnatal care', 'Child growth monitoring', 'Immunisation counselling'],
+  // A breast or cervical screening day.
+  ['Clinical breast examination', 'Breast self-examination teaching', 'Referral and follow-up coordination'],
+  // An eye clinic.
+  ['Visual acuity screening', 'Eye health education', 'Dispensing spectacles'],
+  // A blood drive.
+  ['Donor registration', 'Donor eligibility screening', 'Haemoglobin testing', 'Post-donation care'],
+  // First aid cover.
+  ['Basic Life Support (BLS)', 'Cardiopulmonary resuscitation (CPR)', 'Wound and bleeding control', 'Emergency triage'],
+];
+
+/**
+ * Skills commonly chosen alongside the ones already selected, minus those
+ * already held.
+ *
+ * Only fires once something is selected: with nothing ticked there is nothing
+ * to reason from, and offering a set of "popular" skills to somebody who has
+ * chosen none is just a second, shorter list to ignore.
+ *
+ * Every returned value is checked against the live vocabulary, so a typo in
+ * the table above is dropped rather than shown as a skill that cannot be
+ * selected.
+ */
+export function companionSkills(selected: readonly string[], limit = 6): string[] {
+  if (selected.length === 0) return [];
+
+  const held = new Set(selected);
+  const real = new Set(ALL_SKILLS);
+  const out: string[] = [];
+
+  for (const group of SKILL_AFFINITIES) {
+    if (!group.some((skill) => held.has(skill))) continue;
+    for (const skill of group) {
+      if (held.has(skill) || !real.has(skill) || out.includes(skill)) continue;
+      out.push(skill);
+      if (out.length >= limit) return out;
+    }
+  }
+
+  return out;
+}

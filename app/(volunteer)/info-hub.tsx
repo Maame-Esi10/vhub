@@ -11,7 +11,7 @@ import {
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ScreenHeader } from '@/components/ui';
+import { GlanceGrid, RoleTypeExplainer, ScreenHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { LAYER1_WEIGHTS } from '@/lib/matching/layer1';
 import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS, V_SCORE_PENALTIES } from '@/lib/vscore';
@@ -48,9 +48,39 @@ export default function InfoHub() {
       <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
         <Text style={styles.title}>How VHub works</Text>
         <Text style={styles.intro}>
-          Two numbers shape what you see and who you get matched with. Neither is a judgement of you
-          as a person. Here is exactly what each one measures.
+          Four things decide what you see and who picks you. None of them is a judgement of you as a
+          person.
         </Text>
+
+        {/*
+          THE MAP, BEFORE THE DETAIL. The sections below are collapsed, which
+          made this screen a table of contents written as furniture: you had to
+          open things to find out whether it answered your question, so somebody
+          unsure what they wanted opened nothing and left.
+        */}
+        <GlanceGrid
+          items={[
+            { icon: 'target', term: 'Match score', meaning: 'How well an event fits you, out of 100' },
+            { icon: 'shield-check-outline', term: 'V-Score', meaning: 'How dependable you have been' },
+            { icon: 'stethoscope', term: 'Clinical work', meaning: 'Hands-on care. Needs verification' },
+            { icon: 'account-group-outline', term: 'Support work', meaning: 'Runs the event. Open to all' },
+          ]}
+        />
+
+        {/*
+          THE DISTINCTION MOST OFTEN GOT WRONG, so it opens first and is drawn
+          rather than written. Both words had only ever appeared beside
+          verification, which taught everyone that clinical means verified and
+          support means unverified.
+        */}
+        <Section
+          icon="compare-horizontal"
+          title="Clinical or support?"
+          subtitle="What the work is, not who may do it"
+          defaultOpen
+        >
+          <RoleTypeExplainer audience="volunteer" />
+        </Section>
 
         <Section
           icon="target"
@@ -85,7 +115,7 @@ export default function InfoHub() {
           <WeightRow
             label="Availability"
             weight={LAYER1_WEIGHTS.availability}
-            detail="Full points when the event falls in a day and time slot you marked yourself free for. If it runs over several days, you are scored on how many of them you can make. Full points once you can cover half or more, and part points below that, so being free for some of a long event is always worth more than none."
+            detail="Full points when the event falls in a slot you marked free. Over several days you are scored on how many you can make, with full points at half or more."
           />
           <WeightRow
             label="Experience"

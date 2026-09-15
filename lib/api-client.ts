@@ -52,6 +52,7 @@ export const API_ROUTES = {
   vettedSource: '/api/vetted-source',
   scoreEvent: '/api/score-event',
   accountClosure: '/api/account-closure',
+  skillSuggest: '/api/skill-suggest',
   mailHealth: '/api/mail-health',
 } as const;
 
@@ -921,6 +922,26 @@ export interface SignedDocument {
  *
  * `ownerId` omitted means "my own document".
  */
+export interface SkillSuggestionResponse {
+  /** Always a subset of constants/skills.ts, most relevant first. Empty when unavailable. */
+  skills: string[];
+}
+
+/**
+ * Which of the platform's existing skills fit a piece of free text.
+ *
+ * EMPTY IS THE NORMAL "NO" and is not an error: the endpoint answers
+ * `{ skills: [] }` when Gemini is unconfigured, slow, broken, out of quota, or
+ * simply found nothing relevant, because a screen's response to every one of
+ * those is the same -- show the ordinary picker.
+ */
+export function suggestSkills(
+  description: string,
+  options?: RequestOptions
+): Promise<SkillSuggestionResponse> {
+  return apiPost<SkillSuggestionResponse>(API_ROUTES.skillSuggest, { description }, options);
+}
+
 export function getDocumentUrl(
   ownerId?: string,
   options?: RequestOptions

@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { NumberStepper } from '@/components/ui';
+import { NumberStepper, RoleTypeExplainer } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { EXPERIENCE_LEVELS, ROLE_TYPES, VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import type { RoleDraft } from '@/components/organisation/outreachWizard';
@@ -84,6 +84,15 @@ export function RoleBuilder({ roles, onChange, filledByKey }: RoleBuilderProps) 
 
   return (
     <View style={styles.wrap}>
+      {/*
+        BEFORE THE FIRST ROLE TYPE IS CHOSEN, because this is the screen where
+        the mistake gets made. An organisation that reads "support" as "does
+        not need verification" ticks it to stop the gate blocking applicants,
+        and the credential check comes off work that needed it. Choosing by
+        what the work IS is the only thing that produces a correct answer.
+      */}
+      <RoleTypeExplainer audience="organisation" />
+      <View style={styles.explainerGap} />
       {roles.map((role, index) => {
         const filled = filledByKey?.get(roleKey(role)) ?? 0;
         const duplicate = duplicateOf(index);
@@ -269,6 +278,7 @@ function Chip({
 }
 
 const styles = StyleSheet.create({
+  explainerGap: { height: spacing.lg },
   wrap: {
     gap: spacing.base,
   },

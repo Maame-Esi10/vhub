@@ -46,6 +46,7 @@ import type { OutreachWizardState, WizardFieldError } from '@/components/organis
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { SKILL_CATEGORIES } from '@/constants/skills';
+import { SkillSuggestBox } from '@/components/skills/SkillSuggestBox';
 import {
   MAX_GALLERY_IMAGES,
   useAddOutreachDays,
@@ -72,7 +73,26 @@ const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
   data: c.skills,
 }));
 
+/**
+ * Prepends a "Recommended" section when Gemini has suggested anything.
+ *
+ * REORDERING, NOT FILTERING. The nine real categories follow untouched, so a
+ * suggestion can only ever add a shortcut to the top of the list -- never take
+ * an option away from somebody whose event is not what their description made
+ * it sound like.
+ */
+function withSuggestions(suggested: readonly string[]) {
+  if (suggested.length === 0) return SKILL_SECTIONS;
+  return [
+    { title: 'Recommended for this outreach', icon: 'lightbulb-on-outline', data: [...suggested] },
+    ...SKILL_SECTIONS,
+  ];
+}
+
 export default function CreateOutreach() {
+  const [suggestedSkills, setSuggestedSkills] = useState<string[]>([]);
+  const suggestedSections = useMemo(() => withSuggestions(suggestedSkills), [suggestedSkills]);
+
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const organisationId = useAuthStore((s) => s.user)?.id;
@@ -641,13 +661,31 @@ export default function CreateOutreach() {
 
           {step === 3 ? (
             <View style={styles.fieldGroup}>
+              {/*
+                READS THE DESCRIPTION THE ORGANISATION HAS ALREADY WRITTEN, so
+                nobody is asked to describe the same event twice. Seventy-five
+                skills across nine categories is more than anyone browses
+                properly, and search only finds words already in the list --
+                "breast cancer screening" finds nothing, while clinical breast
+                examination, patient registration and health education all sit
+                there unfound.
+
+                The result is PREPENDED to the sections below, never swapped in
+                for them. See suggestedSections.
+              */}
+              <SkillSuggestBox
+                label="Not sure which skills to pick?"
+                sourceText={state.description}
+                onSuggestions={setSuggestedSkills}
+              />
+
               <View onLayout={(event) => captureFieldTop('requiredSkills', event)}>
                 <MultiSelectField
                   label="Required Skills"
                   required
                   placeholder="Select the skills volunteers need"
                   selected={state.requiredSkills}
-                  sections={SKILL_SECTIONS}
+                  sections={suggestedSections}
                   error={errors.requiredSkills}
                   onChange={(next) => update('requiredSkills', next)}
                 />

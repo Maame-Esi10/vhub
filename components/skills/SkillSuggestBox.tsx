@@ -1,0 +1,191 @@
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Input } from '@/components/ui';
+import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { useSuggestSkills } from '@/hooks/useSuggestSkills';
+import { humanErrorOrNull } from '@/lib/errorMessage';
+
+export interface SkillSuggestBoxProps {
+  /**
+   * Text to send when the box supplies no input of its own. Used by Create
+   * Outreach, where the organisation has already written a description and
+   * asking them to write it twice would be absurd.
+   */
+  sourceText?: string;
+  /** Renders its own short input. Used in volunteer onboarding. */
+  editable?: boolean;
+  label: string;
+  placeholder?: string;
+  /** Handed the ranked skills. Always a subset of constants/skills.ts. */
+  onSuggestions: (skills: string[]) => void;
+}
+
+/**
+ * "Describe it, and we will point at the likely skills."
+ *
+ * WHY THIS EARNS ITS PLACE. The vocabulary is seventy-five skills across nine
+ * categories. Search only finds words that are already in it, so an
+ * organisation running a breast cancer screening day finds nothing by typing
+ * "breast cancer" -- it is not a skill and never will be -- while clinical
+ * breast examination, patient registration and health education all sit in the
+ * list unfound. That gap is the whole reason this exists.
+ *
+ * IT REORDERS, IT NEVER FILTERS, AND IT NEVER TICKS ANYTHING. The caller puts
+ * the result at the TOP of its picker with the full list still underneath, and
+ * selection stays a deliberate tap. Filtering would let one sentence
+ * permanently narrow what somebody can find, which for a volunteer means
+ * narrowing their own profile -- and a profile is the thing the matcher reads.
+ *
+ * ONE CALL PER PRESS. It is a button, not a watcher on a text field: every
+ * call spends from a daily Gemini allowance shared by every user on the
+ * platform.
+ *
+ * WHEN IT FAILS IT SAYS SO QUIETLY AND CHANGES NOTHING. The picker underneath
+ * is fully usable and was always going to be; an unavailable suggestion is not
+ * an error the form has to recover from.
+ */
+export function SkillSuggestBox({
+  sourceText,
+  editable = false,
+  label,
+  placeholder,
+  onSuggestions,
+}: SkillSuggestBoxProps) {
+  const [text, setText] = useState('');
+  const suggest = useSuggestSkills();
+
+  const description = editable ? text : (sourceText ?? '');
+  const ready = description.trim().length >= 10;
+  const [empty, setEmpty] = useState(false);
+
+  function handlePress() {
+    if (!ready || suggest.isPending) return;
+    setEmpty(false);
+    suggest.mutate(description, {
+      onSuccess: (skills) => {
+        setEmpty(skills.length === 0);
+        onSuggestions(skills);
+      },
+    });
+  }
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.headerRow}>
+        <MaterialCommunityIcons name="lightbulb-on-outline" size={18} color={colors.primary} />
+        <Text style={styles.label}>{label}</Text>
+      </View>
+
+      {editable ? (
+        <Input
+          placeholder={placeholder}
+          value={text}
+          onChangeText={setText}
+          multiline
+          numberOfLines={3}
+          accessibilityLabel={label}
+          containerStyle={styles.input}
+        />
+      ) : null}
+
+      <Pressable
+        onPress={handlePress}
+        disabled={!ready || suggest.isPending}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !ready || suggest.isPending }}
+        accessibilityLabel="Suggest skills"
+        style={({ pressed }) => [
+          styles.button,
+          (!ready || suggest.isPending) && styles.buttonDisabled,
+          pressed && styles.pressed,
+        ]}
+      >
+        {suggest.isPending ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <MaterialCommunityIcons name="auto-fix" size={16} color={colors.primary} />
+        )}
+        <Text style={styles.buttonText}>
+          {suggest.isPending ? 'Looking...' : 'Suggest skills'}
+        </Text>
+      </Pressable>
+
+      {!ready ? (
+        <Text style={styles.hint}>
+          {editable ? 'Write a sentence first.' : 'Add a description first.'}
+        </Text>
+      ) : null}
+
+      {empty ? <Text style={styles.hint}>Nothing obvious. Browse the list below.</Text> : null}
+
+      {suggest.isError ? (
+        <Text style={styles.hint}>
+          {humanErrorOrNull(suggest.error, 'Could not suggest just now.')}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.base,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignContent: 'center',
+    flexWrap: 'wrap',
+    rowGap: spacing.xs,
+    gap: spacing.sm,
+  },
+  label: {
+    flex: 1,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  input: {
+    marginTop: spacing.xs,
+  },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignContent: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    rowGap: spacing.xs,
+    gap: spacing.sm,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  buttonDisabled: {
+    opacity: 0.45,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  buttonText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    color: colors.primary,
+  },
+  hint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+  },
+});

@@ -115,6 +115,7 @@ export type UserRateLimitBucket =
   | "document_url"
   | "upload_signature"
   | "vscore"
+  | "skill_suggest"
   | "account_closure";
 
 const USER_RULES: Readonly<Record<UserRateLimitBucket, RateLimitRule>> = {
@@ -128,6 +129,13 @@ const USER_RULES: Readonly<Record<UserRateLimitBucket, RateLimitRule>> = {
   upload_signature: { limit: 20, windowMs: 60_000 },
   /** Writes reputation data and replays a volunteer's whole score history. */
   vscore: { limit: 30, windowMs: 60_000 },
+  /**
+   * Also spends Gemini quota, and the legitimate pattern is one call per
+   * outreach created and one per volunteer onboarding -- never per keystroke
+   * or per view. Tighter than `match` because nothing about this is automatic:
+   * every call is somebody pressing a button.
+   */
+  skill_suggest: { limit: 10, windowMs: 60_000 },
   /** Irreversible, and done once in an account's lifetime. A retry or two, no more. */
   account_closure: { limit: 5, windowMs: 60_000 },
 };
