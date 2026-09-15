@@ -34,8 +34,13 @@ yarn-error.*
 .env
 .env*.local
 
-# local Claude Code settings
-.claude/settings.local.json
+# AI assistant config and notes. NOT PUBLISHED (owner, 2026-09-15): this is a
+# public repository and the tooling used to build the project is not part of
+# the deliverable. Untracked with `git rm --cached`, which leaves the files on
+# disk and working -- CLAUDE.md is read from the filesystem, not from git.
+CLAUDE.md
+.claude/
+docs/VSCODE_PROMPT_GUIDE.md
 
 # typescript
 *.tsbuildinfo

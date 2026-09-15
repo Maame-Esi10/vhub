@@ -177,6 +177,39 @@ export function useTabBarContentPadding(): { paddingBottom: number } {
 }
 
 /**
+ * The offset a FIXED FOOTER needs so its buttons are not under the pill.
+ *
+ * WHY THIS IS SEPARATE FROM useTabBarContentPadding (owner-reported,
+ * 2026-09-15: "the Next button vanishes... on Step 3 I am stuck").
+ *
+ * A footer that is a SIBLING of the scroll view, not a child of it, sits at the
+ * bottom of the screen and is completely unaffected by the scroll content's
+ * padding. Create Outreach, Edit Outreach, the volunteer outreach detail and
+ * the attendance screen all have one, and every one of those footers held the
+ * screen's primary action -- Next, Save, Apply.
+ *
+ * THE SYMPTOM LOOKED LIKE A BUG IN THE BUTTON, WHICH IS WHY IT SURVIVED.
+ * The button reappeared whenever a text field was focused, because the
+ * keyboard shrinks the window and KeyboardAvoidingView lifts the footer clear
+ * of the pill. So it seemed to come and go with focus. On the Create Outreach
+ * step that has no text input at all, the keyboard never opened, the footer
+ * never lifted, and the flow was impassable.
+ *
+ * MARGIN, NOT PADDING. Padding would stretch the footer down behind the pill,
+ * leaving a tall bar with its border high up the screen and an empty region
+ * underneath. A margin keeps the footer a compact bar that ENDS above the
+ * floating pill, which is what the design intends: the pill floats over the
+ * page, and the page's furniture stops short of it.
+ *
+ * A screen using this should NOT also put the full clearance on its scroll
+ * content -- the footer is between the two, so the padding would be dead space.
+ */
+export function useTabBarFooterOffset(): { marginBottom: number } {
+  const insets = useSafeAreaInsets();
+  return { marginBottom: tabBarClearance(insets.bottom) };
+}
+
+/**
  * Builds a tabBarIcon renderer that swaps a filled glyph in on focus and an
  * outline glyph otherwise.
  *

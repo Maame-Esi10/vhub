@@ -49,7 +49,7 @@ import { formatDaySpan, hoursVaryByDay } from '@/lib/outreachDays';
 import { useAuthStore } from '@/stores/authStore';
 import type { ApplicationStatus } from '@/types/database';
 import { humanError } from '@/lib/errorMessage';
-import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
+import { useTabBarFooterOffset } from '@/components/ui/tabBarOptions';
 
 const STATUS_MESSAGE: Record<ApplicationStatus, string> = {
   pending: "You've applied. The organisation is reviewing your application.",
@@ -61,9 +61,9 @@ const STATUS_MESSAGE: Record<ApplicationStatus, string> = {
 };
 
 export default function OutreachDetail() {
-  // The floating tab bar is absolute and reserves no space, so the last
-  // element needs this or it sits under the pill and cannot be tapped.
-  const tabBarPadding = useTabBarContentPadding();
+  // The fixed footer below the scroller needs its own offset: the scroll
+  // content's padding does nothing for a sibling. See useTabBarFooterOffset.
+  const tabBarFooter = useTabBarFooterOffset();
   const router = useRouter();
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const outreachId = typeof id === 'string' ? id : undefined;
@@ -336,7 +336,7 @@ export default function OutreachDetail() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
+      <ScrollView contentContainerStyle={styles.content}>
         <FlyerBackground uri={outreach.flyer_url} style={styles.hero}>
           <View style={styles.heroContent}>
             <MatchScoreBadge onDark />
@@ -631,7 +631,8 @@ export default function OutreachDetail() {
         ) : null}
       </ScrollView>
 
-      <View style={styles.footer}>
+      {/* Sibling of the scroller: it needs its own offset, or the pill covers Apply. */}
+      <View style={[styles.footer, tabBarFooter]}>
         {canWithdraw ? (
           <Button
             title="Withdraw application"

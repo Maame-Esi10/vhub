@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -62,7 +62,7 @@ import { hasOwnHours, sortDayDrafts } from '@/lib/outreachDays';
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { humanError } from '@/lib/errorMessage';
-import { tabBarClearance } from '@/components/ui/tabBarOptions';
+import { useTabBarFooterOffset } from '@/components/ui/tabBarOptions';
 
 const TOTAL_STEPS = 4;
 const STEP_TITLES = ['Basic Information', 'Where & When', 'Requirements & Capacity', 'Preview'];
@@ -93,7 +93,9 @@ function withSuggestions(suggested: readonly string[]) {
 export default function CreateOutreach() {
   const [suggestedSkills, setSuggestedSkills] = useState<string[]>([]);
   const suggestedSections = useMemo(() => withSuggestions(suggestedSkills), [suggestedSkills]);
-  const insets = useSafeAreaInsets();
+  // The fixed footer below the scroller needs its own offset: the scroll
+  // content's padding does nothing for a sibling. See useTabBarFooterOffset.
+  const tabBarFooter = useTabBarFooterOffset();
   const router = useRouter();
   const organisationId = useAuthStore((s) => s.user)?.id;
   const createOutreach = useCreateOutreach();
@@ -478,10 +480,7 @@ export default function CreateOutreach() {
         <ScrollView
           ref={scrollRef}
           style={styles.flex}
-          contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: tabBarClearance(insets.bottom) },
-        ]}
+          contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.stepTitle}>{STEP_TITLES[step - 1]}</Text>
@@ -729,7 +728,12 @@ export default function CreateOutreach() {
           ) : null}
         </ScrollView>
 
-        <View style={styles.footer}>
+        {/*
+          THE FOOTER IS A SIBLING OF THE SCROLLER, so the scroll content's
+          padding never protected it and the pill sat on top of Next. It only
+          appeared when a text field was focused, because the keyboard lifts it.
+        */}
+        <View style={[styles.footer, tabBarFooter]}>
           {/*
             Named, above the button that refused to work. Scrolling to the field
             answers "where", and this answers "what" without the organisation

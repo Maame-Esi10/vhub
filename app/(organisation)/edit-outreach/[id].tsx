@@ -67,7 +67,7 @@ import { changedDayHours, dayDraftsFromRows, dayStringsOf } from '@/lib/outreach
 import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { humanError } from '@/lib/errorMessage';
-import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
+import { useTabBarFooterOffset } from '@/components/ui/tabBarOptions';
 
 const REGION_OPTIONS: SelectOption[] = GHANA_REGIONS.map((r) => ({ value: r.name, label: r.name }));
 const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
@@ -88,9 +88,9 @@ const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
  * and every section is independently editable.
  */
 export default function EditOutreach() {
-  // The floating tab bar is absolute and reserves no space, so the last
-  // element needs this or it sits under the pill and cannot be tapped.
-  const tabBarPadding = useTabBarContentPadding();
+  // The fixed footer below the scroller needs its own offset: the scroll
+  // content's padding does nothing for a sibling. See useTabBarFooterOffset.
+  const tabBarFooter = useTabBarFooterOffset();
   const router = useRouter();
   const { id, section } = useLocalSearchParams<{ id: string; section?: string }>();
   const outreachId = typeof id === 'string' ? id : undefined;
@@ -637,7 +637,7 @@ export default function EditOutreach() {
         <ScrollView
           ref={scrollRef}
           style={styles.flex}
-          contentContainerStyle={[styles.content, tabBarPadding]}
+          contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
           {/* ---------- Details ---------- */}
@@ -852,7 +852,8 @@ export default function EditOutreach() {
           pinned, it cannot scroll away, and it is impossible to reach for
           Save again without reading it.
         */}
-        <View style={styles.footer}>
+        {/* Sibling of the scroller: it needs its own offset, or the pill covers Save. */}
+        <View style={[styles.footer, tabBarFooter]}>
           {blockingMessage ? (
             <View style={styles.errorBanner}>
               <MaterialCommunityIcons name="alert-circle" size={18} color={colors.danger} />

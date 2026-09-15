@@ -65,12 +65,53 @@ describe('every screen inside a tab navigator clears the floating bar', () => {
 
       (reason ? it.skip : it)(`${key} accounts for the tab bar`, () => {
         const src = resolve(group, screen);
+        // Any of the three is a correct answer. A screen whose primary action
+        // sits in a fixed footer BELOW the scroller uses the footer offset
+        // instead of content padding -- the scroll content's padding does
+        // nothing for a sibling, and adding both would be dead space.
         const clears =
-          src.includes('useTabBarContentPadding') || src.includes('tabBarClearance');
+          src.includes('useTabBarContentPadding') ||
+          src.includes('useTabBarFooterOffset') ||
+          src.includes('tabBarClearance');
         expect(clears).toBe(true);
       });
     }
   }
+
+  /*
+    A FOOTER IS NOT COVERED BY THE SCROLL CONTENT'S PADDING (2026-09-15).
+
+    A `<View>` that is a SIBLING of the scroller sits at the bottom of the
+    screen, and `useTabBarContentPadding` does nothing for it. Four screens had
+    one, and every one held that screen's primary action: Next, Save, Apply.
+
+    The symptom looked like a bug in the button, which is why it survived a
+    build: focusing a text field opens the keyboard, which shrinks the window,
+    which lifts the footer clear of the pill -- so the button appeared to come
+    and go with focus. On the Create Outreach step with no text input, it never
+    appeared at all and the flow was impassable.
+  */
+  it('a screen with a fixed footer uses the FOOTER offset, not only content padding', () => {
+    const offenders: string[] = [];
+
+    for (const group of GROUPS) {
+      for (const screen of screensOf(group)) {
+        const key = `${group}/${screen}`;
+        if (EXEMPT[key]) continue;
+        const src = resolve(group, screen);
+
+        const closes = [...src.matchAll(/<\/(?:ScrollView|FlatList)>/g)];
+        if (closes.length === 0) continue;
+        const afterScroller = src.slice(closes[closes.length - 1]!.index!);
+
+        // A styles.footer rendered below the scroller must carry the offset.
+        const hasFooter = /<View style=\{(?:\[)?styles\.footer/.test(afterScroller);
+        if (hasFooter && !src.includes('useTabBarFooterOffset')) offenders.push(key);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
 
   it('every exemption names a real screen', () => {
     const all = GROUPS.flatMap((g) => screensOf(g).map((s) => `${g}/${s}`));
