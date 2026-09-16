@@ -1,6 +1,6 @@
 # V-HUB Rebuild Guide (v2 — July 2026)
 
-This replaces all previous context/master documents. The old repository was lost; the Figma designs survive. This guide, together with `CLAUDE.md`, is the single source of truth for the rebuild.
+This replaces all previous context/master documents. The old repository was lost; the Figma designs survive. This guide is the single source of truth for the rebuild, alongside the project's architecture notes.
 
 ## 1. What V-HUB Is
 
@@ -47,7 +47,7 @@ Data-flow contract: **screens consume hooks; hooks consume Supabase directly (RL
 
 ## 4. Data Model
 
-Six core tables (full column detail in CLAUDE.md; SQL in `supabase/schema.sql`): profiles → (volunteer_profiles | organisation_profiles), outreaches, applications, event_reviews, plus skill_match_cache for Gemini caching. Key constraints: applications and event_reviews are unique per (outreach, volunteer); v_score bounded 0–100 and writable only by the serverless tier.
+Six core tables (SQL in `supabase/schema.sql`): profiles → (volunteer_profiles | organisation_profiles), outreaches, applications, event_reviews, plus skill_match_cache for Gemini caching. Key constraints: applications and event_reviews are unique per (outreach, volunteer); v_score bounded 0–100 and writable only by the serverless tier.
 
 ## 5. Matching Engine
 
@@ -64,22 +64,22 @@ Starts at 70. Bands: Elite 90+ · Trusted 75–89 · Active 60–74 · Developin
 
 The UI lives in Figma. Two ways to use it in VS Code:
 
-1. **Figma MCP server (preferred).** Connect Figma's MCP server to Claude Code (see the prompt guide, Step 4). Then in any UI task you paste the Figma frame link and the `ui-builder` subagent pulls the real design context — spacing, colours, text — and generates matching React Native code.
-2. **Screenshot fallback.** Export the frame as PNG, drop it in the repo under `design-refs/`, and reference it in the prompt.
+1. **Figma's own design context (preferred).** Paste the Figma frame link and read the real spacing, colours and text off the design rather than estimating them from a picture.
+2. **Screenshot fallback.** Export the frame as PNG, drop it in the repo under `design-refs/`, and work from that.
 
-Either way: the design is the spec. Claude should not invent layouts.
+Either way: the design is the spec, and layouts are not invented where one already exists.
 
 ## 8. Rebuild Phases
 
 | Phase | Scope | Exit criteria |
 |---|---|---|
-| 0 | Scaffold Expo app, install deps, create Supabase project, apply schema.sql, env wiring, CLAUDE.md + agents in place | App boots in Expo Go; `tsc --noEmit` clean; tables visible in Supabase |
+| 0 | Scaffold Expo app, install deps, create Supabase project, apply schema.sql, env wiring | App boots in Expo Go; `tsc --noEmit` clean; tables visible in Supabase |
 | 1 | Auth: welcome/login/register, role guard, volunteer + org onboarding, profile creation | Register → onboard → land in correct tab group on a real device; rows appear in Supabase |
 | 2 | Data layer: outreach creation, live feed, outreach detail, Quick Join + Full Application, application tracker, org dashboard + applicant review — all on real queries | Two test accounts (1 org, 1 volunteer) can complete a full post→apply→accept loop |
 | 3 | Intelligence: Layer 1 + tests, serverless API deployed to Vercel, Gemini Layer 2 with cache + fallback, ranked feed with score badges, V-Score pipeline, post-event reviews, Resend emails, Info Hub | Feed is genuinely ranked; review submission changes a V-Score; Gemini outage doesn't break matching (tested by removing the key) |
 | 4 | Push notifications, cancellation + waitlist auto-promotion, offline handling, cross-device testing, EAS Build | Installable Android build; 24h reminder fires; waitlist promotes next-best volunteer |
 
-Each phase ends with: `qa-reviewer` pass → fix criticals → `docs-writer` updates README + REPORT_NOTES → git commit + push.
+Each phase ends with: a review pass for security, RLS gaps and spec drift → fix criticals → update README + REPORT_NOTES → git commit + push.
 
 ## 9. Anti-Data-Loss Discipline (learned the hard way)
 

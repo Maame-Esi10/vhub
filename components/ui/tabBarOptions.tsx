@@ -7,6 +7,7 @@ import {
   type ColorValue,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text } from '@/components/ui/Text';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -29,10 +30,11 @@ type IconName = keyof typeof Ionicons.glyphMap;
  * the point where it stops touching and starts floating. Clamped so it does
  * not collapse on a small handset or drift absurdly wide on a tablet.
  *
- * THE LABELS ARE WHAT MADE THIS IMPOSSIBLE BEFORE, and they are gone: see
- * tabBarShowLabel below. Five labelled tabs cannot fit in three quarters of a
- * phone screen at a legible size, which is why two earlier attempts only
- * nudged the number.
+ * THE LABELS ARE STILL HERE. Five of them will not fit across three quarters
+ * of a phone at a FIXED size, which is what capped two earlier attempts and
+ * then briefly cost the labels entirely. The fix was the fixed size, not the
+ * words: tabBarLabel renders each one with adjustsFontSizeToFit, so a narrow
+ * handset gets a slightly smaller label rather than a truncated one.
  */
 function barInset(screenWidth: number): number {
   return Math.min(Math.max(screenWidth * 0.12, 28), 72);
@@ -41,10 +43,8 @@ function barInset(screenWidth: number): number {
 /** Clearance between the bottom of the bar and the gesture bar or screen edge. */
 const BAR_LIFT = spacing.md;
 
-/** The bar's own height. 58 rather than 64: with the labels gone there is
- * nothing under the glyph to leave room for, and a shorter bar reads more like
- * a pill and less like a strip. */
-const BAR_HEIGHT = 58;
+/** The bar's own height: icon, label and a little air. */
+const BAR_HEIGHT = 62;
 
 /**
  * Shared tab bar chrome for the volunteer, organisation and admin groups, so
@@ -92,7 +92,9 @@ export function useTabBarScreenOptions() {
       height: BAR_HEIGHT,
       paddingTop: spacing.sm,
       paddingBottom: spacing.sm,
-      paddingHorizontal: spacing.xs,
+      // No horizontal padding: the pill's rounded ends are the inset, and
+      // every pixel here comes off the label slots.
+      paddingHorizontal: 0,
       backgroundColor: colors.background,
       borderRadius: radius.pill,
       // A floating surface needs an edge of its own: against a white screen
@@ -111,47 +113,46 @@ export function useTabBarScreenOptions() {
       shadowOffset: { width: 0, height: 6 },
     },
     /*
-      ICONS ONLY (owner, 2026-09-15).
+      LABELS STAY, AND THE BAR IS STILL SHORT (owner, 2026-09-16: "do not give
+      me a choice between a readable bar and a floating one").
 
-      This is the trade the short bar required, and it is a real one. Five
-      labelled tabs need roughly the full width of a phone at a legible size,
-      so every previous attempt to inset the pill was capped by the longest
-      word on the admin bar ("CREDENTIALS"). Dropping the labels is what makes
-      three-quarter width possible at all.
+      The previous attempt removed the labels because five of them will not fit
+      across three quarters of a phone at a fixed size. That was solving the
+      wrong half of the problem: the constraint is a FIXED font, not the words.
 
-      What it costs: a first-time user identifies a tab by its glyph rather
-      than by reading it. The glyphs are the conventional ones for exactly
-      these destinations -- house, document, calendar, person, and a filled
-      coral disc for Create -- and the accessibility label on every tab still
-      speaks its name, so a screen reader is unaffected.
+      `tabBarLabel` is rendered here rather than left to React Navigation, so
+      each label can shrink to fit its own slot. `adjustsFontSizeToFit` with a
+      floor of 0.8 means a narrow handset gets a slightly smaller label instead
+      of a truncated one, and a wide handset gets the full size. No width can
+      produce "CREDENTIAL..." any more, which is what forced every earlier
+      compromise.
 
-      Putting labels back is this one line. The inset would have to come down
-      with it.
+      Three other things buy room, and together they are why the inset could
+      stay at 12%: the bar's own horizontal padding is gone (the pill's rounded
+      ends already provide the visual inset), the per-item padding is 1, and
+      the icon is 20 rather than 26.
     */
-    tabBarShowLabel: false,
-    tabBarLabelStyle: {
-      fontFamily: fontFamily.semiBold,
-      // 9/0 rather than 9.5/0.2, which was itself down from 10/0.5. Each
-      // reduction has bought room for the same thing: five labels across a
-      // pill, the longest being "CREDENTIALS" on the admin bar at eleven
-      // characters. Widening BAR_INSET above narrows the bar by 24px, which
-      // costs roughly 5px per tab on a five-tab bar, and this returns it.
-      //
-      // Letter-spacing is now zero. On uppercase text at this size it was
-      // buying legibility worth less than the ~2px per label it cost, and a
-      // truncated label is worse than a slightly tighter one.
-      fontSize: 9,
-      letterSpacing: 0,
-      textTransform: 'uppercase' as const,
-      marginTop: 1,
-    },
+    tabBarShowLabel: true,
+    tabBarLabel: ({ color, children }: { color: ColorValue; children: string }) => (
+      <Text
+        style={[styles.label, { color }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        // 0.8, not lower: below that the label stops being readable and the
+        // honest answer would be a shorter word, not a smaller one.
+        minimumFontScale={0.8}
+        allowFontScaling={false}
+      >
+        {children}
+      </Text>
+    ),
     // Without this a long label silently ellipsises instead of shrinking. It
     // is also the one place in the app where text does NOT scale with the
     // system font: five labels across a pill have nowhere to grow into, and a
     // truncated tab label is worse than a small one.
     tabBarAllowFontScaling: false,
     tabBarItemStyle: {
-      paddingHorizontal: 2,
+      paddingHorizontal: 1,
       borderRadius: radius.pill,
     },
   };
@@ -259,9 +260,9 @@ export function useTabBarFooterOffset(): { marginBottom: number } {
  */
 export function tabBarIcon(focusedName: IconName, unfocusedName: IconName) {
   return function TabBarIcon({ color, focused }: { color: ColorValue; focused: boolean }) {
-    // Larger than before, because with the labels gone the glyph is the only
-    // thing naming the destination.
-    return <Ionicons name={focused ? focusedName : unfocusedName} size={26} color={color} />;
+    // 20, not 26: the label is back, so the glyph no longer has to name the
+    // destination on its own, and the height it gives up goes to the label.
+    return <Ionicons name={focused ? focusedName : unfocusedName} size={20} color={color} />;
   };
 }
 
@@ -287,6 +288,16 @@ export function CreateTabIcon({ focused }: { color: ColorValue; focused: boolean
 }
 
 const styles = StyleSheet.create({
+  label: {
+    // The size on a NORMAL phone rather than a size every phone must fit: the
+    // renderer shrinks below this (to 0.8) when a slot is too narrow.
+    fontFamily: fontFamily.semiBold,
+    fontSize: 9,
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginTop: 1,
+  },
   createDisc: {
     width: 30,
     height: 30,

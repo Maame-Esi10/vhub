@@ -50,7 +50,9 @@ export default function AdminTabsLayout() {
       <Tabs.Screen
         name="credentials"
         options={{
-          title: 'Credentials',
+          // 'Creds', not 'Credentials': eleven characters is the longest label on any
+          // of the three bars and it set the floor for how short the pill could be.
+          title: 'Creds',
           tabBarIcon: tabBarIcon('id-card', 'id-card-outline'),
         }}
       />
