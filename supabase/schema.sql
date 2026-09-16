@@ -347,6 +347,24 @@ alter table volunteer_profiles
 -- organisation's own listing.
 alter table outreaches add column if not exists flyer_url text;
 
+-- Venue photo and coordinates (2026-09-16). See
+-- supabase/migrations/20260916_outreach_location.sql for the reasoning: the
+-- image is a Cloudinary public_id on PUBLIC delivery like the flyer, and the
+-- coordinates exist to hand to whichever map app the phone already has rather
+-- than to render a map inside VHub.
+alter table outreaches add column if not exists location_image_id text;
+alter table outreaches add column if not exists location_lat numeric;
+alter table outreaches add column if not exists location_lng numeric;
+alter table outreaches drop constraint if exists outreaches_location_pair;
+alter table outreaches add constraint outreaches_location_pair
+  check ((location_lat is null) = (location_lng is null));
+alter table outreaches drop constraint if exists outreaches_location_range;
+alter table outreaches add constraint outreaches_location_range
+  check (
+    (location_lat is null or (location_lat >= -90 and location_lat <= 90))
+    and (location_lng is null or (location_lng >= -180 and location_lng <= 180))
+  );
+
 drop trigger if exists trg_volunteer_profiles_updated_at on volunteer_profiles;
 create trigger trg_volunteer_profiles_updated_at
   before update on volunteer_profiles
@@ -1970,7 +1988,10 @@ grant update (
   role_type,
   slots_total,
   status,
-  flyer_url
+  flyer_url,
+  location_image_id,
+  location_lat,
+  location_lng
 ) on outreaches to authenticated;
 
 -- ============================================================
@@ -2043,7 +2064,10 @@ grant insert (
   role_type,
   slots_total,
   status,
-  flyer_url
+  flyer_url,
+  location_image_id,
+  location_lat,
+  location_lng
 ) on outreaches to authenticated;
 
 -- status omitted deliberately: it must default to 'pending' so a client can

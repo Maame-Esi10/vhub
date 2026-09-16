@@ -415,6 +415,11 @@ export interface Outreach {
   status: OutreachStatus;
   /** Cloudinary URL of the flyer image. Client-writable by the owning org. */
   flyer_url: string | null;
+  /** Cloudinary public_id of a photo of the venue. Public delivery, like the flyer. */
+  location_image_id: string | null;
+  /** Venue coordinates, for handing to the phone's own map app. Both or neither. */
+  location_lat: number | null;
+  location_lng: number | null;
   /**
    * Venue anchor for the attendance location check, captured from the
    * ORGANISER's device. Server-only (written by /api/checkin) — absent from
