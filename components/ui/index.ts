@@ -13,7 +13,7 @@ export type { ConfirmDialogProps, ConfirmDialogTone } from './ConfirmDialog';
 export { useTabBarScreenOptions, tabBarIcon } from './tabBarOptions';
 export { RoleTypeExplainer } from './RoleTypeExplainer';
 export { GlanceGrid } from './GlanceGrid';
-export { HintRow } from './HintRow';
+export { HintRail } from './HintRail';
 export type { GlanceItem } from './GlanceGrid';
 export { ScreenHeader } from './ScreenHeader';
 export type { ScreenHeaderProps } from './ScreenHeader';

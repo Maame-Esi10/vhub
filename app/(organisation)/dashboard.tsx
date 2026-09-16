@@ -18,7 +18,7 @@ import { Avatar,
   FilterChips,
   ListSkeleton,
   MetricCard,
-  ModerationBanner, HintRow } from '@/components/ui';
+  ModerationBanner, HintRail } from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { OutreachCard } from '@/components/organisation';
 import { colors, fontFamily, spacing } from '@/constants/theme';
@@ -191,21 +191,41 @@ export default function Dashboard() {
       </View>
 
       {/*
-        NOBODY OPENS THE INFO HUB UNPROMPTED, so the screen explaining clinical
-        versus support was read by the organisations that least needed it -- and
-        the costly mistake here is ticking "support" to stop the verification
-        gate blocking applicants, which takes the credential check off work
-        that needed it.
+        A SIGNPOST, IN ONE SHORT ROW. Nobody opens the Info Hub unprompted, so
+        the screen explaining clinical versus support was read by the
+        organisations that least needed it -- and the costly mistake here is
+        ticking "support" to stop the verification gate blocking applicants,
+        which takes the credential check off work that needed it.
+
+        A rail rather than a box: this is secondary and should not take a full
+        row of the dashboard to say so.
       */}
-      <View style={styles.hintWrap}>
-        <HintRow
-          icon="help-circle-outline"
-          text="Clinical or support? How volunteers are ranked?"
-          actionLabel="Info Hub"
-          accessibilityLabel="Open the Info Hub"
-          onPress={() => router.push('/(organisation)/info-hub')}
-        />
-      </View>
+      <HintRail
+        edgePadding={0}
+        items={[
+          {
+            icon: 'help-circle-outline',
+            label: 'Clinical or support?',
+            accessibilityLabel: 'Open the Info Hub',
+            // `from` so backing out returns here rather than to Profile.
+            onPress: () =>
+              router.push({
+                pathname: '/(organisation)/info-hub',
+                params: { from: '/(organisation)/dashboard' },
+              }),
+          },
+          {
+            icon: 'chart-line',
+            label: 'How ranking works',
+            accessibilityLabel: 'Open the Info Hub to read how volunteers are ranked',
+            onPress: () =>
+              router.push({
+                pathname: '/(organisation)/info-hub',
+                params: { from: '/(organisation)/dashboard' },
+              }),
+          },
+        ]}
+      />
 
       {outreachesQuery.data ? (
         <View style={styles.metricsGrid}>
@@ -308,7 +328,6 @@ export default function Dashboard() {
 }
 
 const styles = StyleSheet.create({
-  hintWrap: { marginBottom: spacing.lg },
   container: {
     flex: 1,
     backgroundColor: colors.background,

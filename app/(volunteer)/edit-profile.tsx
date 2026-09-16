@@ -9,7 +9,7 @@ import {
 import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   AvailabilityGrid,
@@ -87,6 +87,8 @@ export default function EditVolunteerProfile() {
     volunteerProfile?.availability_slots ?? []
   );
   const [discarding, setDiscarding] = useState(false);
+  // Where this screen was opened from. See backDestination.
+  const { from } = useLocalSearchParams<{ from?: string }>();
   // Repurposed from a "coming soon" notice into the upload's error dialog —
   // the happy path needs no confirmation, since the new photo appears in the
   // Avatar above the moment the store updates.
@@ -155,11 +157,28 @@ export default function EditVolunteerProfile() {
     }
   }
 
+  /*
+    WHERE BACK GOES, AND WHY IT IS NOT ALWAYS PROFILE (owner, 2026-09-16:
+    "tapping back does not return me to where I came from").
+
+    This screen is reached from Profile AND from the hint on the feed, and it
+    used to `replace` to Profile from both -- so opening it from the feed and
+    backing out dropped the volunteer on a screen they had not been on.
+
+    `from` is the query param ScreenHeader already reads for exactly this, but
+    onBack overrides the header's own routing, so it has to be honoured here
+    too. Anything not recognised falls back to Profile, which is the origin for
+    every other entry point.
+  */
+  function backDestination(): '/(volunteer)/feed' | '/(volunteer)/profile' {
+    return from === '/(volunteer)/feed' ? '/(volunteer)/feed' : '/(volunteer)/profile';
+  }
+
   function handleCancel() {
     if (dirty) {
       setDiscarding(true);
     } else {
-      router.replace('/(volunteer)/profile');
+      router.replace(backDestination());
     }
   }
 
@@ -356,7 +375,7 @@ export default function EditVolunteerProfile() {
         cancelLabel="Keep Editing"
         onConfirm={() => {
           setDiscarding(false);
-          router.replace('/(volunteer)/profile');
+          router.replace(backDestination());
         }}
         onCancel={() => setDiscarding(false)}
       />

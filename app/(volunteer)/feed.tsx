@@ -11,7 +11,7 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar, EmptyState, ErrorState, FilterChips, ListSkeleton, SelectField, ModerationBanner, HintRow } from '@/components/ui';
+import { Avatar, EmptyState, ErrorState, FilterChips, ListSkeleton, SelectField, ModerationBanner, HintRail } from '@/components/ui';
 import type { FilterChipOption, SelectOption } from '@/components/ui';
 import { MatchBreakdownSheet, OutreachFeedCard } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
@@ -166,29 +166,41 @@ export default function Feed() {
       </View>
 
       {/*
-        THE TWO THINGS NOBODY FINDS ON THEIR OWN. A volunteer had no way of
-        knowing that the skills on their profile decide what this list shows,
-        so a thin profile read as a quiet platform rather than a fixable
-        setting -- and nobody opens the Info Hub unprompted, so the screen
-        explaining clinical versus support reached only the people who least
-        needed it.
+        SIGNPOSTS, IN ONE SHORT ROW. These used to be two full-width boxes
+        stacked above the feed -- secondary content in primary space, which is
+        the fault whatever the words said. A rail costs one row however many
+        there are.
+
+        They still exist because neither is discoverable otherwise: nothing
+        told a volunteer that their profile decides what this list shows, and
+        nobody opens the Info Hub unprompted.
       */}
-      <View style={styles.hints}>
-        <HintRow
-          icon="tune-variant"
-          text="Your skills and availability shape these matches."
-          actionLabel="Edit profile"
-          accessibilityLabel="Edit your profile to change what you are matched with"
-          onPress={() => router.push('/(volunteer)/edit-profile')}
-        />
-        <HintRow
-          icon="help-circle-outline"
-          text="Clinical or support? How scores work?"
-          actionLabel="Info Hub"
-          accessibilityLabel="Open the Info Hub"
-          onPress={() => router.push('/(volunteer)/info-hub')}
-        />
-      </View>
+      <HintRail
+        items={[
+          {
+            icon: 'tune-variant',
+            label: 'Why these matches?',
+            accessibilityLabel: 'Edit your profile to change what you are matched with',
+            // `from` so backing out returns HERE, not to Profile: both screens
+            // are reached from two places and default to the other one.
+            onPress: () =>
+              router.push({
+                pathname: '/(volunteer)/edit-profile',
+                params: { from: '/(volunteer)/feed' },
+              }),
+          },
+          {
+            icon: 'help-circle-outline',
+            label: 'Clinical or support?',
+            accessibilityLabel: 'Open the Info Hub',
+            onPress: () =>
+              router.push({
+                pathname: '/(volunteer)/info-hub',
+                params: { from: '/(volunteer)/feed' },
+              }),
+          },
+        ]}
+      />
 
       <View style={styles.filters}>
         <SelectField
@@ -312,7 +324,6 @@ export default function Feed() {
 }
 
 const styles = StyleSheet.create({
-  hints: { paddingHorizontal: spacing.xl, gap: spacing.sm, marginBottom: spacing.base },
   container: {
     flex: 1,
     backgroundColor: colors.background,
