@@ -674,6 +674,23 @@ export default function CreateOutreach() {
                 The result is PREPENDED to the sections below, never swapped in
                 for them. See suggestedSections.
               */}
+              {/*
+                REQUIRED SKILLS IS THE POINT OF THIS STEP, and it did not look
+                like it (owner, 2026-09-16: "not clearly visible, despite being
+                the main point of that screen").
+
+                It was one field label among several, below a suggestion box and
+                above the role builder, with nothing saying it mattered more
+                than the controls around it. A heading and a line of purpose
+                give it the weight its 35 match points already have.
+              */}
+              <Text style={styles.skillsHeading}>Required Skills</Text>
+              <Text style={styles.skillsLead}>
+                {clinical
+                  ? 'The biggest single factor in who gets matched to this outreach.'
+                  : 'Optional for support work. Add them only if they genuinely matter.'}
+              </Text>
+
               <SkillSuggestBox
                 label="Not sure which skills to pick?"
                 // TITLE AND DESCRIPTION, not description alone (owner, 2026-09-15:
@@ -692,7 +709,9 @@ export default function CreateOutreach() {
                   organisation should not have to discover that by trying.
                 */}
                 <MultiSelectField
-                  label="Required Skills"
+                  // The heading above carries the name now, so the field keeps
+                  // only the asterisk's job: is this required or not.
+                  label=""
                   required={clinical}
                   placeholder={
                     clinical
@@ -775,6 +794,19 @@ export default function CreateOutreach() {
 }
 
 const styles = StyleSheet.create({
+  skillsHeading: {
+    fontFamily: fontFamily.bold,
+    fontSize: 18,
+    color: colors.textPrimary,
+  },
+  skillsLead: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.base,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

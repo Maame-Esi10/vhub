@@ -8,7 +8,7 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar } from '@/components/ui';
+import { Avatar, SettingsRow } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 import { tabBarClearance } from '@/components/ui/tabBarOptions';
@@ -56,8 +56,18 @@ export default function OrganisationProfile() {
         Initials come from the same `full_name` rendered beside them, so the
         fallback can never show different letters from the name on the card.
       */}
-      <View style={styles.card}>
-        <Avatar name={profile?.full_name ?? 'Organisation'} uri={profile?.avatar_url} size={56} />
+      {/*
+        THE SAME IDENTITY HEADER AS THE VOLUNTEER SIDE (owner, 2026-09-16).
+        This was a bordered card with the badges tucked inside it; the
+        volunteer's is a plain row with the badges underneath. Two designs for
+        the same thing on the two Profile screens, and no reason for either.
+
+        The volunteer's shape won because it is the better one: an avatar-led
+        row needs no container to read as a header, and putting the badges on
+        their own line stops the name column being squeezed by them.
+      */}
+      <View style={styles.identity}>
+        <Avatar name={profile?.full_name ?? 'Organisation'} uri={profile?.avatar_url} size={64} />
         <View style={styles.identityText}>
           <Text style={styles.name} numberOfLines={2}>
             {profile?.full_name ?? 'Organisation'}
@@ -67,45 +77,40 @@ export default function OrganisationProfile() {
               {profile.email}
             </Text>
           ) : null}
-          <View style={styles.badgeRow}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>Organisation</Text>
-            </View>
-          </View>
         </View>
       </View>
 
-      <Pressable
-        style={({ pressed }) => [styles.rowCard, pressed && styles.rowCardPressed]}
-        onPress={() => router.push('/(organisation)/edit-profile')}
-        accessibilityRole="button"
-        accessibilityLabel="Edit your organisation profile"
-      >
-        <MaterialCommunityIcons name="account-edit-outline" size={22} color={colors.primary} />
-        <View style={styles.rowText}>
-          <Text style={styles.rowTitle}>Edit Profile</Text>
-          <Text style={styles.rowBody}>
-            Update your organisation details, location and description.
-          </Text>
+      <View style={styles.badgeRow}>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>Organisation</Text>
         </View>
-        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
-      </Pressable>
+      </View>
 
-      <Pressable
-        style={({ pressed }) => [styles.rowCard, pressed && styles.rowCardPressed]}
-        onPress={() => router.push('/(organisation)/info-hub')}
-        accessibilityRole="button"
-        accessibilityLabel="How VHub works"
-      >
-        <MaterialCommunityIcons name="help-circle-outline" size={22} color={colors.primary} />
-        <View style={styles.rowText}>
-          <Text style={styles.rowTitle}>How VHub works</Text>
-          <Text style={styles.rowBody}>
-            Matching, applications, V-Score and post-event reviews explained.
-          </Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textSecondary} />
-      </Pressable>
+      {/*
+        SETTINGS ROWS, the standard across the app now. These were bespoke
+        two-line cards that existed only here, so the organisation side carried
+        a different treatment from the volunteer side for identical controls.
+        The supporting sentences went with them: a row that says "Edit Profile"
+        beside a pencil does not need a sentence explaining that it edits the
+        profile.
+      */}
+      <View style={styles.actions}>
+        <SettingsRow
+          icon="account-edit-outline"
+          label="Edit Profile"
+          onPress={() => router.push('/(organisation)/edit-profile')}
+        />
+        <SettingsRow
+          icon="help-circle-outline"
+          label="How VHub works"
+          onPress={() =>
+            router.push({
+              pathname: '/(organisation)/info-hub',
+              params: { from: '/(organisation)/profile' },
+            })
+          }
+        />
+      </View>
 
       {/* Sign Out lives in Settings (the gear above), not here. */}
       </ScrollView>
@@ -148,15 +153,18 @@ const styles = StyleSheet.create({
   gearPressed: {
     opacity: 0.7,
   },
-  card: {
+  identity: {
     flexDirection: 'row',
     alignItems: 'center',
-    // Real space between the logo and the text it labels, rather than the two
-    // sitting flush against each other.
+    // alignItems centres children within their line; alignContent places the
+    // line itself and defaults to flex-start, so a wrapping row pins to the top.
+    alignContent: 'center',
+    flexWrap: 'wrap',
+    rowGap: spacing.md,
     gap: spacing.base,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.base,
+  },
+  actions: {
+    marginTop: spacing.xl,
   },
   identityText: {
     // Takes the remaining width so a long organisation name wraps inside the
@@ -189,33 +197,5 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.medium,
     fontSize: 12,
     color: colors.primary,
-  },
-  rowCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.base,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.base,
-    marginTop: spacing.base,
-  },
-  rowCardPressed: {
-    opacity: 0.8,
-  },
-  rowText: {
-    flex: 1,
-  },
-  rowTitle: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  rowBody: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    lineHeight: 17,
-    color: colors.textSecondary,
-    marginTop: 2,
   },
 });

@@ -46,6 +46,22 @@ export const colors = {
   // Hairline borders/dividers on light surfaces.
   border: '#E5E7EB',
 
+  /*
+    A border that is actually VISIBLE on a tinted card.
+
+    WHY IT EXISTS (owner, 2026-09-16: the applicant and roster cards "look
+    unfinished"). The roster card already had `borderWidth: 1` with `border`,
+    and it read as though it had none -- because #E5E7EB sits on #F3F4F6, and
+    those two are barely a shade apart. The border was being drawn and could
+    not be seen.
+
+    `border` is correct on a WHITE ground, which is most of the app, and it
+    stays the default. This is for the case it cannot serve: an edge on a
+    `surface` or `surfaceSubtle` fill, where the line has to be darker than the
+    thing it is outlining rather than lighter than the page behind it.
+  */
+  borderOnSurface: '#D7DAE0',
+
   // Status accents.
   success: '#22C55E', // verified / ID-check green
   warning: '#F59E0B', // "locked until verified" amber banner

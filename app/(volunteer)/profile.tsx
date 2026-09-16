@@ -3,70 +3,12 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar, VScoreBadge } from '@/components/ui';
+import { Avatar, SettingsRow, VScoreBadge } from '@/components/ui';
 import { VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getVScoreBand } from '@/lib/vscore';
 import { useAuthStore } from '@/stores/authStore';
 import { tabBarClearance } from '@/components/ui/tabBarOptions';
-
-type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
-
-interface ProfileActionProps {
-  icon: IconName;
-  title: string;
-  /** One short line. Not a sentence explaining the feature — see below. */
-  body: string;
-  accessibilityLabel: string;
-  onPress: () => void;
-  /** The first row carries no divider above it. */
-  first?: boolean;
-}
-
-/**
- * One row of the actions card.
- *
- * REDESIGNED TWICE. The first attempt (2026-09-11) made each of these a
- * separate filled card with a coral icon tile and two lines of body copy. The
- * owner did not approve it, and rereading it she was right: two full-width
- * cards carrying a paragraph each gave two ordinary navigation links more
- * weight than the V-Score panel above them, which is the one thing on this
- * screen that is genuinely worth looking at.
- *
- * So they are now ONE grouped card with a hairline between the rows — the
- * standard way a phone shows a short list of destinations, and about half the
- * height. The subtitles are cut to a single short line. "Everything
- * organisations have said about your work, in full, including their notes" is
- * a sentence explaining a feature; a row like this needs a label and a hint,
- * and the screen it opens can do the explaining.
- */
-function ProfileAction({ icon, title, body, accessibilityLabel, onPress, first }: ProfileActionProps) {
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.actionRow, !first && styles.actionRowDivided, pressed && styles.pressed]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-    >
-      <MaterialCommunityIcons
-        name={icon}
-        size={22}
-        color={colors.primary}
-        style={styles.actionIcon}
-      />
-      <View style={styles.actionText}>
-        <Text style={styles.actionTitle}>{title}</Text>
-        <Text style={styles.actionBody}>{body}</Text>
-      </View>
-      <MaterialCommunityIcons
-        name="chevron-right"
-        size={22}
-        color={colors.textSecondary}
-        style={styles.actionChevron}
-      />
-    </Pressable>
-  );
-}
 
 export default function VolunteerProfile() {
   const insets = useSafeAreaInsets();
@@ -205,28 +147,45 @@ export default function VolunteerProfile() {
           </Pressable>
         ) : null}
 
-        <View style={styles.actionsCard}>
-          {/*
-            EDIT PROFILE FIRST (owner-approved, 2026-09-14). Not merely a stated
-            preference: Edit Profile is the only control on this screen that
-            changes a volunteer's outcomes. Skills, specialties and availability
-            are three of the five matching components, so editing the profile is
-            literally how somebody improves what they are offered. My Feedback
-            is a record of what has already happened. Active above passive.
-          */}
-          <ProfileAction
-            first
+        {/*
+          THE SETTINGS ROW IS THE STANDARD (owner, 2026-09-16). These were a
+          bespoke two-row card that existed nowhere else in the app, so the
+          screen carried three different card treatments -- the V-Score panel,
+          the identity block and this -- and read as three designs rather than
+          one.
+
+          SettingsRow is the row this app already has for "a labelled thing you
+          tap to go somewhere", it is the treatment on Settings, and it has
+          been through two rounds of large-font fixes that a new card would have
+          had to repeat. The V-Score card stays exactly as approved: it is not
+          a navigation row, it is the screen's one piece of data.
+
+          EDIT PROFILE FIRST (owner-approved, 2026-09-14). Not merely a stated
+          preference: it is the only control here that changes a volunteer's
+          outcomes, because skills, specialties and availability are three of
+          the five matching components. My Feedback is a record of what has
+          already happened. Active above passive.
+        */}
+        <View style={styles.actions}>
+          <SettingsRow
             icon="account-edit-outline"
-            title="Edit Profile"
-            body="Details, expertise and availability"
-            accessibilityLabel="Edit your professional profile"
-            onPress={() => router.push('/(volunteer)/edit-profile')}
+            label="Edit Profile"
+            onPress={() =>
+              router.push({
+                pathname: '/(volunteer)/edit-profile',
+                params: { from: '/(volunteer)/profile' },
+              })
+            }
           />
-          <ProfileAction
-            icon="message-star-outline"
-            title="My Feedback"
-            body="Reviews and notes from organisations"
-            accessibilityLabel="See the feedback organisations have given you"
+          {/*
+            `star-box-outline`, not `message-star-outline`: the old glyph was a
+            speech bubble, which reads as messages the volunteer can reply to.
+            Feedback here is a record written about them that they can only
+            read.
+          */}
+          <SettingsRow
+            icon="star-box-outline"
+            label="My Feedback"
             onPress={() => router.push('/(volunteer)/feedback')}
           />
         </View>
@@ -244,6 +203,11 @@ export default function VolunteerProfile() {
 }
 
 const styles = StyleSheet.create({
+  actions: {
+    // The section gap, matching the one above the V-Score card. SettingsRow
+    // carries its own marginBottom between rows.
+    marginTop: spacing.xl,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -437,51 +401,8 @@ const styles = StyleSheet.create({
   },
 
   // ---- The two actions, as one grouped card ----------------------------
-  actionsCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    // SECTION GAP, not a within-section gap (owner, 2026-09-14). While the
-    // space BETWEEN sections equalled the space INSIDE them, nothing on this
-    // screen read as grouped -- it was one undifferentiated column, which is
-    // most of why it felt wrong across three attempts. xl between, lg within.
-    marginTop: spacing.xl,
-    overflow: 'hidden',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.base,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.base,
-  },
-  actionRowDivided: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
   // A bare glyph rather than a tile. The tile was what made these read as
   // heavier than the score card above them.
-  actionIcon: {
-    flexGrow: 0,
-    flexShrink: 0,
-    width: 22,
-  },
-  actionText: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 0,
-    gap: 1,
-  },
-  actionTitle: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  actionBody: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12.5,
-    lineHeight: 17,
-    color: colors.textSecondary,
-  },
   // An icon is a Text node underneath, so without this it is a shrinkable flex
   // item and the arrow clips to a sliver when the row is tight.
   actionChevron: {

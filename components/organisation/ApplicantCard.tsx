@@ -312,6 +312,11 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
+    // A visible edge, in the token that can be seen on a tinted fill: plain
+    // `border` is lighter than `surface` and draws nothing. Without it the
+    // card had no boundary at all and read as unfinished.
+    borderWidth: 1,
+    borderColor: colors.borderOnSurface,
     padding: spacing.base,
     marginBottom: spacing.base,
   },

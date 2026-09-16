@@ -21,6 +21,38 @@ const STATUS_TONE: Record<ApplicationStatus, BadgeTone> = {
   cancelled: 'neutral',
 };
 
+/**
+ * The colour of the rail down the left edge of each card.
+ *
+ * WHY THE CARD LEADS WITH STATUS (owner, 2026-09-16: the Applications cards
+ * were "plain and identical to the Schedule screen").
+ *
+ * They were, and the reason is that both were bordered rectangles with a title
+ * and some meta -- so two screens answering completely different questions
+ * looked the same. Schedule answers "what am I doing and when": it is
+ * time-led, and its card is built around a date and an icon rail. Applications
+ * answers "where do my applications stand": the STATUS is the whole point, and
+ * it was a chip in the corner like any other piece of metadata.
+ *
+ * A coloured rail makes the answer scannable down a list without reading a
+ * word of it -- four pending and one accepted is a shape, not five titles. The
+ * chip stays, because colour alone is not an accessible way to carry meaning;
+ * the rail reinforces the chip rather than replacing it.
+ *
+ * This is also why the card is NOT a bordered rectangle any more: the content
+ * wanted an accent, not a container.
+ */
+const STATUS_RAIL: Record<ApplicationStatus, string> = {
+  pending: colors.warning,
+  accepted: colors.success,
+  rejected: colors.danger,
+  waitlisted: colors.primary,
+  // Neutral in the tone map, and neutral here: a decision that went against
+  // the volunteer is not an error, and a red rail would say it was.
+  not_selected: colors.textSecondary,
+  cancelled: colors.textSecondary,
+};
+
 const STATUS_LABEL: Record<ApplicationStatus, string> = {
   pending: 'Under review',
   accepted: 'Accepted',
@@ -122,7 +154,11 @@ export function VolunteerApplicationCard({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={outreach?.title ?? 'Application'}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.card,
+        { borderLeftColor: STATUS_RAIL[application.status] },
+        pressed && styles.pressed,
+      ]}
     >
       <View style={styles.topRow}>
         <Text style={styles.title} numberOfLines={2}>
@@ -233,10 +269,18 @@ export function VolunteerApplicationCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
+    // The rail: a solid edge on the left only, in the status colour. Border
+    // radius clips it into a rounded tab, which is why no separate view is
+    // needed to draw it.
+    borderLeftWidth: 4,
+    // The other three sides are a hairline rather than a full border, so the
+    // rail is the only strong edge and the eye goes to it.
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     padding: spacing.base,
     marginBottom: spacing.md,
   },

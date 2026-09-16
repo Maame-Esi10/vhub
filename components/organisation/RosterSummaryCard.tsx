@@ -192,7 +192,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    // Was `border`, which is lighter than the `surface` fill it outlines, so
+    // the card looked borderless despite having one.
+    borderColor: colors.borderOnSurface,
   },
   headerRow: {
     flexDirection: 'row',

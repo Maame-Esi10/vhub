@@ -10,7 +10,7 @@ import { InfoBandRow,
   InfoSection,
   InfoSubheading,
   InfoWeightRow,
-  ScreenHeader, GlanceGrid, RoleTypeExplainer } from '@/components/ui';
+  ScreenHeader, RoleTypeExplainer } from '@/components/ui';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { LAYER1_WEIGHTS } from '@/lib/matching/layer1';
 import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS } from '@/lib/vscore';
@@ -49,20 +49,20 @@ export default function OrganisationInfoHub() {
           THE MAP, BEFORE THE DETAIL. Every section below is collapsed, so
           without this the screen is a table of contents written as furniture.
         */}
-        <GlanceGrid
-          items={[
-            { icon: 'target', term: 'Match score', meaning: 'How well a volunteer fits this event' },
-            { icon: 'shield-check-outline', term: 'V-Score', meaning: 'How dependable they have been' },
-            { icon: 'stethoscope', term: 'Clinical role', meaning: 'Hands-on care. Needs verification' },
-            { icon: 'account-group-outline', term: 'Support role', meaning: 'Runs the event. Open to all' },
-          ]}
-        />
-
         {/*
-          FIRST AND OPEN, because this is the distinction an organisation gets
-          wrong in the costliest direction: ticking "support" to stop the
-          verification gate blocking applicants takes the credential check off
-          work that needed it.
+          THE GLANCE GRID IS GONE (owner, 2026-09-16: "the four boxes at the
+          top are followed by explanations... each explanation should sit under
+          its own box").
+
+          That split was the grid's own fault. It named four concepts in two
+          words each and the sections below then explained them -- in a
+          different order, several screens apart, so the reader had to carry
+          four terms down the page and match them up. A map is only worth
+          having when the territory is far away; here every section header IS
+          the term, and its body IS the explanation, directly underneath.
+
+          It also removes the second card design from a screen that was
+          supposed to have one.
         */}
         <InfoSection
           icon="compare-horizontal"

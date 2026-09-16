@@ -1,8 +1,5 @@
-import { useState } from 'react';
 import {
-  LayoutAnimation,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   UIManager,
@@ -11,7 +8,10 @@ import {
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { GlanceGrid, RoleTypeExplainer, ScreenHeader } from '@/components/ui';
+// InfoSection is the SHARED card, and is now the only one on either hub.
+// This screen used to declare its own `Section` with identical props and a
+// different look, so the two Info Hubs read as two designs.
+import { InfoSection, RoleTypeExplainer, ScreenHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { LAYER1_WEIGHTS } from '@/lib/matching/layer1';
 import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS, V_SCORE_PENALTIES } from '@/lib/vscore';
@@ -58,31 +58,31 @@ export default function InfoHub() {
           open things to find out whether it answered your question, so somebody
           unsure what they wanted opened nothing and left.
         */}
-        <GlanceGrid
-          items={[
-            { icon: 'target', term: 'Match score', meaning: 'How well an event fits you, out of 100' },
-            { icon: 'shield-check-outline', term: 'V-Score', meaning: 'How dependable you have been' },
-            { icon: 'stethoscope', term: 'Clinical work', meaning: 'Hands-on care. Needs verification' },
-            { icon: 'account-group-outline', term: 'Support work', meaning: 'Runs the event. Open to all' },
-          ]}
-        />
-
         {/*
-          THE DISTINCTION MOST OFTEN GOT WRONG, so it opens first and is drawn
-          rather than written. Both words had only ever appeared beside
-          verification, which taught everyone that clinical means verified and
-          support means unverified.
+          THE GLANCE GRID IS GONE (owner, 2026-09-16: "the four boxes at the
+          top are followed by explanations... each explanation should sit under
+          its own box").
+
+          That split was the grid's own fault. It named four concepts in two
+          words each and the sections below then explained them -- in a
+          different order, several screens apart, so the reader had to carry
+          four terms down the page and match them up. A map is only worth
+          having when the territory is far away; here every section header IS
+          the term, and its body IS the explanation, directly underneath.
+
+          It also removes the second card design from a screen that was
+          supposed to have one.
         */}
-        <Section
+        <InfoSection
           icon="compare-horizontal"
           title="Clinical or support?"
           subtitle="What the work is, not who may do it"
           defaultOpen
         >
           <RoleTypeExplainer audience="volunteer" />
-        </Section>
+        </InfoSection>
 
-        <Section
+        <InfoSection
           icon="target"
           title="Your match score"
           subtitle="Shown on every outreach in your feed"
@@ -138,9 +138,9 @@ export default function InfoHub() {
             A low score usually points at something fixable: a skill you haven&apos;t added yet, or
             an availability slot you left unticked.
           </Text>
-        </Section>
+        </InfoSection>
 
-        <Section
+        <InfoSection
           icon="shield-check-outline"
           title="Your V-Score"
           subtitle={
@@ -192,9 +192,9 @@ export default function InfoHub() {
               waitlist.
             </Text>
           </View>
-        </Section>
+        </InfoSection>
 
-        <Section icon="account-check-outline" title="Verification" subtitle="What it unlocks">
+        <InfoSection icon="account-check-outline" title="Verification" subtitle="What it unlocks">
           <Text style={styles.body}>
             You can browse every outreach and join support roles without verifying your identity.
             Clinical roles are different: they need a verified profile before you can submit a full
@@ -204,9 +204,9 @@ export default function InfoHub() {
             Verification doesn&apos;t change your match score or your V-Score. It only decides which
             roles you are eligible to apply for.
           </Text>
-        </Section>
+        </InfoSection>
 
-        <Section icon="lock-outline" title="Your data" subtitle="Who can see what">
+        <InfoSection icon="lock-outline" title="Your data" subtitle="Who can see what">
           <Text style={styles.body}>
             Your phone number and email are only visible to an organisation once you have actually
             applied to one of their outreaches. Before that, they can see the same public profile any
@@ -216,51 +216,9 @@ export default function InfoHub() {
             Scores are calculated on VHub&apos;s servers, never on your phone, and neither you nor an
             organisation can edit a V-Score directly.
           </Text>
-        </Section>
+        </InfoSection>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-interface SectionProps {
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  title: string;
-  subtitle: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}
-
-function Section({ icon, title, subtitle, defaultOpen = false, children }: SectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <View style={styles.section}>
-      <Pressable
-        onPress={() => {
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          setOpen((value) => !value);
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        accessibilityState={{ expanded: open }}
-        style={({ pressed }) => [styles.sectionHeader, pressed && styles.pressed]}
-      >
-        <View style={styles.sectionIcon}>
-          <MaterialCommunityIcons name={icon} size={20} color={colors.primary} />
-        </View>
-        <View style={styles.sectionHeaderText}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <Text style={styles.sectionSubtitle}>{subtitle}</Text>
-        </View>
-        <MaterialCommunityIcons
-          name={open ? 'chevron-up' : 'chevron-down'}
-          size={22}
-          color={colors.textSecondary}
-        />
-      </Pressable>
-
-      {open ? <View style={styles.sectionBody}>{children}</View> : null}
-    </View>
   );
 }
 
@@ -324,47 +282,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginBottom: spacing.lg,
   },
-  section: {
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.md,
-    overflow: 'hidden',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.base,
-  },
   pressed: {
     opacity: 0.8,
-  },
-  sectionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  sectionHeaderText: {
-    flex: 1,
-  },
-  sectionTitle: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  sectionSubtitle: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  sectionBody: {
-    paddingHorizontal: spacing.base,
-    paddingBottom: spacing.base,
   },
   body: {
     fontFamily: fontFamily.regular,
