@@ -352,7 +352,7 @@ alter table outreaches add column if not exists flyer_url text;
 -- image is a Cloudinary public_id on PUBLIC delivery like the flyer, and the
 -- coordinates exist to hand to whichever map app the phone already has rather
 -- than to render a map inside VHub.
-alter table outreaches add column if not exists location_image_id text;
+alter table outreaches add column if not exists location_image_url text;
 alter table outreaches add column if not exists location_lat numeric;
 alter table outreaches add column if not exists location_lng numeric;
 alter table outreaches drop constraint if exists outreaches_location_pair;
@@ -1989,7 +1989,7 @@ grant update (
   slots_total,
   status,
   flyer_url,
-  location_image_id,
+  location_image_url,
   location_lat,
   location_lng
 ) on outreaches to authenticated;
@@ -2065,7 +2065,7 @@ grant insert (
   slots_total,
   status,
   flyer_url,
-  location_image_id,
+  location_image_url,
   location_lat,
   location_lng
 ) on outreaches to authenticated;

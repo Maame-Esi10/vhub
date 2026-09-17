@@ -80,6 +80,15 @@ export interface OutreachWizardState {
   region: string | null;
   district: string | null;
   locationName: string;
+  /**
+   * The venue photo and pin. Both optional and deliberately unvalidated: an
+   * organisation filling the form from another region cannot capture a
+   * position, and a required field here would be answered with a guess -- a
+   * guessed coordinate sends people to the wrong place with confidence.
+   */
+  locationImageUrl: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   requiredSkills: string[];
   /** Always at least one. The organisation adds and removes entries; there is no mode. */
   roles: RoleDraft[];
@@ -129,6 +138,9 @@ export const INITIAL_WIZARD_STATE: OutreachWizardState = {
   region: null,
   district: null,
   locationName: '',
+  locationImageUrl: null,
+  locationLat: null,
+  locationLng: null,
   requiredSkills: [],
   roles: [INITIAL_ROLE],
   flyerUrl: null,
@@ -498,6 +510,9 @@ export function wizardStateFromOutreach(
     role_type: OutreachRoleType | null;
     slots_total: number;
     flyer_url: string | null;
+    location_image_url?: string | null;
+    location_lat?: number | null;
+    location_lng?: number | null;
   },
   roles: {
     category: VolunteerCategory;
@@ -534,6 +549,13 @@ export function wizardStateFromOutreach(
     region: outreach.region,
     district: outreach.district,
     locationName: outreach.location_name ?? '',
+    // The stored id, and no preview URL: the editor has the public_id but not
+    // a delivery URL, and constructing one here would hard-code a Cloudinary
+    // cloud name and transformation into the form. An organisation replacing
+    // the photo picks a new one; one leaving it alone sends the same id back.
+    locationImageUrl: outreach.location_image_url ?? null,
+    locationLat: outreach.location_lat ?? null,
+    locationLng: outreach.location_lng ?? null,
     requiredSkills: outreach.required_skills ?? [],
     roles:
       roles.length > 0

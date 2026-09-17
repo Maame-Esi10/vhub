@@ -352,6 +352,20 @@ export interface CreateOutreachParams {
    * it on its own listing — see supabase/schema.sql.
    */
   flyerUrl?: string | null;
+  /**
+   * The venue photo's Cloudinary public_id, and the venue's coordinates.
+   *
+   * Client-writable for the same reason the flyer is: an organisation sets
+   * them on its own listing, and all three are in outreaches' INSERT and
+   * UPDATE grant lists (supabase/migrations/20260916_outreach_location.sql).
+   *
+   * The public_id, not a URL: a delivery URL carries a transformation and a
+   * version, so storing one would make every future change of size or format
+   * a data migration.
+   */
+  locationImageUrl?: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
 }
 
 /**
@@ -384,6 +398,9 @@ export function useCreateOutreach() {
           slots_total: params.slotsTotal,
           status: params.status,
           flyer_url: params.flyerUrl ?? null,
+          location_image_url: params.locationImageUrl ?? null,
+          location_lat: params.locationLat ?? null,
+          location_lng: params.locationLng ?? null,
         })
         .select()
         .single();

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
-  Switch,
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -129,18 +128,56 @@ export function CategoryChecklist({
             </Pressable>
 
             {isOpen ? (
+              /*
+                CHIPS, NOT SWITCH ROWS (owner, 2026-09-16: "the same
+                required-skills design from onboarding... the UI only, not the
+                concept").
+
+                The two pickers stay different where it matters -- this one is
+                search-first because an organisation usually has something in
+                mind, and onboarding is browse-first because a volunteer is
+                being asked what they can do. That is a deliberate,
+                documented split and it is untouched.
+
+                What was NOT deliberate was them LOOKING different. A full-width
+                row with a Switch reads as a settings toggle: a thing you turn
+                on, one per line, however short the word. A chip is sized by its
+                own text, so a category fits in a third of the vertical space
+                and the selected ones are visible as a group rather than as a
+                column of switch positions to read one at a time.
+
+                Same styling as components/onboarding/SkillPicker, deliberately
+                to the pixel.
+              */
               <View style={styles.body}>
-                {section.data.map((item) => (
-                  <View key={item} style={styles.row}>
-                    <Text style={styles.rowLabel}>{item}</Text>
-                    <Switch
-                      value={selected.has(item)}
-                      onValueChange={() => onToggle(item)}
-                      trackColor={{ false: colors.border, true: colors.primary }}
-                      thumbColor={colors.white}
-                    />
-                  </View>
-                ))}
+                <View style={styles.grid}>
+                  {section.data.map((item) => {
+                    const isSelected = selected.has(item);
+                    return (
+                      <Pressable
+                        key={item}
+                        onPress={() => onToggle(item)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: isSelected }}
+                        accessibilityLabel={item}
+                        style={({ pressed }) => [
+                          styles.skillChip,
+                          isSelected && styles.skillChipSelected,
+                          pressed && styles.chipPressed,
+                        ]}
+                      >
+                        {isSelected ? (
+                          <MaterialCommunityIcons name="check" size={14} color={colors.primary} />
+                        ) : null}
+                        <Text
+                          style={[styles.skillChipText, isSelected && styles.skillChipTextSelected]}
+                        >
+                          {item}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
             ) : null}
           </View>
@@ -199,25 +236,35 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  row: {
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  skillChip: {
     flexDirection: 'row',
     alignItems: 'center',
-
-    // alignItems centres children within their line; alignContent places
-    // the line itself, and defaults to flex-start. Without it a wrapping row
-    // pins its single line to the TOP of the box.
-    alignContent: 'center',
-    justifyContent: 'space-between',
-    // Wraps instead of clipping when the row outgrows its width at a large
-    // system font size. rowGap only applies between wrapped lines, so a row
-    // that still fits on one is unaffected.
-    flexWrap: 'wrap',
-    rowGap: 4,
-    gap: spacing.base,
+    gap: spacing.xs,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.base,
     paddingVertical: spacing.md,
   },
-  rowLabel: {
-    flex: 1,
+  skillChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(255, 107, 107, 0.10)',
+  },
+  chipPressed: {
+    opacity: 0.7,
+  },
+  skillChipTextSelected: {
+    color: colors.primary,
+  },
+  skillChipText: {
     fontFamily: fontFamily.regular,
     fontSize: 14,
     color: colors.textPrimary,

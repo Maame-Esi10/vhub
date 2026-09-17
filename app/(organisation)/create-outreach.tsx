@@ -48,6 +48,7 @@ import { colors, fontFamily, spacing } from '@/constants/theme';
 import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { SKILL_CATEGORIES } from '@/constants/skills';
 import { SkillSuggestBox } from '@/components/skills/SkillSuggestBox';
+import { VenueLocationField } from '@/components/organisation/VenueLocationField';
 import {
   MAX_GALLERY_IMAGES,
   useAddOutreachDays,
@@ -308,6 +309,9 @@ export default function CreateOutreach() {
         slotsTotal: payload.slotsTotal,
         status,
         flyerUrl: state.flyerUrl,
+        locationImageUrl: state.locationImageUrl,
+        locationLat: state.locationLat,
+        locationLng: state.locationLng,
       },
       {
         onSuccess: async (outreach) => {
@@ -609,6 +613,27 @@ export default function CreateOutreach() {
                   accessibilityLabel="Venue name"
                 />
               </View>
+
+              {/*
+                Directly under the venue NAME, because that is the thing it
+                makes findable. A name on its own is not somewhere a volunteer
+                who has never been there can get to.
+              */}
+              <VenueLocationField
+                value={{
+                  imageUrl: state.locationImageUrl,
+                  lat: state.locationLat,
+                  lng: state.locationLng,
+                }}
+                onChange={(next) =>
+                  setState((prev) => ({
+                    ...prev,
+                    locationImageUrl: next.imageUrl,
+                    locationLat: next.lat,
+                    locationLng: next.lng,
+                  }))
+                }
+              />
               {/*
                 Native pickers rather than masked text entry: the organiser no
                 longer types punctuation, and an impossible date like 2026-13-45

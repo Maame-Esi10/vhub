@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Image,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -412,6 +414,51 @@ export default function OutreachDetail() {
               {row.value}
             </DetailRow>
           ))}
+
+          {/*
+            GETTING THERE, when the organisation supplied it.
+
+            A venue NAME is not a place somebody who has never been there can
+            find. A photo answers "what am I looking for when I arrive", and the
+            pin hands the point to whichever map app the phone already has --
+            which does walking directions, offline tiles and traffic far better
+            than a map rendered inside VHub would.
+
+            `geo:` is the Android intent and is understood by every map app on
+            the platform; the `?q=` label is what makes the pin show the venue's
+            name rather than a bare coordinate. Both are optional and independent:
+            an organisation may supply a photo, a pin, both or neither, and each
+            renders only if it is there.
+          */}
+          {outreach.location_image_url ? (
+            <Image
+              source={{ uri: outreach.location_image_url }}
+              style={styles.venuePhoto}
+              resizeMode="cover"
+              accessibilityLabel={`Photo of ${outreach.location_name ?? 'the venue'}`}
+            />
+          ) : null}
+
+          {outreach.location_lat !== null && outreach.location_lng !== null ? (
+            <Pressable
+              onPress={() => {
+                const label = encodeURIComponent(outreach.location_name ?? 'Outreach venue');
+                void Linking.openURL(
+                  `geo:${outreach.location_lat},${outreach.location_lng}?q=${outreach.location_lat},${outreach.location_lng}(${label})`
+                ).catch(() => {
+                  // No map app, or the scheme was refused. The address above is
+                  // still on screen, so this is a shortcut that did not work
+                  // rather than a dead end.
+                });
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open the venue in your map app"
+              style={({ pressed }) => [styles.mapLink, pressed && styles.mapLinkPressed]}
+            >
+              <MaterialCommunityIcons name="directions" size={18} color={colors.primary} />
+              <Text style={styles.mapLinkText}>Open in maps</Text>
+            </Pressable>
+          ) : null}
 
           {/*
             The link is an action, not another fact, so it needs more air above
@@ -834,6 +881,36 @@ function DetailRow({
 }
 
 const styles = StyleSheet.create({
+  venuePhoto: {
+    width: '100%',
+    height: 160,
+    borderRadius: radius.md,
+    marginTop: spacing.base,
+    backgroundColor: colors.surface,
+  },
+  mapLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignContent: 'center',
+    flexWrap: 'wrap',
+    rowGap: spacing.xs,
+    gap: spacing.sm,
+    alignSelf: 'flex-start',
+    marginTop: spacing.base,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  mapLinkPressed: {
+    opacity: 0.7,
+  },
+  mapLinkText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    color: colors.primary,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

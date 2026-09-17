@@ -193,6 +193,34 @@ export function useFlyerUpload() {
 }
 
 /**
+ * Uploads a photo of the venue and returns BOTH its URL and its public_id.
+ *
+ * REUSES THE 'gallery' UPLOAD KIND deliberately. A venue photo is the same
+ * class of asset in every way that matters to Cloudinary: an image, public
+ * delivery, uncropped, signed for an organisation. Adding a 'venue' kind would
+ * mean a new branch in lib/cloudinary.ts, a new folder, and a change to the
+ * signature endpoint's allowed kinds -- three moving parts for a different
+ * folder name.
+ *
+ * The caller keeps the URL, which is the convention every PUBLIC image in this
+ * app already follows -- `outreaches.flyer_url`, `outreach_images.url`,
+ * `profiles.avatar_url`. Storing the public_id instead would mean building a
+ * delivery URL to render it, which needs the Cloudinary cloud name, and the
+ * app only learns that from the signature endpoint at upload time. The
+ * public_id convention belongs to the PRIVATE assets, which are read back
+ * through /api/document-url by a server that knows the cloud name.
+ */
+export function useVenuePhotoUpload() {
+  return useMutation({
+    mutationFn: async (): Promise<UploadResult | null> => {
+      const picked = await pickImage('gallery');
+      if (picked.cancelled) return null;
+      return uploadToCloudinary('gallery', picked.file);
+    },
+  });
+}
+
+/**
  * Uploads one gallery image and returns its URL.
  *
  * Deliberately separate from `useFlyerUpload` even though the flow is the
