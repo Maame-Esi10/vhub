@@ -49,10 +49,15 @@ const GROUP_LABEL: Record<ApplicationStatus, string> = {
   cancelled: 'Withdrawn',
 };
 
-/** One flattened list so a single FlatList can render grouped sections. */
-type Row =
-  | { kind: 'header'; key: string; label: string; count: number }
-  | { kind: 'application'; key: string; application: VolunteerApplication };
+/*
+  NO GROUP HEADERS ANY MORE (2026-09-18, with the card redesign).
+
+  Each card now states its own status in words across a band at the top, so a
+  "UNDER REVIEW" heading directly above a card reading "UNDER REVIEW" said the
+  same thing twice, and the counts it carried are already on the filter chips.
+  The order below is still the grouping -- undecided first, then what they got,
+  then what is closed out -- it is simply no longer announced.
+*/
 
 export default function Applications() {
   const insets = useSafeAreaInsets();
@@ -118,28 +123,13 @@ export default function Applications() {
     })),
   ];
 
-  const rows = useMemo<Row[]>(() => {
+  const rows = useMemo<VolunteerApplication[]>(() => {
     const visibleGroups =
       statusFilter === 'all' ? GROUP_ORDER : GROUP_ORDER.filter((status) => status === statusFilter);
 
-    return visibleGroups.flatMap((status) => {
-      const inGroup = applications.filter((application) => application.status === status);
-      if (inGroup.length === 0) return [];
-      const header: Row = {
-        kind: 'header',
-        key: `header-${status}`,
-        label: GROUP_LABEL[status],
-        count: inGroup.length,
-      };
-      return [
-        header,
-        ...inGroup.map<Row>((application) => ({
-          kind: 'application',
-          key: application.id,
-          application,
-        })),
-      ];
-    });
+    return visibleGroups.flatMap((status) =>
+      applications.filter((application) => application.status === status)
+    );
   }, [applications, statusFilter]);
 
   function handleWithdraw(reason: string | null) {
@@ -204,7 +194,7 @@ export default function Applications() {
 
       <FlatList
         data={rows}
-        keyExtractor={(item) => item.key}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: tabBarClearance(insets.bottom) },
@@ -215,31 +205,27 @@ export default function Applications() {
             onRefresh={() => applicationsQuery.refetch()}
           />
         }
-        renderItem={({ item }) =>
-          item.kind === 'header' ? (
-            <Text style={styles.groupHeader}>
-              {item.label} ({item.count})
-            </Text>
-          ) : (
-            <VolunteerApplicationCard
-              application={item.application}
-              organisationLogoUrl={
-                item.application.outreach?.organisation
-                  ? organisationLogos.data?.[item.application.outreach.organisation.id]
-                  : null
-              }
-              onPress={() => router.push(`/(volunteer)/outreach/${item.application.outreach_id}?from=/(volunteer)/applications`)}
-              onWithdraw={() => setWithdrawing(item.application)}
-              waitlistPosition={waitlistPositions.data?.[item.application.id]}
-              eventDays={
-                item.application.outreach
-                  ? applicationDays.data?.[item.application.outreach.id]?.map((day) => day.day)
-                  : undefined
-              }
-              committedDays={committedDays.data?.[item.application.id]}
-            />
-          )
-        }
+        renderItem={({ item }) => (
+          <VolunteerApplicationCard
+            application={item}
+            organisationLogoUrl={
+              item.outreach?.organisation
+                ? organisationLogos.data?.[item.outreach.organisation.id]
+                : null
+            }
+            onPress={() =>
+              router.push(
+                `/(volunteer)/outreach/${item.outreach_id}?from=/(volunteer)/applications`
+              )
+            }
+            onWithdraw={() => setWithdrawing(item)}
+            waitlistPosition={waitlistPositions.data?.[item.id]}
+            eventDays={
+              item.outreach ? applicationDays.data?.[item.outreach.id]?.map((day) => day.day) : undefined
+            }
+            committedDays={committedDays.data?.[item.id]}
+          />
+        )}
         ListEmptyComponent={
           applications.length === 0 ? (
             <EmptyState
@@ -291,11 +277,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: colors.textPrimary,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.base,
+    paddingTop: spacing.lg,
   },
   filtersWrap: {
     paddingHorizontal: spacing.xl,
+    // The chips are a separate thing from the screen's name, and the gap has
+    // to say so: a heading with 16 under it reads as a label ON the chips.
     marginTop: spacing.base,
+    marginBottom: spacing.xs,
   },
   centerFill: {
     flex: 1,
@@ -305,14 +294,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.base,
     paddingBottom: spacing.xxl,
-  },
-  groupHeader: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 11,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    color: colors.textSecondary,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
   },
 });

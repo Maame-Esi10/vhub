@@ -13,28 +13,30 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 type IconName = keyof typeof Ionicons.glyphMap;
 
 /**
- * How far the bar floats in from the left and right edges.
+ * How far the bar is pulled IN from the left and right edges of the screen.
  *
- * A PROPORTION OF THE SCREEN, NOT A FIXED NUMBER (owner, reported three times:
- * "it still spans the full width... I want space OUTSIDE the container").
+ * WHY THIS KEPT COMING BACK WRONG (owner, reported four times, most recently
+ * "the navbar still touches the edges... make the bar physically shorter").
  *
- * The history is the useful part. It was `spacing.base` (16) so the pill lined
- * up with the content gutter, which is exactly what made it read as part of
- * the page rather than as something floating on it. Raising it to 28 helped
- * and was still not enough, because 28 on a 400dp screen is a bar 86% of the
- * width -- which the eye reads as full-width with rounded ends, not as a pill.
+ * It was never the number. The bar was being inset with `left` and `right`,
+ * and React Navigation's own bottom-bar style pins the bar with `start: 0`
+ * and `end: 0` (see BottomTabBar's `styles.bottom`). In Yoga, `start`/`end`
+ * take PRECEDENCE over `left`/`right` whatever the order of the style array,
+ * so our inset was parsed, applied, and silently discarded on every render.
+ * The bar has therefore been full width this whole time, and every previous
+ * attempt -- 16, then 28, then 12% of the screen -- changed nothing visible,
+ * which is exactly why raising the number never helped.
+ *
+ * `marginHorizontal` is the fix rather than `start`/`end`: React Navigation
+ * sets no margin on the bar, so nothing can outrank it, and it does not
+ * depend on which of RN's three generations of inset props wins. Do NOT go
+ * back to `left`/`right` here.
  *
  * `(-------)` is wrong. `(   -------   )` is right.
  *
- * 12% a side puts the bar at roughly three quarters of the screen, which is
- * the point where it stops touching and starts floating. Clamped so it does
- * not collapse on a small handset or drift absurdly wide on a tablet.
- *
- * THE LABELS ARE STILL HERE. Five of them will not fit across three quarters
- * of a phone at a FIXED size, which is what capped two earlier attempts and
- * then briefly cost the labels entirely. The fix was the fixed size, not the
- * words: tabBarLabel renders each one with adjustsFontSizeToFit, so a narrow
- * handset gets a slightly smaller label rather than a truncated one.
+ * 12% a side leaves a quarter of the screen as clear space either end, which
+ * is the point where the bar stops touching and starts floating. Clamped so
+ * it does not collapse on a small handset or drift absurdly wide on a tablet.
  */
 function barInset(screenWidth: number): number {
   return Math.min(Math.max(screenWidth * 0.12, 28), 72);
@@ -86,8 +88,10 @@ export function useTabBarScreenOptions() {
     tabBarInactiveTintColor: colors.textSecondary,
     tabBarStyle: {
       position: 'absolute' as const,
-      left: inset,
-      right: inset,
+      // MARGIN, NOT left/right -- see barInset. React Navigation pins the bar
+      // with start/end, which outrank left/right in Yoga, so an inset written
+      // that way is discarded and the bar spans the full screen.
+      marginHorizontal: inset,
       bottom: insets.bottom + BAR_LIFT,
       height: BAR_HEIGHT,
       paddingTop: spacing.sm,
@@ -113,24 +117,27 @@ export function useTabBarScreenOptions() {
       shadowOffset: { width: 0, height: 6 },
     },
     /*
-      LABELS STAY, AND THE BAR IS STILL SHORT (owner, 2026-09-16: "do not give
-      me a choice between a readable bar and a floating one").
+      LABELS STAY, AND THE BAR IS NOW GENUINELY NARROW (owner, 2026-09-16: "do
+      not give me a choice between a readable bar and a floating one").
 
-      The previous attempt removed the labels because five of them will not fit
-      across three quarters of a phone at a fixed size. That was solving the
-      wrong half of the problem: the constraint is a FIXED font, not the words.
+      Until the marginHorizontal fix above, the bar was full width and the
+      labels had ~90dp slots to sit in, so nothing ever had to fit. At 12% a
+      side the widest slot a label gets is:
 
-      `tabBarLabel` is rendered here rather than left to React Navigation, so
-      each label can shrink to fit its own slot. `adjustsFontSizeToFit` with a
-      floor of 0.8 means a narrow handset gets a slightly smaller label instead
-      of a truncated one, and a wide handset gets the full size. No width can
-      produce "CREDENTIAL..." any more, which is what forced every earlier
-      compromise.
+        360dp screen, 4 tabs (volunteer): (360 - 86) / 4 = 68dp
+        360dp screen, 5 tabs (org/admin): (360 - 86) / 5 = 55dp
 
-      Three other things buy room, and together they are why the inset could
-      stay at 12%: the bar's own horizontal padding is gone (the pill's rounded
-      ends already provide the visual inset), the per-item padding is 1, and
-      the icon is 20 rather than 26.
+      The longest labels are APPLICATIONS (volunteer, 4 tabs) and APPLICANTS
+      (organisation, 5 tabs). In Inter SemiBold uppercase those are about 7.3em
+      and 6.2em wide, so at 8px they need 58dp and 50dp -- both inside their
+      slot with room to spare. That is why the size dropped from 9 to 8 rather
+      than the words being cut: one point of type buys more than any rewording
+      would, and the icon above already names the destination.
+
+      `tabBarLabel` is rendered here rather than left to React Navigation so
+      each label can still shrink INTO its own slot on a narrow handset
+      (adjustsFontSizeToFit, floor 0.8). That is the backstop for a 320dp
+      phone, not the mechanism -- the base size is meant to fit.
     */
     tabBarShowLabel: true,
     tabBarLabel: ({ color, children }: { color: ColorValue; children: string }) => (
@@ -292,7 +299,9 @@ const styles = StyleSheet.create({
     // The size on a NORMAL phone rather than a size every phone must fit: the
     // renderer shrinks below this (to 0.8) when a slot is too narrow.
     fontFamily: fontFamily.semiBold,
-    fontSize: 9,
+    // 8, not 9: the bar is a quarter narrower than it used to render, so the
+    // widest label has to fit a 55dp slot. See the tabBarLabel comment.
+    fontSize: 8,
     letterSpacing: 0,
     textTransform: 'uppercase',
     textAlign: 'center',

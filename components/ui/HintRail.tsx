@@ -84,6 +84,20 @@ const styles = StyleSheet.create({
     // flexGrow 0 so the rail takes its content height and nothing more: inside
     // a column it would otherwise try to fill the space it is given.
     flexGrow: 0,
+    /*
+      SPACE ABOVE, NOT ONLY BELOW (owner, 2026-09-18: the pill "sits too close
+      under the V-Score text", on both home screens).
+
+      The rail had a bottom margin and no top one, so on both screens it sat
+      flush under the greeting block -- close enough to the V-Score line to
+      read as part of it rather than as a separate row of signposts. The margin
+      lives here rather than on either screen because both place the rail
+      immediately under their header and both were wrong in the same way.
+
+      20, not 16: it has to be clearly larger than the 8 between the greeting
+      and the V-Score line under it, or the group boundary is not stated.
+    */
+    marginTop: spacing.lg,
     marginBottom: spacing.base,
   },
   content: {
