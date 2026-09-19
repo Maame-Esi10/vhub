@@ -9,12 +9,8 @@ import {
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { EmptyState, ErrorState, ListSkeleton, ScreenHeader } from '@/components/ui';
-// The row is generic — icon, title, body, unread cues — and only lives under
-// components/volunteer because that side had an inbox first. Imported rather
-// than copied so the two inboxes cannot drift apart visually.
-import { NotificationRow } from '@/components/volunteer';
+import { NotificationCard } from '@/components/ui/NotificationCard';
 import {
   toNotificationRows,
   unreadCount,
@@ -22,6 +18,7 @@ import {
   useNotifications,
   type AppNotification,
 } from '@/hooks/useNotifications';
+import { notificationDestination } from '@/lib/notificationPresentation';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { humanError } from '@/lib/errorMessage';
 import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
@@ -30,24 +27,23 @@ import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
  * The organisation's inbox.
  *
  * WHY THIS EXISTS. The organisation side had no notifications screen at all,
- * which was not obvious because pushes still ARRIVED — the under-subscription
- * escalation reached a real device on 2026-08-20. Every one of those also
- * writes a `notifications` row, and until now nothing in the organisation's app
- * could read one: miss the push, and the message was gone.
+ * which was not obvious because pushes still ARRIVED. Every one of those also
+ * writes a `notifications` row, and until it was built nothing in the
+ * organisation's app could read one: miss the push, and the message was gone.
  *
- * NO TABS, unlike the volunteer screen. Its three are All / Matches / Updates,
- * and "Matches" is `new_match`, which is only ever sent to volunteers. Offering
- * an organisation a tab that is structurally always empty would be a worse
- * screen, not a more consistent one.
+ * NO FILTER CHIPS, unlike the volunteer screen. Its three are All / Matches /
+ * Updates, and "Matches" is `new_match`, which is only ever sent to
+ * volunteers. Offering an organisation a filter that is structurally always
+ * empty would be a worse screen, not a more consistent one.
  *
- * No design ref exists for this screen (design-refs/Notifications.png is the
- * volunteer one), so it deliberately reuses that screen's language — the same
- * ScreenHeader, the same dated group headings, the same row — rather than
- * inventing a second visual style for the same content.
+ * Everything else is deliberately identical to the volunteer inbox, down to
+ * the card, the summary line and the "Mark all read" button, so the two do not
+ * drift into two visual styles for the same content. Rebuilt alongside it on
+ * 2026-09-19.
  */
 export default function OrganisationNotifications() {
   // The floating tab bar is absolute and reserves no space, so the last
-  // row needs this or it sits under the pill and cannot be tapped.
+  // card needs this or it sits under the pill and cannot be tapped.
   const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const notificationsQuery = useNotifications();
@@ -58,57 +54,32 @@ export default function OrganisationNotifications() {
   const unread = unreadCount(notifications);
 
   /**
-   * Tapping marks read and routes on what the server attached.
+   * Marks read, then goes wherever this notification actually belongs.
    *
-   * A new applicant goes to the vetting queue for THAT event rather than to the
-   * event page: the notification exists because there is someone to decide on,
-   * and the decision is one screen further in.
+   * A new applicant goes to the vetting queue for THAT event rather than to
+   * the event page: the notification exists because there is someone to decide
+   * on, and the decision is one screen further in. That rule, and the rest,
+   * live in lib/notificationPresentation.ts so the card's "View" affordance is
+   * driven by the same answer.
    */
   function handlePress(notification: AppNotification) {
     if (!notification.read_at) {
       markRead.mutate(notification.id);
     }
 
-    const kind = (notification.data as { kind?: string } | null)?.kind;
-    if (kind === 'new_application' && notification.outreach_id) {
-      router.push(`/(organisation)/applicants?outreachId=${notification.outreach_id}`);
-      return;
-    }
-    if (notification.outreach_id) {
-      router.push(`/(organisation)/outreach/${notification.outreach_id}`);
+    const destination = notificationDestination(notification, 'organisation');
+    if (destination) {
+      router.push(destination as Parameters<typeof router.push>[0]);
     }
   }
 
-  const header = (
-    <ScreenHeader
-      title="Notifications"
-      fallback="/(organisation)/dashboard"
-      trailing={
-        <Pressable
-          onPress={() => markRead.mutate(undefined)}
-          disabled={unread === 0 || markRead.isPending}
-          accessibilityRole="button"
-          accessibilityLabel="Mark all notifications as read"
-          hitSlop={12}
-          style={({ pressed }) => [pressed && styles.pressed]}
-        >
-          <MaterialCommunityIcons
-            name="check-all"
-            size={24}
-            // Greyed rather than hidden when nothing is unread, so the control
-            // does not appear and disappear as the list changes.
-            color={unread === 0 ? colors.border : colors.primary}
-          />
-        </Pressable>
-      }
-    />
-  );
+  const header = <ScreenHeader title="Notifications" fallback="/(organisation)/dashboard" />;
 
   if (notificationsQuery.isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         {header}
-        <ListSkeleton rows={5} rowHeight={88} />
+        <ListSkeleton rows={5} rowHeight={128} />
       </SafeAreaView>
     );
   }
@@ -119,9 +90,7 @@ export default function OrganisationNotifications() {
         {header}
         <View style={styles.centerFill}>
           <ErrorState
-            message={
-              humanError(notificationsQuery.error, 'Please try again.')
-            }
+            message={humanError(notificationsQuery.error, 'Please try again.')}
             onRetry={() => notificationsQuery.refetch()}
           />
         </View>
@@ -133,10 +102,39 @@ export default function OrganisationNotifications() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {header}
 
+      {notifications.length > 0 ? (
+        <View style={styles.controls}>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summary}>
+              {unread === 0
+                ? 'You are all caught up.'
+                : unread === 1
+                  ? '1 unread notification'
+                  : `${unread} unread notifications`}
+            </Text>
+            {unread > 0 ? (
+              <Pressable
+                onPress={() => markRead.mutate(undefined)}
+                disabled={markRead.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Mark all notifications as read"
+                hitSlop={8}
+                style={({ pressed }) => [styles.markAll, pressed && styles.pressed]}
+              >
+                <Text style={styles.markAllText}>Mark all read</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
+
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={[rows.length === 0 ? styles.emptyContent : styles.listContent, tabBarPadding]}
+        contentContainerStyle={[
+          rows.length === 0 ? styles.emptyContent : styles.listContent,
+          tabBarPadding,
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={notificationsQuery.isRefetching}
@@ -147,8 +145,9 @@ export default function OrganisationNotifications() {
           item.kind === 'header' ? (
             <Text style={styles.groupHeader}>{item.label}</Text>
           ) : (
-            <NotificationRow
+            <NotificationCard
               notification={item.notification}
+              navigable={notificationDestination(item.notification, 'organisation') !== null}
               onPress={() => handlePress(item.notification)}
             />
           )
@@ -176,27 +175,56 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  // Real breathing room at both ends of the list rather than rows running into
-  // the header and the tab bar.
-  listContent: {
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xxl,
+  pressed: {
+    opacity: 0.7,
   },
-  emptyContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
+  controls: {
     paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    flexWrap: 'wrap',
+    alignContent: 'center',
+    rowGap: spacing.sm,
+  },
+  summary: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  markAll: {
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  markAllText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    color: colors.primary,
+  },
+  listContent: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.xxl,
   },
   groupHeader: {
     fontFamily: fontFamily.semiBold,
     fontSize: 11,
     letterSpacing: 1,
     color: colors.textSecondary,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-    marginHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
-  pressed: {
-    opacity: 0.6,
+  emptyContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
   },
 });

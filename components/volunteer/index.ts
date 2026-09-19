@@ -18,7 +18,5 @@ export { WithdrawSheet } from './WithdrawSheet';
 export type { WithdrawSheetProps } from './WithdrawSheet';
 export { ReviewSummaryCard } from './ReviewSummaryCard';
 export type { ReviewSummaryCardProps } from './ReviewSummaryCard';
-export { NotificationRow, formatRelativeTime } from './NotificationRow';
-export type { NotificationRowProps } from './NotificationRow';
 export { GalleryStrip } from './GalleryStrip';
 export type { GalleryStripProps, GalleryStripItem } from './GalleryStrip';

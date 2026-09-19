@@ -5753,3 +5753,87 @@ Four standing guards now exist for this reason: `tabBarClearance.test.ts`,
 `authEntryScreens.test.ts`, `userFacingText.test.ts` and
 `skillAffinities.test.ts`. Each one exists because something correct was also
 silent.
+
+## The notifications inbox becomes cards, and learns what it is showing (2026-09-19)
+
+Owner, on seeing the screen: it "looks outdated". That was the whole brief, and
+it turned out to be the smaller half of what was wrong.
+
+**A DEPARTURE FROM CLAUDE.md RULE 7, stated plainly.** The rule is "match the
+Figma designs; do not invent alternative layouts for screens that exist in
+Figma", and `design-refs/Notifications.png` exists. The design is a full-bleed
+row list: a 44dp icon circle, title, body, a hairline rule, and unread carried
+by a tinted fill plus a four-pixel coral bar down the left edge. It was
+implemented faithfully and it is now the last list in the app drawn that way.
+Every other one -- the feed, the applications tracker, the roster -- moved to
+bordered white cards on a padded ground during the card-language work of
+2026-09-16 to 2026-09-18. The design is not wrong; it is simply older than the
+visual language the rest of the app arrived at, and the owner asked for the
+screen to be brought forward. The layout is now the feed card's container, to
+the token.
+
+**The left colour bar went for the reason it went from the application cards.**
+A colour means something only to somebody who has been told the key, and
+nothing told anybody. Unread is now three cues, one of them a word: a "NEW"
+badge, a faint warm ground, and full-strength title text against the muted read
+state. The word is the cue that survives a red/green deficiency and bright
+sunlight, which is where a volunteer actually checks these.
+
+**THE REAL FAULT WAS NOT THE STYLING.** `notifications.type` holds only four
+values -- `new_match`, `application_status`, `event_reminder`, `test` -- and
+nine genuinely different pieces of news travel through them, because adding a
+fifth would be a schema change for something the payload can already carry. So
+six endpoints write a discriminator into `data.kind` (`new_application`,
+`credential_review`, `organisation_verification`, `dispute`, `moderation`,
+`score_event_voided`) and the application decisions write theirs as a status.
+Nothing on the client read any of it. An identity-verification approval, a
+dispute outcome, a suspension notice, a reversed V-Score deduction and an
+ordinary application update all arrived wearing the same blue clipboard icon
+and the same words above them. `lib/notificationPresentation.ts` now reads kind,
+then status, then type, and gives each one a caption in words above the title.
+No migration: the data was already being sent and already being stored.
+
+**And a real routing bug fell out of the same gap.** The screen decided where a
+tap went with two questions: does it have an `outreach_id`, and failing that is
+it an `application_status`. A credential decision has neither an outreach nor
+anything to do with applications, so "Your documents have been approved" opened
+the Applications tracker. Destinations now come from
+`notificationDestination(notification, audience)`, which also answers whether
+there is anywhere to go at all -- so the card's "View" affordance and the tap
+are driven by one function and cannot disagree. `moderation` and `test`
+deliberately return null: a suspension refers to the state of the account,
+which the home-screen banner already states, and a test push exists only to
+prove delivery. Sending either somewhere plausible would teach people that
+tapping a notification does something unpredictable.
+
+**One judgement call worth recording.** An application decision carrying an
+`outreach_id` used to open the outreach page and now opens the tracker. The
+tracker's card states the status in words, says what it means for the
+volunteer, and gives a waitlisted volunteer their live place in the queue; the
+outreach page states none of that. Matches and reminders still go to the
+outreach, because there the event itself is the subject.
+
+### The guard was vacuous on its first attempt, again
+
+The test walks `api/src` and extracts every literal kind written into a
+notification payload, so the list comes from the authority rather than from the
+map that is supposed to comply with it -- the lesson of the section above. Its
+first assertion was behavioural: does this kind render as something other than
+the fallback? **It passed with an entry deleted from the map.** An unrecognised
+kind falls back to its `type`, and for all six of these the type is
+`application_status`, which renders as a perfectly ordinary blue "Application
+update" card. The check reported success while the notification had silently
+lost its identity -- exactly the fault it existed to catch, one layer up.
+
+It now asserts against `RECOGNISED_NOTIFICATION_KINDS`, the map's own keys,
+which is a direct statement rather than an inference from behaviour. Verified
+by deleting an entry: the old assertion passed, the new one fails and names the
+kind. A floor assertion (`at least six kinds found`) guards the regex itself,
+so a refactor of the API that stopped the scan matching would fail loudly
+instead of silently checking nothing.
+
+**Also tightened while there:** `NotificationPresentation.icon` was typed
+`string`, so a misspelled glyph name would have rendered as an empty square
+with nothing to notice it. It is now typed against MaterialCommunityIcons' real
+glyph map through a type-only import, and a deliberate typo was confirmed to
+fail the typecheck.

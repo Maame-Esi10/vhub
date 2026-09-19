@@ -51,6 +51,8 @@ export { Badge } from './Badge';
 export type { BadgeProps, BadgeTone } from './Badge';
 export { Avatar } from './Avatar';
 export type { AvatarProps } from './Avatar';
+export { NotificationCard } from './NotificationCard';
+export type { NotificationCardProps } from './NotificationCard';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 export { ErrorState } from './ErrorState';

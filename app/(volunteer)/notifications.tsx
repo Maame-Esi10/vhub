@@ -9,9 +9,8 @@ import {
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { EmptyState, ErrorState, ListSkeleton, ScreenHeader } from '@/components/ui';
-import { NotificationRow } from '@/components/volunteer';
+import { EmptyState, ErrorState, FilterChips, ListSkeleton, ScreenHeader } from '@/components/ui';
+import { NotificationCard } from '@/components/ui/NotificationCard';
 import {
   filterNotifications,
   toNotificationRows,
@@ -21,20 +20,37 @@ import {
   type AppNotification,
   type NotificationFilter,
 } from '@/hooks/useNotifications';
+import { notificationDestination } from '@/lib/notificationPresentation';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { humanError } from '@/lib/errorMessage';
 import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
-const TABS: { value: NotificationFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'matches', label: 'Matches' },
-  { value: 'updates', label: 'Updates' },
-];
-
-
+/**
+ * The volunteer's inbox.
+ *
+ * REBUILT 2026-09-19 (owner: it "looks outdated"). Three things changed, and
+ * only the first is cosmetic.
+ *
+ * 1. The rows became cards, in the language every other list in the app now
+ *    uses. See components/ui/NotificationCard.tsx.
+ * 2. The underlined text tabs became the same pill chips the applications
+ *    tracker and the feed filter with. The underline row was the app's only
+ *    instance of that control, and it carried a transparent two-pixel view
+ *    under every inactive tab to stop the row jumping -- a hack that exists
+ *    because the pattern did not belong here.
+ * 3. Tapping now routes on what the notification IS, via
+ *    notificationDestination(). It used to route on "does it have an
+ *    outreach_id", which sent an identity-verification decision to the
+ *    Applications tracker.
+ *
+ * "Mark all read" is now a labelled button rather than a double-tick glyph in
+ * the header. The glyph was the same fault as the coloured rail on the
+ * application cards: a mark nobody was taught to read, in the most prominent
+ * position on the screen.
+ */
 export default function Notifications() {
   // The floating tab bar is absolute and reserves no space, so the last
-  // row needs this or it sits under the pill and cannot be tapped.
+  // card needs this or it sits under the pill and cannot be tapped.
   const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const [filter, setFilter] = useState<NotificationFilter>('all');
@@ -48,58 +64,48 @@ export default function Notifications() {
   );
   const unread = unreadCount(notifications);
 
-  /**
-   * Tapping marks read and routes on the payload the server attached. The
-   * `type` values are the contract in lib/push.ts, kept in step with the four
-   * dispatch sites in api/.
-   */
+  /*
+    Counts on the chips, so switching tab is an informed choice rather than a
+    guess. Totals rather than unread counts: the unread figure is stated once,
+    in words, beside them, and two different numbers meaning two different
+    things on one row is how a screen stops being readable.
+  */
+  const tabs = useMemo(
+    () => [
+      { value: 'all' as const, label: 'All', count: notifications.length },
+      {
+        value: 'matches' as const,
+        label: 'Matches',
+        count: filterNotifications(notifications, 'matches').length,
+      },
+      {
+        value: 'updates' as const,
+        label: 'Updates',
+        count: filterNotifications(notifications, 'updates').length,
+      },
+    ],
+    [notifications]
+  );
+
+  /** Marks read, then goes wherever this notification actually belongs. */
   function handlePress(notification: AppNotification) {
     if (!notification.read_at) {
       markRead.mutate(notification.id);
     }
 
-    // outreach_id is a real column, so it stays correct even for a payload
-    // shape that predates a later change to `data`.
-    if (notification.outreach_id) {
-      router.push(`/(volunteer)/outreach/${notification.outreach_id}?from=/(volunteer)/notifications`);
-      return;
+    const destination = notificationDestination(notification, 'volunteer');
+    if (destination) {
+      router.push(destination as Parameters<typeof router.push>[0]);
     }
-    if (notification.type === 'application_status') {
-      router.push('/(volunteer)/applications');
-    }
-    // A 'test' notification routes nowhere: it exists only to prove delivery.
   }
 
-  const header = (
-    <ScreenHeader
-      title="Notifications"
-      fallback="/(volunteer)/feed"
-      trailing={
-        <Pressable
-          onPress={() => markRead.mutate(undefined)}
-          disabled={unread === 0 || markRead.isPending}
-          accessibilityRole="button"
-          accessibilityLabel="Mark all notifications as read"
-          hitSlop={12}
-          style={({ pressed }) => [pressed && styles.pressed]}
-        >
-          <MaterialCommunityIcons
-            name="check-all"
-            size={24}
-            // Greyed rather than hidden when nothing is unread, so the control
-            // does not appear and disappear as the list changes.
-            color={unread === 0 ? colors.border : colors.primary}
-          />
-        </Pressable>
-      }
-    />
-  );
+  const header = <ScreenHeader title="Notifications" fallback="/(volunteer)/feed" />;
 
   if (notificationsQuery.isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         {header}
-        <ListSkeleton rows={5} rowHeight={88} />
+        <ListSkeleton rows={5} rowHeight={128} />
       </SafeAreaView>
     );
   }
@@ -110,9 +116,7 @@ export default function Notifications() {
         {header}
         <View style={styles.centerFill}>
           <ErrorState
-            message={
-              humanError(notificationsQuery.error, 'Please try again.')
-            }
+            message={humanError(notificationsQuery.error, 'Please try again.')}
             onRetry={() => notificationsQuery.refetch()}
           />
         </View>
@@ -124,28 +128,39 @@ export default function Notifications() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {header}
 
-      <View style={styles.tabs}>
-        {TABS.map((tab) => {
-          const active = tab.value === filter;
-          return (
+      <View style={styles.controls}>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summary}>
+            {unread === 0
+              ? 'You are all caught up.'
+              : unread === 1
+                ? '1 unread notification'
+                : `${unread} unread notifications`}
+          </Text>
+          {unread > 0 ? (
             <Pressable
-              key={tab.value}
-              onPress={() => setFilter(tab.value)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              style={styles.tab}
+              onPress={() => markRead.mutate(undefined)}
+              disabled={markRead.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Mark all notifications as read"
+              hitSlop={8}
+              style={({ pressed }) => [styles.markAll, pressed && styles.pressed]}
             >
-              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{tab.label}</Text>
-              <View style={[styles.tabUnderline, active && styles.tabUnderlineActive]} />
+              <Text style={styles.markAllText}>Mark all read</Text>
             </Pressable>
-          );
-        })}
+          ) : null}
+        </View>
+
+        <FilterChips options={tabs} value={filter} onChange={setFilter} />
       </View>
 
       <FlatList
         data={rows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={[rows.length === 0 ? styles.emptyContent : null, tabBarPadding]}
+        contentContainerStyle={[
+          rows.length === 0 ? styles.emptyContent : styles.listContent,
+          tabBarPadding,
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={notificationsQuery.isRefetching}
@@ -156,8 +171,9 @@ export default function Notifications() {
           item.kind === 'header' ? (
             <Text style={styles.groupHeader}>{item.label}</Text>
           ) : (
-            <NotificationRow
+            <NotificationCard
               notification={item.notification}
+              navigable={notificationDestination(item.notification, 'volunteer') !== null}
               onPress={() => handlePress(item.notification)}
             />
           )
@@ -197,46 +213,59 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-  tabs: {
-    flexDirection: 'row',
+  /*
+    The controls sit in their own padded block with a real gap under the
+    header and a hairline closing them off, rather than the chips running
+    straight into the first card.
+  */
+  controls: {
     paddingHorizontal: spacing.xl,
-    gap: spacing.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  tab: {
+  summaryRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    flexWrap: 'wrap',
+    alignContent: 'center',
+    rowGap: spacing.sm,
   },
-  tabLabel: {
+  summary: {
+    flex: 1,
     fontFamily: fontFamily.medium,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
-    paddingTop: spacing.sm,
   },
-  tabLabelActive: {
+  markAll: {
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  markAllText: {
     fontFamily: fontFamily.semiBold,
+    fontSize: 13,
     color: colors.primary,
   },
-  tabUnderline: {
-    height: 2,
-    alignSelf: 'stretch',
-    backgroundColor: 'transparent',
-  },
-  tabUnderlineActive: {
-    backgroundColor: colors.primary,
+  listContent: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.xxl,
   },
   groupHeader: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 12,
-    letterSpacing: 0.5,
+    fontSize: 11,
+    letterSpacing: 1,
     color: colors.textSecondary,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   emptyContent: {
     flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
   },
 });
