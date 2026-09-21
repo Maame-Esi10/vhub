@@ -368,6 +368,26 @@ export default function OrganisationOutreachDetail() {
           ) : null}
         </View>
 
+        {/*
+          THE DESCRIPTION SITS UNDER THE FACTS AND ABOVE THE ROSTER (owner,
+          2026-09-21: "the description box should sit under the info card and
+          before the roster. It is currently below Actions").
+
+          It belongs with the event, not after the controls. What the event IS
+          reads as part of the same thought as where and when it is; pushed
+          below five action rows it became a footnote, and an organiser
+          checking their own wording had to scroll past everything they could
+          DO to the event to find what they had SAID about it.
+        */}
+        {outreach.description ? (
+          <>
+            <Text style={styles.sectionLabel}>DESCRIPTION</Text>
+            <View style={styles.card}>
+              <Text style={styles.description}>{outreach.description}</Text>
+            </View>
+          </>
+        ) : null}
+
         {/* ---------- Roster ----------
 
             THE SUMMARY ONLY. How full the event is, who is confirmed, and
@@ -461,18 +481,20 @@ export default function OrganisationOutreachDetail() {
         />
 
         {/*
-          Offered on EVERY status, past events included. A finished outreach is
-          still worth correcting — and until editing existed a flyer could only
-          be attached at creation, so every outreach posted before flyers
-          shipped was stuck on the navy fallback band with no way to fix it.
-        */}
-        <ActionRow
-          icon="pencil-outline"
-          title="Edit event details"
-          meta="Change the title, time, place, flyer or who you need."
-          onPress={() => router.push(`/(organisation)/edit-outreach/${outreach.id}`)}
-        />
+          THE "EDIT EVENT DETAILS" ROW IS GONE (owner, 2026-09-21: "since the
+          pencil icon already appears on the info card, is the separate Edit
+          Event card even needed?").
 
+          It was not. Every row of the info card above is itself a shortcut
+          into the editor, each carrying a pencil and each landing on the field
+          it names -- which is strictly better than one row landing on the top
+          of the form. Keeping both meant two routes to the same screen, one of
+          them less useful, taking a fifth of the space in a list the owner
+          already found too compressed.
+
+          Nothing became unreachable: the editor is one tap from any fact on
+          the card, on every status including finished events.
+        */}
         {/*
           The check-in QR's permanent home. Hidden for drafts: an unpublished
           outreach has no accepted volunteers, so nobody could scan it.
@@ -507,15 +529,6 @@ export default function OrganisationOutreachDetail() {
             meta="Wraps this event up. Attendance and reviews stay open."
             onPress={() => setConfirming('completed')}
           />
-        ) : null}
-
-        {outreach.description ? (
-          <>
-            <Text style={styles.sectionLabel}>DESCRIPTION</Text>
-            <View style={styles.card}>
-              <Text style={styles.description}>{outreach.description}</Text>
-            </View>
-          </>
         ) : null}
 
         {/* ---------- Cancelled banner ----------
@@ -679,7 +692,9 @@ function DetailRow({
   const body = (
     <>
       <View style={styles.detailIconColumn}>
-        <MaterialCommunityIcons name={icon} size={16} color={colors.textSecondary} />
+        {/* primary, not textSecondary: a grey glyph on white was the
+            "too pale" half of the report. */}
+        <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
       </View>
       <View style={styles.detailTextBlock}>
         <Text style={styles.detailLabel}>{label}</Text>
@@ -730,7 +745,14 @@ function ActionRow({
       accessibilityLabel={title}
       style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
     >
-      <MaterialCommunityIcons name={icon} size={20} color={accent} />
+      <View
+        style={[
+          styles.actionIconTile,
+          { backgroundColor: tone === 'danger' ? 'rgba(239, 68, 68, 0.12)' : colors.surface },
+        ]}
+      >
+        <MaterialCommunityIcons name={icon} size={20} color={accent} />
+      </View>
       <View style={styles.actionText}>
         <Text style={[styles.actionTitle, tone === 'danger' && styles.dangerTitle]}>{title}</Text>
         <Text style={styles.actionMeta}>{meta}</Text>
@@ -923,9 +945,34 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing.md,
   },
+  /*
+    A TILE, NOT A BARE GLYPH (owner, 2026-09-21: "the calendar icon sits
+    clearly above the date text rather than level with it. The icons are also
+    too pale. Make them larger or stronger, and align each one with the first
+    line of its text").
+
+    Both faults had one cause. The row is `alignItems: 'flex-start'`, which is
+    right -- centring stranded the pin beside line 2 of a two-line address --
+    but the first line of this row is the LABEL, a 10px uppercase caption, not
+    the value. So a 16px glyph anchored to the top of the row sat level with
+    "DATE & TIME" and therefore visibly above the date itself, which is the
+    text anybody is actually reading.
+
+    A 32dp tile spans the caption and the first line of the value together, so
+    its centre falls on the join between them and it reads as level with the
+    pair rather than perched on top of it. The tile also solves the paleness
+    without inventing a colour: a filled ground gives the glyph something to
+    sit on, so a 18px accent icon on `surface` carries at arm's length where a
+    16px grey glyph on white did not. It is the same stat-icon treatment the
+    application and feed cards already use, so the three read as one app.
+  */
   detailIconColumn: {
-    width: 20,
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   detailTextBlock: {
     flex: 1,
@@ -950,17 +997,40 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
   },
+  /*
+    ROOM TO BREATHE (owner, 2026-09-21: "the five action cards are too
+    compressed. Revamp or resize them rather than squeezing").
+
+    Four things were squeezing them at once: 12dp of vertical padding, an
+    11px meta line with no line-height of its own, NO GAP between one card and
+    the next, and a bare 20px glyph with nothing separating it from the title.
+    Five of those stacked flush read as one striped block rather than as five
+    things you can do.
+
+    The gap is the change that does most of the work -- it is what makes them
+    read as separate cards -- and the icon tile is the same 40dp treatment the
+    info rows above now use, so the two halves of the screen agree. One of the
+    five has also gone: see the note where the edit row used to be.
+  */
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    minHeight: 64,
-    paddingVertical: spacing.md,
+    gap: spacing.base,
+    minHeight: 72,
+    paddingVertical: spacing.base,
     paddingHorizontal: spacing.base,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.background,
+    marginBottom: spacing.md,
+  },
+  actionIconTile: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pressed: {
     opacity: 0.85,
@@ -975,9 +1045,12 @@ const styles = StyleSheet.create({
   },
   actionMeta: {
     fontFamily: fontFamily.regular,
-    fontSize: 11,
+    fontSize: 12,
+    // A real line height: at 11px with none, a meta that wrapped to two lines
+    // closed up into a grey smudge under the title.
+    lineHeight: 17,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 3,
   },
   description: {
     fontFamily: fontFamily.regular,

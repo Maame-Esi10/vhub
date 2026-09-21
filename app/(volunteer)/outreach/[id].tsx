@@ -865,12 +865,7 @@ function DetailRow({
   return (
     <View style={styles.detailRow}>
       <View style={styles.detailIconColumn}>
-        <MaterialCommunityIcons
-          name={icon}
-          size={16}
-          color={colors.primary}
-          style={styles.detailIcon}
-        />
+        <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
       </View>
       <View style={styles.detailTextBlock}>
         <Text style={styles.detailLabel}>{label}</Text>
@@ -1019,14 +1014,34 @@ const styles = StyleSheet.create({
   // fixed 20pt column instead, which is deterministic: same centre, and
   // therefore the same left edge, for every icon on the card. 20 rather than
   // 16 so the widest glyph fits inside the column instead of spilling out.
+  /*
+    A TILE, NOT A BARE GLYPH (owner, 2026-09-21: "the calendar icon sits
+    clearly above the date text rather than level with it. The icons are also
+    too pale. Make them larger or stronger, and align each one with the first
+    line of its text").
+
+    Both faults had one cause. The row is `alignItems: 'flex-start'`, which is
+    right -- centring stranded the pin beside line 2 of a two-line address --
+    but the first line of this row is the LABEL, a 10px uppercase caption, not
+    the value. So a 16px glyph anchored to the top of the row sat level with
+    "DATE & TIME" and therefore visibly above the date itself, which is the
+    text anybody is actually reading.
+
+    A 32dp tile spans the caption and the first line of the value together, so
+    its centre falls on the join between them and it reads as level with the
+    pair rather than perched on top of it. The tile also solves the paleness
+    without inventing a colour: a filled ground gives the glyph something to
+    sit on, so a 18px accent icon on `surface` carries at arm's length where a
+    16px grey glyph on white did not. It is the same stat-icon treatment the
+    application and feed cards already use, so the three read as one app.
+  */
   detailIconColumn: {
-    width: 20,
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
     alignItems: 'center',
-  },
-  // Line height matched to the label's, so icon and label share one line box
-  // and read as one line. This is what keeps the pin beside "LOCATION".
-  detailIcon: {
-    lineHeight: 16,
+    justifyContent: 'center',
   },
   detailTextBlock: {
     flex: 1,

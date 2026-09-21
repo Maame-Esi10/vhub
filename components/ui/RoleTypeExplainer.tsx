@@ -1,12 +1,19 @@
-import { StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  StyleSheet,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { MAX_FONT_SCALE, useFontScale } from '@/constants/typography';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
-interface Column {
+interface RoleCard {
   icon: IconName;
   title: string;
   /** Three or four words, directly under the heading. */
@@ -14,50 +21,59 @@ interface Column {
   /** The rule, in a sentence or two. This is what the examples cannot say. */
   blurb: string;
   examples: string[];
-  tint: string;
   accent: string;
+  tint: string;
 }
 
 /**
- * The two kinds of work, side by side.
+ * The two kinds of work, as cards you swipe between.
  *
  * WHY IT IS A DIAGRAM AND NOT A PARAGRAPH (owner, 2026-09-15). Both terms had
  * only ever appeared next to verification, which taught everybody that
  * "clinical" means verified and "support" means unverified. It does not:
  * clinical is hands-on care, support is what makes the event run, and
- * verification is a CONSEQUENCE of the first, not its definition.
+ * verification is a CONSEQUENCE of the first, not its definition. A verified
+ * nurse who reads "support" as beneath her never applies; an organisation that
+ * ticks "support" to stop the gate blocking applicants takes the credential
+ * check off work that needed it.
  *
- * Two real costs came out of the confusion. A verified nurse reads "support"
- * as beneath her and never applies, when support roles are exactly where an
- * extra pair of trained hands is most useful. And an organisation ticks
- * "support" to stop the verification gate blocking applicants, which takes the
- * credential check off work that needed it.
+ * WHY IT IS NOW HORIZONTAL CARDS (owner, 2026-09-21: the columns "are dull.
+ * Make them a proper card design, ideally a horizontal scrollable card with
+ * the information in bits, which retains better than a flat vertical list").
  *
- * A comparison is the thing a paragraph is worst at. Two columns, read at a
- * glance, put the distinction where the eye already is -- and the words are
- * kept short deliberately, because the failure mode here is somebody skipping
- * the text entirely.
+ * The two tinted columns had three faults beyond being plain. Side by side on
+ * a phone each column is barely 150dp wide, so a two-line rule broke into five
+ * short lines and read as a poem. The examples were a bulleted list, which is
+ * the flattest possible presentation of four scannable words. And the whole
+ * thing collapsed into a vertical stack at a large font size, which destroys
+ * the one property a comparison needs.
  *
- * The verification line sits UNDERNEATH both columns rather than inside
- * either, because attaching it to the clinical column is how the original
- * misreading was taught in the first place.
+ * A card that takes most of the width can hold its sentence on two or three
+ * lines, the examples become chips, and swiping to the second card is itself
+ * the act of comparing. The next card deliberately peeks past the right edge,
+ * because that is the only reliable signal that a horizontal scroller
+ * scrolls. It works identically at every font size, so the stacking rule that
+ * used to break the comparison is gone.
+ *
+ * The verification note sits UNDERNEATH both cards rather than inside either,
+ * because attaching it to the clinical one is how the original misreading was
+ * taught in the first place.
  */
-const COLUMNS: readonly Column[] = [
+const CARDS: readonly RoleCard[] = [
   {
     icon: 'stethoscope',
     title: 'Clinical',
     what: 'Work on a person',
-    // PROSE FIRST, LIST UNDERNEATH (owner, 2026-09-16: "listed bullet points
-    // do not tell a volunteer what these actually mean or why they exist").
-    // A list of four tasks answers "like what?" and never answers "what is
-    // this?" -- so somebody who did not already know the difference read four
-    // examples and still had to guess the rule. The sentence is the rule; the
-    // examples are only there to confirm it.
+    // PROSE FIRST, EXAMPLES UNDERNEATH (owner, 2026-09-16). A list of four
+    // tasks answers "like what?" and never answers "what is this?" -- so
+    // somebody who did not already know the difference read four examples and
+    // still had to guess the rule. The sentence is the rule; the examples only
+    // confirm it.
     blurb:
       'Anything done to or for a patient directly. If it affects their care, or it needs training to do safely, it is clinical.',
     examples: ['Blood pressure', 'Screening', 'Examination', 'Medicine advice'],
-    tint: 'rgba(255, 107, 107, 0.10)',
     accent: colors.primary,
+    tint: 'rgba(255, 107, 107, 0.10)',
   },
   {
     icon: 'account-group-outline',
@@ -66,78 +82,131 @@ const COLUMNS: readonly Column[] = [
     blurb:
       'Everything that makes the day run. Nobody is examined or treated, but without it the clinical work cannot happen at all.',
     examples: ['Registration', 'Crowd flow', 'Health talks', 'Data entry'],
-    tint: 'rgba(18, 23, 43, 0.06)',
     accent: colors.navy,
+    tint: 'rgba(18, 23, 43, 0.06)',
   },
 ];
 
+/**
+ * The verification note, written for whoever is reading it.
+ *
+ * THE ORGANISATION'S VERSION USED TO BE NONSENSE (owner, 2026-09-21: "the
+ * clinical text is wrong. It says the role is decided by the job and not by
+ * you. The organisation is the one creating the event").
+ *
+ * Exactly right, and the cause is that one sentence was written for two
+ * readers with opposite relationships to the choice. "It is decided by the
+ * job, not by you" is true and useful for a VOLUNTEER, who cannot change what
+ * a role is and only needs to know why one asks for proof. Said to the
+ * ORGANISATION filling in the role type, it denies the thing they are at that
+ * moment doing, which reads as the app not knowing what screen it is on.
+ *
+ * So there are two sentences. The organisation's names the consequence of
+ * their choice, which is the part that actually matters to them: the choice
+ * decides who gets asked for proof.
+ */
+const VERIFICATION_NOTE: Record<'volunteer' | 'organisation' | 'default', string> = {
+  volunteer:
+    'A clinical role asks you to verify who you are before you can apply, because the work is hands-on. A support role never does. Which one a role is comes from the work itself, so it is nothing you have to decide.',
+  organisation:
+    'Whichever you pick decides who is asked for proof. A clinical role requires the volunteer to have verified their identity before they can apply to it; a support role lets anybody apply. Pick the one that describes the work, and the check follows.',
+  default:
+    'A clinical role asks the volunteer to verify their identity before applying, because the work is hands-on. A support role does not.',
+};
+
 export interface RoleTypeExplainerProps {
-  /** Adds the line telling a qualified volunteer that support roles are open to them. */
+  /** Changes the verification note and adds a closing line. */
   audience?: 'volunteer' | 'organisation';
 }
 
 export function RoleTypeExplainer({ audience }: RoleTypeExplainerProps) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const [index, setIndex] = useState(0);
+  const lastIndex = useRef(0);
+
   /*
-    SIDE BY SIDE UNLESS THE FONT IS AT ITS ABSOLUTE CEILING (owner, 2026-09-16:
-    "the clinical and support boxes should be side by side, not stacked").
-
-    They already were -- at the default font. The shared `stacked` flag trips at
-    1.2x, and the owner tests at a large system size, so in practice the
-    comparison she was looking at had been turned into a list. A comparison
-    stacked vertically is not a comparison any more: the whole point is that
-    the eye can cross between the two columns.
-
-    So the threshold here is MAX_FONT_SCALE rather than the app-wide 1.2. Text
-    never scales past that ceiling anyway, so stacking now only happens at the
-    very top of the range, where two columns genuinely cannot hold a sentence.
+    Measured rather than taken from the window: this component is dropped
+    inside screens with their own horizontal padding, and a card sized to the
+    SCREEN would overflow every one of them.
   */
-  const { scale } = useFontScale();
-  const stacked = scale >= MAX_FONT_SCALE;
+  function handleLayout(event: LayoutChangeEvent) {
+    setTrackWidth(event.nativeEvent.layout.width);
+  }
+
+  // The next card peeks. Without that there is nothing on screen saying a
+  // horizontal scroller is a horizontal scroller.
+  const cardWidth = trackWidth > 0 ? Math.round(trackWidth * 0.86) : 0;
+  const step = cardWidth + spacing.md;
+
+  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (step <= 0) return;
+    const next = Math.round(event.nativeEvent.contentOffset.x / step);
+    if (next !== lastIndex.current) {
+      lastIndex.current = next;
+      setIndex(next);
+    }
+  }
 
   return (
-    <View style={styles.wrap}>
-      <View style={[styles.columns, stacked && styles.columnsStacked]}>
-        {COLUMNS.map((column) => (
-          <View
-            key={column.title}
-            style={[styles.column, { backgroundColor: column.tint }, stacked && styles.columnFull]}
-          >
-            <View style={styles.columnHeader}>
-              <MaterialCommunityIcons name={column.icon} size={20} color={column.accent} />
-              <Text style={[styles.columnTitle, { color: column.accent }]}>{column.title}</Text>
-            </View>
-            <Text style={styles.columnWhat}>{column.what}</Text>
-            <Text style={styles.columnBlurb}>{column.blurb}</Text>
-            <Text style={styles.examplesLabel}>For example</Text>
-            {column.examples.map((example) => (
-              <View key={example} style={styles.exampleRow}>
-                <View style={[styles.bullet, { backgroundColor: column.accent }]} />
-                <Text style={styles.exampleText}>{example}</Text>
+    <View style={styles.wrap} onLayout={handleLayout}>
+      {cardWidth > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          // Snapping makes the swipe land on a card rather than halfway
+          // between two, which is what stops it feeling like a loose strip.
+          snapToInterval={step}
+          decelerationRate="fast"
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.track}
+        >
+          {CARDS.map((card) => (
+            <View key={card.title} style={[styles.card, { width: cardWidth }]}>
+              <View style={[styles.cardBand, { backgroundColor: card.tint }]}>
+                <View style={[styles.iconTile, { backgroundColor: card.accent }]}>
+                  <MaterialCommunityIcons name={card.icon} size={20} color={colors.white} />
+                </View>
+                <View style={styles.headings}>
+                  <Text style={[styles.cardTitle, { color: card.accent }]}>{card.title}</Text>
+                  <Text style={styles.cardWhat}>{card.what}</Text>
+                </View>
               </View>
-            ))}
-          </View>
+
+              <View style={styles.cardBody}>
+                <Text style={styles.cardBlurb}>{card.blurb}</Text>
+
+                <Text style={styles.examplesLabel}>For example</Text>
+                {/*
+                  CHIPS, NOT BULLETS. Four scannable words in a bulleted column
+                  is the flattest way to show them; as chips they read as a set
+                  at a glance, which is the whole job of an example list.
+                */}
+                <View style={styles.chips}>
+                  {card.examples.map((example) => (
+                    <View key={example} style={[styles.chip, { borderColor: card.accent }]}>
+                      <Text style={[styles.chipText, { color: card.accent }]}>{example}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
+
+      <View style={styles.dots}>
+        {CARDS.map((card, dotIndex) => (
+          <View
+            key={card.title}
+            style={[styles.dot, dotIndex === index && styles.dotActive]}
+          />
         ))}
       </View>
 
-      {/*
-        REWRITTEN (owner, 2026-09-16: "verification follows the work, not the
-        other way round" is unclear).
-
-        It was. It was a sentence about the RELATIONSHIP between two ideas,
-        aimed at a reader who was still working out what the ideas were -- and
-        it only made sense if you already knew the mistake it was correcting.
-        Nobody reads a note to learn which of two things they had backwards.
-
-        What a volunteer actually needs to know is the practical consequence:
-        which of these needs proof, and when they will be asked for it. So it
-        now says that, in the order they will meet it.
-      */}
       <View style={styles.note}>
         <MaterialCommunityIcons name="shield-check-outline" size={16} color={colors.textSecondary} />
-        <Text style={styles.noteText}>
-          Clinical roles ask you to verify who you are first, because the work is hands-on. Support
-          roles never do. It is decided by the job, not by you.
-        </Text>
+        <Text style={styles.noteText}>{VERIFICATION_NOTE[audience ?? 'default']}</Text>
       </View>
 
       {audience === 'volunteer' ? (
@@ -149,8 +218,8 @@ export function RoleTypeExplainer({ audience }: RoleTypeExplainerProps) {
 
       {audience === 'organisation' ? (
         <Text style={styles.audienceNote}>
-          Pick whichever describes the work. Calling clinical work &quot;support&quot; lets people through
-          without the check that work needs.
+          Calling clinical work &quot;support&quot; lets people through without the check that work
+          needs.
         </Text>
       ) : null}
     </View>
@@ -159,55 +228,57 @@ export function RoleTypeExplainer({ audience }: RoleTypeExplainerProps) {
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: spacing.base,
+    gap: spacing.md,
   },
-  columns: {
-    flexDirection: 'row',
-    // REAL BREATHING SPACE (owner, 2026-09-16: "stacked directly against the
-    // Clinical box with no breathing space"). sm put two tinted panels close
-    // enough to read as one striped block; base is the gap at which they read
-    // as two things being compared.
-    gap: spacing.base,
+  track: {
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  columnsStacked: {
-    flexDirection: 'column',
-    gap: spacing.base,
-  },
-  column: {
-    flex: 1,
+  card: {
     borderRadius: radius.lg,
-    padding: spacing.base,
-    gap: spacing.xs,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    // Clipped so the tinted band reaches the rounded corners, the same
+    // treatment the feed and application cards use.
+    overflow: 'hidden',
   },
-  columnFull: {
-    flex: 0,
-    width: '100%',
-  },
-  columnHeader: {
+  cardBand: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignContent: 'center',
-    flexWrap: 'wrap',
-    rowGap: spacing.xs,
-    gap: spacing.xs,
+    gap: spacing.md,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
   },
-  columnTitle: {
+  iconTile: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headings: {
+    flex: 1,
+  },
+  cardTitle: {
     fontFamily: fontFamily.bold,
-    fontSize: 15,
+    fontSize: 16,
   },
-  columnWhat: {
+  cardWhat: {
     fontFamily: fontFamily.medium,
     fontSize: 12,
     lineHeight: 17,
     color: colors.textSecondary,
+    marginTop: 1,
   },
-  columnBlurb: {
+  cardBody: {
+    padding: spacing.base,
+  },
+  cardBlurb: {
     fontFamily: fontFamily.regular,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 19,
     color: colors.textPrimary,
-    marginTop: spacing.xs,
-    marginBottom: spacing.sm,
   },
   examplesLabel: {
     fontFamily: fontFamily.semiBold,
@@ -215,27 +286,40 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: 'uppercase',
     color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    marginTop: spacing.base,
+    marginBottom: spacing.sm,
   },
-  exampleRow: {
+  chips: {
     flexDirection: 'row',
-    alignItems: 'center',
-    alignContent: 'center',
     flexWrap: 'wrap',
-    rowGap: 2,
+    alignContent: 'center',
+    gap: spacing.sm,
+    rowGap: spacing.sm,
+  },
+  chip: {
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+  },
+  chipText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+  },
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     gap: spacing.sm,
   },
-  bullet: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.border,
   },
-  exampleText: {
-    flex: 1,
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    lineHeight: 18,
-    color: colors.textPrimary,
+  dotActive: {
+    backgroundColor: colors.primary,
+    width: 18,
   },
   note: {
     flexDirection: 'row',
