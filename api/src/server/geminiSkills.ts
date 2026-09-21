@@ -26,7 +26,7 @@ const MAX_DESCRIPTION_CHARS = 1200;
  * are a truthful answer to "we could not match your topic" rather than a
  * filler, and the screen labels them as general rather than as topical.
  */
-const UNIVERSAL_SUPPORT_SKILLS: readonly string[] = [
+export const UNIVERSAL_SUPPORT_SKILLS: readonly string[] = [
   'Patient registration',
   'Crowd and queue management',
   'Health education',
@@ -76,7 +76,21 @@ export async function suggestSkills(description: string): Promise<string[] | nul
   if (text.length < 10) return [];
 
   const apiKey = env.geminiApiKey;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    /*
+      LOGGED, because this is the one failure that is a CONFIGURATION mistake
+      rather than weather. Everything else here -- a timeout, a 429, a garbled
+      reply -- is transient and expected. A missing key means the feature has
+      never worked on this deployment and never will until somebody sets it,
+      and the caller deliberately cannot tell the difference, so without a log
+      line there is nothing anywhere that says so.
+
+      Not observeError(): that alerts, and an unconfigured optional feature is
+      not an incident.
+    */
+    console.warn("[skill-suggest] GEMINI_API_KEY is not set; returning the universal fallback");
+    return null;
+  }
 
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);

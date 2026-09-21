@@ -2,7 +2,7 @@ import { z } from "zod";
 import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { enforceIpRateLimit, enforceUserRateLimit } from "../../../server/rateLimit";
-import { suggestSkills } from "../../../server/geminiSkills";
+import { suggestSkills, UNIVERSAL_SUPPORT_SKILLS } from "../../../server/geminiSkills";
 
 export const runtime = "nodejs";
 
@@ -50,9 +50,31 @@ export async function POST(req: Request): Promise<Response> {
 
     const skills = await suggestSkills(body.description);
 
-    // null (Layer 2 unavailable) and [] (nothing relevant) are the same answer
-    // to the screen, deliberately.
-    return Response.json({ skills: skills ?? [] });
+    /*
+      UNAVAILABLE FALLS BACK TO THE UNIVERSAL SKILLS, NOT TO NOTHING.
+
+      This is a deliberate change from the rule in CLAUDE.md, which said an
+      unavailable Layer 2 returns an empty array because "the screen's response
+      to every one of those is identical: show the picker it would have shown
+      anyway". That was written before the universal fallback existed, and the
+      two rules have quietly contradicted each other ever since.
+
+      The consequence was reported on 2026-09-21: an outreach titled for eye
+      screening was told there was no close match, while eight eye and vision
+      skills sat in the list. `suggestSkills` applies UNIVERSAL_SUPPORT_SKILLS
+      only when Gemini ANSWERS and matches nothing; every genuine failure -- no
+      API key, a timeout, a non-2xx, a malformed reply -- returns null and was
+      turned into an empty array here. So on a deployment with no Gemini key
+      the feature cannot ever produce a suggestion, and says "no close match",
+      which is a statement about the vocabulary and is untrue.
+
+      If the honest answer to "we could not match your topic" is the work every
+      outreach needs regardless, then it is equally the honest answer to "we
+      could not reach Gemini" -- more so, because in that case nothing was
+      judged at all. The screen labels these as general rather than topical, so
+      nothing here claims they were matched.
+    */
+    return Response.json({ skills: skills ?? [...UNIVERSAL_SUPPORT_SKILLS] });
   } catch (err) {
     return errorResponse(err, req);
   }
