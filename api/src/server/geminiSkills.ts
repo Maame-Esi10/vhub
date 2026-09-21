@@ -109,7 +109,27 @@ export async function suggestSkills(description: string): Promise<string[] | nul
       }
     );
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      /*
+        LOGGED WITH ITS STATUS, because the two most likely causes are
+        configuration and they are indistinguishable from outside.
+
+        A Google AI Studio key does not expire, so a key that has sat in Vercel
+        since August is almost certainly still valid. What DOES go stale is the
+        model name: `GEMINI_MODEL` overrides the default, and a retired model
+        answers 404 to every request forever. A key whose project never had the
+        Generative Language API enabled answers 403, and an exhausted free-tier
+        quota answers 429. Those are three different fixes and the caller sees
+        one empty array for all of them.
+
+        Not observeError(): a 429 is the free tier working as designed and must
+        not page anybody.
+      */
+      console.warn(
+        `[skill-suggest] Gemini returned ${response.status} for model ${env.geminiModel}; falling back`
+      );
+      return null;
+    }
 
     const payload = (await response.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
