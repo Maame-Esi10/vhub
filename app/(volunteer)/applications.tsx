@@ -9,6 +9,7 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { EmptyState, ErrorState, FilterChips, ListSkeleton, Toast } from '@/components/ui';
+import { TabBackLink } from '@/components/ui/TabBackLink';
 import type { FilterChipOption } from '@/components/ui';
 import { VolunteerApplicationCard, WithdrawSheet } from '@/components/volunteer';
 import { colors, fontFamily, spacing } from '@/constants/theme';
@@ -187,6 +188,14 @@ export default function Applications() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/*
+        Only rendered when this screen was reached from somewhere else (a
+        notification tap). A tab keeps no history, so the hardware back button
+        would otherwise land on the feed.
+      */}
+      <View style={styles.backWrap}>
+        <TabBackLink label="Notifications" />
+      </View>
       <Text style={styles.title}>My Applications</Text>
       <View style={styles.filtersWrap}>
         <FilterChips options={filters} value={statusFilter} onChange={setStatusFilter} />
@@ -278,6 +287,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
+  },
+  // No height of its own when TabBackLink renders nothing, so the ordinary
+  // journey into this tab is unchanged.
+  backWrap: {
+    paddingHorizontal: spacing.xl,
   },
   filtersWrap: {
     paddingHorizontal: spacing.xl,

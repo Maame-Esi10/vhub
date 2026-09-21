@@ -181,7 +181,10 @@ describe('notificationDestination', () => {
       notification({ outreach_id: 'o1', data: { status: 'accepted' } }),
       'volunteer'
     );
-    expect(destination).toBe('/(volunteer)/applications');
+    expect(destination).toContain('/(volunteer)/applications');
+    // A tab keeps no history, so without `from` the hardware back button
+    // lands on Home instead of on the inbox the tap came from.
+    expect(destination).toContain('from=/(volunteer)/notifications');
   });
 
   it('still sends a match and a reminder to the outreach itself', () => {
@@ -211,7 +214,8 @@ describe('notificationDestination', () => {
       notification({ outreach_id: 'o1', data: { kind: 'new_application' } }),
       'organisation'
     );
-    expect(destination).toBe('/(organisation)/applicants?outreachId=o1');
+    expect(destination).toContain('/(organisation)/applicants?outreachId=o1');
+    expect(destination).toContain('from=/(organisation)/notifications');
   });
 
   it('sends an organisation its own verification decision', () => {
@@ -222,7 +226,7 @@ describe('notificationDestination', () => {
 
   it('routes the same row differently for the two audiences', () => {
     const cancelled = notification({ outreach_id: 'o1', data: { status: 'cancelled' } });
-    expect(notificationDestination(cancelled, 'volunteer')).toBe('/(volunteer)/applications');
+    expect(notificationDestination(cancelled, 'volunteer')).toContain('/(volunteer)/applications');
     expect(notificationDestination(cancelled, 'organisation')).toContain('/(organisation)/outreach/o1');
   });
 

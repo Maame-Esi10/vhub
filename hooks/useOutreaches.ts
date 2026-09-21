@@ -61,8 +61,16 @@ function emptyApplicantCounts(): ApplicantCounts {
  * exist. RLS (`applications_select_own_or_org`) already scopes that second
  * query to applications on this org's outreaches.
  *
- * Ordered by event date ascending so the soonest event leads each status
- * group on the dashboard.
+ * NEWEST FIRST (owner, 2026-09-21: "Event ordering is backwards. Newest
+ * first. An August event is sitting above my new October one").
+ *
+ * It was `date` ASCENDING, described here as "so the soonest event leads each
+ * status group". That reasoning only holds for events still to come; applied
+ * to a list that also contains everything already finished, ascending means
+ * the organisation's oldest completed event is the first thing on the
+ * dashboard and the one they just created is at the bottom. Descending puts
+ * the event they are most likely to be thinking about at the top, which on
+ * this screen is always the most recent one.
  */
 export function useOrganisationOutreaches(organisationId: string | undefined) {
   return useQuery({
@@ -73,7 +81,7 @@ export function useOrganisationOutreaches(organisationId: string | undefined) {
         .from('outreaches')
         .select('*')
         .eq('organisation_id', organisationId!)
-        .order('date', { ascending: true })
+        .order('date', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (error) {

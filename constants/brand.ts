@@ -33,3 +33,30 @@ export const APP_TAGLINE = 'Connecting Volunteers. Transforming Healthcare.';
 /** What the app does. One sentence, and the only place the detail belongs. */
 export const APP_INTRO =
   'Find medical outreach opportunities, join impactful events, and help communities in need.';
+
+/**
+ * The tagline's two clauses, one per line.
+ *
+ * WHY THIS EXISTS (owner, 2026-09-21: on the splash, "Transforming
+ * Healthcare." sits under "Connecting" rather than centred).
+ *
+ * The tagline was already `textAlign: 'center'` and genuinely was centred.
+ * The trouble is that its two clauses are almost exactly the same length --
+ * twenty-two characters against twenty-four -- so when the string wraps, the
+ * second line begins about one character to the left of the first. Centred,
+ * that puts "Transforming" all but directly beneath "Connecting", which the
+ * eye reads as a left-aligned block. The alignment was right and it looked
+ * wrong, which is the only kind of centring bug worth having.
+ *
+ * Splitting the clauses deliberately, rather than leaving the wrap to the
+ * measured width, makes it a two-line composition on every screen size
+ * instead of a sentence that happens to break in a particular place.
+ *
+ * DERIVED FROM APP_TAGLINE, never written out again, so the two cannot drift
+ * -- which is the whole reason this file exists.
+ */
+export const APP_TAGLINE_LINES: readonly string[] = APP_TAGLINE
+  .split('.')
+  .map((clause) => clause.trim())
+  .filter((clause) => clause.length > 0)
+  .map((clause) => `${clause}.`);

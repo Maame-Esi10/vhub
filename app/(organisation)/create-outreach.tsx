@@ -64,6 +64,7 @@ import { useFlyerUpload, useGalleryImageUpload } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { humanError } from '@/lib/errorMessage';
 import { useTabBarFooterOffset } from '@/components/ui/tabBarOptions';
+import { AlertDialog, type AlertTone } from '@/components/ui/AlertDialog';
 
 const TOTAL_STEPS = 4;
 const STEP_TITLES = ['Basic Information', 'Where & When', 'Requirements & Capacity', 'Preview'];
@@ -109,7 +110,25 @@ export default function CreateOutreach() {
 
   const [step, setStep] = useState(1);
   const [state, setState] = useState<OutreachWizardState>(INITIAL_WIZARD_STATE);
-  const [roleError, setRoleError] = useState<string | null>(null);
+  /*
+    EVERY OUTCOME OF THE SUBMIT IS A POPUP, not a line of text under the button
+    (owner, repeatedly, most recently 2026-09-21). The wizard's last step
+    scrolls, so a refusal written under the submit button is routinely
+    off-screen at the moment it is written -- which is how the database's "this
+    organisation is not verified, so it cannot publish outreaches yet" was
+    never seen, and a refused publish looked exactly like a button that did
+    nothing.
+
+    One piece of state for all of them, because they are all the same thing:
+    something happened that the organisation has to read before carrying on.
+  */
+  const [outcome, setOutcome] = useState<{
+    tone: AlertTone;
+    title: string;
+    message: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
 
   /*
     ERRORS ARE DERIVED, NOT STORED. This is the fix for a reported bug: a day
@@ -331,9 +350,12 @@ export default function CreateOutreach() {
                 '[create-outreach] outreach saved but its extra days did not:',
                 error instanceof Error ? error.message : error
               );
-              setRoleError(
-                'The outreach was saved, but only its first day was. Open it from the dashboard and add the other days again.'
-              );
+              setOutcome({
+                tone: 'error',
+                title: 'Only the first day was saved',
+                message:
+                  'The outreach was created, but the other days were not. Open it from the dashboard and add them again.',
+              });
               return;
             }
           }
@@ -366,9 +388,12 @@ export default function CreateOutreach() {
                 '[create-outreach] outreach saved but its per-day hours did not:',
                 error instanceof Error ? error.message : error
               );
-              setRoleError(
-                "The outreach was saved, but the hours you set for individual days were not. Open it from the dashboard and set them again. Every day is currently running to the event's hours."
-              );
+              setOutcome({
+                tone: 'error',
+                title: 'The per-day hours were not saved',
+                message:
+                  "The outreach was created, but the hours you set for individual days were not. Every day is currently running to the event's hours. Open it from the dashboard and set them again.",
+              });
               return;
             }
           }
@@ -386,9 +411,12 @@ export default function CreateOutreach() {
                 '[create-outreach] outreach saved but its roles did not:',
                 error instanceof Error ? error.message : error
               );
-              setRoleError(
-                'The outreach was saved, but its roles could not be. Open it from the dashboard and set them again.'
-              );
+              setOutcome({
+                tone: 'error',
+                title: 'The roles were not saved',
+                message:
+                  'The outreach was created, but its roles could not be. Open it from the dashboard and set them again.',
+              });
               return;
             }
           }
@@ -409,9 +437,12 @@ export default function CreateOutreach() {
                 '[create-outreach] outreach saved but its gallery did not:',
                 error instanceof Error ? error.message : error
               );
-              setRoleError(
-                'The outreach was published, but its gallery images could not be attached. Open it from the dashboard and add them again.'
-              );
+              setOutcome({
+                tone: 'error',
+                title: 'The gallery images were not attached',
+                message:
+                  'The outreach was published, but its gallery images could not be attached. Open it from the dashboard and add them again.',
+              });
               return;
             }
           }
@@ -422,13 +453,60 @@ export default function CreateOutreach() {
           // fresh wizard does not open showing the last one's complaints.
           setAttempted({});
           setStep(1);
-          // Straight to the new event's own screen rather than the dashboard,
-          // carrying the confirmation with it. Publishing used to land on a
-          // list with no acknowledgement at all, so the only way to find out
-          // whether it had worked was to go looking for it.
-          router.replace({
-            pathname: '/(organisation)/outreach/[id]',
-            params: { id: outreach.id, created: outreach.id },
+
+          /*
+            THE POPUP STATES THE OUTCOME. IT DOES NOT PERFORM THE NEXT ACTION.
+
+            Both outcomes used to `replace` straight into Manage Event, which
+            for a DRAFT is wrong twice over: the organisation has not finished
+            with the wizard's subject, and being moved somewhere they did not
+            ask to go reads as the app losing its place rather than as a saved
+            draft (owner, 2026-09-21: "After saving to draft, why does Manage
+            Event open?").
+
+            So the confirmation says what happened and where the thing now
+            lives, and offers the journey as a button rather than taking it.
+            Publishing offers it more prominently because a published event is
+            finished and its own screen is the natural next stop; a draft is
+            not finished, so its default is to stay put.
+          */
+          const openManageEvent = () => {
+            setOutcome(null);
+            router.replace({
+              pathname: '/(organisation)/outreach/[id]',
+              params: { id: outreach.id, created: outreach.id },
+            });
+          };
+
+          setOutcome(
+            status === 'draft'
+              ? {
+                  tone: 'success',
+                  title: 'Saved to draft',
+                  message: `${outreach.title} is saved. Nobody can see it yet. You will find it under Drafts on your dashboard, and you can finish and publish it from the Manage Event screen.`,
+                  actionLabel: 'Open Manage Event',
+                  onAction: openManageEvent,
+                }
+              : {
+                  tone: 'success',
+                  title: 'Event created',
+                  message: `${outreach.title} is now open and volunteers can apply. You can track applicants and edit the details from the Manage Event screen.`,
+                  actionLabel: 'Open Manage Event',
+                  onAction: openManageEvent,
+                }
+          );
+        },
+        onError: (error) => {
+          /*
+            The refusal the organisation never saw. The database trigger
+            `trg_outreaches_require_verified_org` raises here, and its message
+            is the one thing on the screen that explains why publishing did
+            nothing, so it has to be somewhere they are actually looking.
+          */
+          setOutcome({
+            tone: 'error',
+            title: 'Could not save this outreach',
+            message: humanError(error, 'Something went wrong. Please try again.'),
           });
         },
       }
@@ -716,16 +794,6 @@ export default function CreateOutreach() {
                   : 'Optional for support work. Add them only if they genuinely matter.'}
               </Text>
 
-              <SkillSuggestBox
-                label="Not sure which skills to pick?"
-                // TITLE AND DESCRIPTION, not description alone (owner, 2026-09-15:
-                // "my outreach title was Mental Health Awareness and it returned
-                // nothing"). The title is the most concentrated statement of what
-                // an event is, and an organisation reasonably expects it to count.
-                sourceText={[state.title, state.description].filter(Boolean).join('. ')}
-                onSuggestions={setSuggestedSkills}
-              />
-
               <View onLayout={(event) => captureFieldTop('requiredSkills', event)}>
                 {/*
                   REQUIRED FOR CLINICAL, OPTIONAL FOR SUPPORT. The asterisk has
@@ -751,6 +819,28 @@ export default function CreateOutreach() {
               </View>
 
               {/*
+                THE HELPER GOES UNDER THE CONTROL IT HELPS WITH (owner,
+                2026-09-21: the skill selector "is barely noticeable sitting
+                under the Gemini box").
+
+                The heading was already here, added in September, but it sat
+                above the suggestion box rather than above the selector -- so
+                the most important control on the step was separated from the
+                words naming it by an entire other component, and read as an
+                afterthought to the suggestions. Heading, then the control,
+                then the aid.
+              */}
+              <SkillSuggestBox
+                label="Not sure which skills to pick?"
+                // TITLE AND DESCRIPTION, not description alone (owner, 2026-09-15:
+                // "my outreach title was Mental Health Awareness and it returned
+                // nothing"). The title is the most concentrated statement of what
+                // an event is, and an organisation reasonably expects it to count.
+                sourceText={[state.title, state.description].filter(Boolean).join('. ')}
+                onSuggestions={setSuggestedSkills}
+              />
+
+              {/*
                 ONE LIST, NO MODE. This was a toggle between "Any volunteers"
                 and "Specific roles", each with its own controls — the
                 database's two storage shapes surfaced as a choice the
@@ -766,12 +856,6 @@ export default function CreateOutreach() {
           {step === TOTAL_STEPS ? (
             <View style={styles.fieldGroup}>
               <OutreachPreviewCard state={state} />
-              {roleError ? <Text style={styles.submitError}>{roleError}</Text> : null}
-              {createOutreach.isError ? (
-                <Text style={styles.submitError}>
-                  {humanError(createOutreach.error, 'Could not save this outreach. Please try again.')}
-                </Text>
-              ) : null}
             </View>
           ) : null}
         </ScrollView>
@@ -814,6 +898,23 @@ export default function CreateOutreach() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {/*
+        Outside the KeyboardAvoidingView: it is a Modal, so it renders over
+        everything regardless, and nesting it inside a view that resizes with
+        the keyboard would make it move with a keyboard it has already
+        dismissed.
+      */}
+      <AlertDialog
+        visible={outcome !== null}
+        tone={outcome?.tone ?? 'info'}
+        title={outcome?.title ?? ''}
+        message={outcome?.message}
+        actionLabel={outcome?.actionLabel}
+        onAction={outcome?.onAction}
+        dismissLabel={outcome?.actionLabel ? 'Stay here' : 'Got it'}
+        onDismiss={() => setOutcome(null)}
+      />
     </SafeAreaView>
   );
 }

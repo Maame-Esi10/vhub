@@ -188,7 +188,9 @@ export function notificationDestination(
     // because there is somebody to decide on, and the decision is one screen
     // further in.
     if (kind === 'new_application' && notification.outreach_id) {
-      return `/(organisation)/applicants?outreachId=${notification.outreach_id}`;
+      // `from` so the tab can offer a way back to the inbox: a tab keeps no
+      // history, so without it the hardware back button lands on Home.
+      return `/(organisation)/applicants?outreachId=${notification.outreach_id}&from=/(organisation)/notifications`;
     }
     if (kind === 'organisation_verification') {
       return '/(organisation)/verification';
@@ -223,14 +225,14 @@ export function notificationDestination(
   */
   const decision = readString(data, 'kind') ?? readString(data, 'status');
   if (decision && BY_STATUS[decision]) {
-    return '/(volunteer)/applications';
+    return '/(volunteer)/applications?from=/(volunteer)/notifications';
   }
 
   if (notification.outreach_id) {
     return `/(volunteer)/outreach/${notification.outreach_id}?from=/(volunteer)/notifications`;
   }
   if (notification.type === 'application_status') {
-    return '/(volunteer)/applications';
+    return '/(volunteer)/applications?from=/(volunteer)/notifications';
   }
   return null;
 }

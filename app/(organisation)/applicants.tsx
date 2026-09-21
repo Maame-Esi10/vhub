@@ -73,7 +73,7 @@ export default function Applicants() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const navigation = useNavigation();
-  const params = useLocalSearchParams<{ outreachId?: string }>();
+  const params = useLocalSearchParams<{ outreachId?: string; from?: string }>();
   const organisationId = useAuthStore((s) => s.user)?.id;
 
   const outreachesQuery = useOrganisationOutreaches(organisationId);
@@ -374,7 +374,24 @@ export default function Applicants() {
   */
   const header = (
     <View style={styles.header}>
-      {enteredFromEvent && selectedOutreachId ? (
+      {/*
+        `from` WINS OVER THE EVENT (owner, 2026-09-21: back from an opened
+        notification went Home). A notification tap arrives here with
+        `from=/(organisation)/notifications`, and sending them "up" to the
+        event instead would be a second wrong destination rather than a fix --
+        they were reading their inbox, not the event.
+      */}
+      {params.from ? (
+        <Pressable
+          onPress={() => router.replace(params.from as Parameters<typeof router.replace>[0])}
+          accessibilityRole="button"
+          accessibilityLabel="Back to notifications"
+          hitSlop={8}
+          style={styles.backButton}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={22} color={colors.textPrimary} />
+        </Pressable>
+      ) : enteredFromEvent && selectedOutreachId ? (
         <Pressable
           onPress={() => router.replace(`/(organisation)/outreach/${selectedOutreachId}`)}
           accessibilityRole="button"

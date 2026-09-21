@@ -82,6 +82,30 @@ export default function OrganisationSettings() {
           onPress={() => router.push('/(organisation)/account-security')}
         />
         {/*
+          A SECOND DOOR TO THE SAME SCREEN (owner, 2026-09-21: "Where is
+          delete account? I cannot find it").
+
+          It was never missing. It is the last block on Account & Security,
+          under the heading CLOSING YOUR ACCOUNT, below the login email and
+          the password form -- so finding it meant knowing that closing an
+          account is filed as a security matter, and scrolling past two forms
+          to reach it. Neither is obvious, and somebody looking for it is not
+          in a mood to hunt.
+
+          The row says what it does in the words a person actually looks for.
+          It is deliberately NOT called "Delete": closure anonymises the
+          person and revokes the login while keeping the record of work, and
+          calling that a deletion would be a promise the app does not keep.
+          The value line says what really happens, so the row is findable
+          without being untrue.
+        */}
+        <SettingsRow
+          icon="account-remove-outline"
+          label="Close Account"
+          value="Remove your details and leave VHub"
+          onPress={() => router.push('/(organisation)/account-security')}
+        />
+        {/*
           Read-only: `verified` is the trust badge volunteers judge outreaches
           by, so it is excluded from the organisation_profiles UPDATE grant and
           set only by a service-role review. Shown here so the state is

@@ -3,7 +3,7 @@ import { Text } from '@/components/ui/Text';
 import { SplashBackdrop } from '@/components/ui/SplashBackdrop';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { getLogoSize, getSplashWordmarkFontSize } from '@/constants/logoSizes';
-import { APP_TAGLINE, APP_INTRO } from '@/constants/brand';
+import { APP_TAGLINE_LINES, APP_INTRO } from '@/constants/brand';
 
 const LOGO = require('../../assets/logo.png');
 
@@ -137,7 +137,16 @@ export function SplashView({ showLoading = true, variant = 'full' }: SplashViewP
           >
             VHub
           </Text>
-          <Text style={styles.tagline}>{APP_TAGLINE}</Text>
+          {/*
+            ONE TEXT PER CLAUSE, not one wrapping string. See
+            APP_TAGLINE_LINES: the two clauses are near enough the same length
+            that a centred wrap reads as left-aligned.
+          */}
+          {APP_TAGLINE_LINES.map((line, index) => (
+            <Text key={line} style={[styles.tagline, index > 0 && styles.taglineContinued]}>
+              {line}
+            </Text>
+          ))}
           <Text style={styles.intro}>{APP_INTRO}</Text>
         </View>
       ) : null}
@@ -201,6 +210,13 @@ const styles = StyleSheet.create({
     // together, because that difference is the only thing telling the eye
     // where one object ends and the next begins.
     marginTop: spacing.xl + spacing.md,
+  },
+  /*
+    Only the FIRST clause opens the group boundary under the lockup; the
+    second follows immediately, because the two are one statement.
+  */
+  taglineContinued: {
+    marginTop: 0,
   },
   intro: {
     alignSelf: 'stretch',
