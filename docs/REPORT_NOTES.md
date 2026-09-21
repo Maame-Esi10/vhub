@@ -5837,3 +5837,54 @@ instead of silently checking nothing.
 with nothing to notice it. It is now typed against MaterialCommunityIcons' real
 glyph map through a type-only import, and a deliberate typo was confirmed to
 fail the typecheck.
+
+## Onboarding stops ending in Settings (owner-approved 2026-09-21)
+
+Two decisions from earlier in September were each right about the fault they
+fixed and each created the next one. This records the pair, because the shape
+recurs.
+
+**September 11.** `app/(auth)/onboarding/complete.tsx` was deleted. It sat
+between signing the declaration and uploading the credential, so a volunteer
+finished the wizard, was congratulated, and met the single outstanding task as
+an optional-looking card on a celebration screen. Easy to walk past without
+ever registering that anything was left. Removing the celebration and sending
+them straight to the upload screen fixed exactly that.
+
+**September 21.** The owner, running the flow as a new user: "after I have
+selected my document I should be directed to the finished onboarding screen,
+not do the identification in the settings then take me to the settings page.
+Is this how to welcome a new user?" She is right. The upload screen is
+`app/(volunteer)/verify-identity.tsx`, which is reached from Settings and looks
+like it, so the last thing a new volunteer saw at the end of registering was
+the app depositing them in a settings screen.
+
+**The resolution is not a compromise between the two.** The upload moved INTO
+step 5, so the completion screen no longer stands between anybody and an
+outstanding task: it reports the outcome of one already attempted. That was the
+whole of the original objection, and it is gone rather than traded away.
+
+- **The API constraint was never a screen constraint.**
+  `/api/verification-document` refuses a document while `declaration_signed` is
+  false. That orders two SERVER CALLS. It had been implemented as an order on
+  two SCREENS, which is where all of this came from. `persistAndFinish` now
+  writes the declaration and then uploads, on one press.
+- **The upload is best-effort and the completion screen reads the profile.**
+  `credential_document_id` is server-only, so its presence proves the endpoint
+  ran; a flag passed through navigation would only record that the app tried. A
+  cancelled file picker is reported as "no document yet" rather than assumed to
+  have worked.
+- **The outstanding document still does not block anything**, and the screen
+  says why: support roles are open to an unverified volunteer, so a gate would
+  be wrong. Silence was the bug, not permissiveness.
+- **The two ticks are now visibly two things.** The owner asked why she had to
+  confirm twice. The accuracy declaration and the document-storage consent are
+  genuinely different agreements, and consent must be written in the same
+  statement as the document so it cannot be inferred from the declaration. They
+  were on two screens with nothing saying so; they are now adjacent and each
+  labelled.
+
+**The generalisation.** Both decisions were made by looking at one screen's
+fault in isolation. Neither asked what the LAST screen of the flow would be
+afterwards. A fix that relocates a step changes the ending of the journey, and
+the ending is the part a person remembers.

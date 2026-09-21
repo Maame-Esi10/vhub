@@ -14,6 +14,10 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { useCompleteOnboarding } from '@/hooks';
+// Direct import, not the hooks barrel: this reaches expo-document-picker, a
+// NATIVE module, and the barrel is imported by essentially every screen.
+import { useCredentialUpload } from '@/hooks/useMediaUpload';
+import { CREDENTIAL_CONSENT_POINTS } from '@/constants/credential-guidelines';
 import { humanErrorOrNull } from '@/lib/errorMessage';
 
 /**
@@ -28,16 +32,32 @@ import { humanErrorOrNull } from '@/lib/errorMessage';
  * document-based with human review instead
  * (volunteer_profiles.verification_status).
  *
- * THE DOCUMENT IS NOT UPLOADED HERE, and that is a constraint rather than a
- * gap. /api/verification-document refuses a document until
- * `declaration_signed` is true, because a credential attached to no
- * declaration is evidence nobody has vouched for — and the declaration is
- * only written when THIS screen submits. So the order is: sign here, upload
- * on app/(volunteer)/verify-identity.tsx, which the next screen links to.
+ * THE DOCUMENT IS NOW UPLOADED HERE (owner-approved, 2026-09-21).
  *
- * It previously said "COMING SOON" over a dead placeholder box. That was true
- * before Cloudinary was wired; it has been false since, and it told a volunteer
- * who wanted to get verified that there was nothing to do.
+ * /api/verification-document still refuses a document until
+ * `declaration_signed` is true, because a credential attached to no
+ * declaration is evidence nobody has vouched for, and the declaration is
+ * written by this screen's submit. That has always been a constraint on the
+ * ORDER OF TWO SERVER CALLS, and it was read as a constraint on the order of
+ * two SCREENS -- so signing happened here and uploading happened somewhere
+ * else, and the somewhere else was a Settings screen the volunteer was
+ * deposited on at the end of registering.
+ *
+ * The owner's words: "after I have selected my document I should be directed
+ * to the finished onboarding screen, not do the identification in the settings
+ * then take me to the settings page. Is this how to welcome a new user?"
+ *
+ * So one screen: sign, consent, choose the file. The submit writes the
+ * declaration first and uploads second, in that order, which is the whole of
+ * what the API ever required.
+ *
+ * TWO TICKS, AND THEY ARE NOT THE SAME TICK. The owner asked why she had to
+ * confirm twice. They were two genuinely different agreements shown on two
+ * screens with nothing saying so: one is "what I have told you is true", the
+ * other is "you may store this document". Both are still needed -- consent is
+ * written in the same statement as the document, so it cannot be inferred from
+ * the declaration -- but each now says which it is, next to the other, where
+ * the difference is visible.
  */
 export default function VerifyIdentity() {
   const router = useRouter();
@@ -47,13 +67,31 @@ export default function VerifyIdentity() {
   const completeOnboarding = useCompleteOnboarding();
 
   const [confirmed, setConfirmed] = useState(false);
+  const [consented, setConsented] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const credentialUpload = useCredentialUpload();
 
-  const submitting = completeOnboarding.isPending;
-  const errorMessage = validationError ?? humanErrorOrNull(completeOnboarding.error) ?? null;
-  const progress = useMemo(() => (confirmed ? 1 : 0.3), [confirmed]);
+  // Consent is asked once and remembered server-side; somebody who already
+  // agreed on an earlier upload is not asked again.
+  const consentRecorded = !!volunteerProfile?.document_consent_at;
+  const consentReady = consented || consentRecorded;
 
-  async function persistAndFinish(options: { declarationSigned: boolean }) {
+  const submitting = completeOnboarding.isPending || credentialUpload.isPending;
+  const errorMessage =
+    validationError ??
+    humanErrorOrNull(completeOnboarding.error) ??
+    humanErrorOrNull(credentialUpload.error) ??
+    null;
+  const progress = useMemo(
+    () => (confirmed && consentReady ? 1 : confirmed ? 0.65 : 0.3),
+    [confirmed, consentReady]
+  );
+
+  async function persistAndFinish(options: {
+    declarationSigned: boolean;
+    /** Opens the file picker after the declaration is written. */
+    uploadDocument: boolean;
+  }) {
     if (!user) {
       setValidationError('Your session expired. Please log in again.');
       return;
@@ -97,24 +135,40 @@ export default function VerifyIdentity() {
     }
 
     onboarding.reset();
+
     /*
-      STRAIGHT TO THE CREDENTIAL SCREEN, which now carries the welcome and the
-      way onward as well (owner, 2026-09-11). There used to be a celebration
-      screen in between whose only real job was to offer a button to this one —
-      so the last thing a new volunteer saw was a screen congratulating them,
-      with the one outstanding task on it as a card they could walk past
-      without ever being told they had.
+      THE UPLOAD RUNS AFTER THE DECLARATION IS WRITTEN, on this same press.
+      That ordering is the API's rule and the only reason these were ever two
+      screens.
+
+      Best-effort, deliberately: the profile is saved by this point, so a
+      failed or cancelled upload must not fail onboarding. Cancelling the file
+      picker is a normal thing to do and is not an error at all. The finished
+      screen reads the profile and states plainly whether a document is on
+      file, so an upload that did not happen is reported rather than assumed.
     */
-    router.replace('/(volunteer)/verify-identity?from=onboarding');
+    if (options.declarationSigned && options.uploadDocument) {
+      try {
+        await credentialUpload.mutateAsync({
+          userId: user.id,
+          consent: consentRecorded ? undefined : true,
+        });
+      } catch {
+        // Surfaced by credentialUpload.error; the finished screen says what is
+        // outstanding either way.
+      }
+    }
+
+    router.replace('/(auth)/onboarding/complete');
   }
 
   function handleSecureVerification() {
-    if (!confirmed) return;
-    persistAndFinish({ declarationSigned: true });
+    if (!confirmed || !consentReady) return;
+    persistAndFinish({ declarationSigned: true, uploadDocument: true });
   }
 
   function handleCompleteLater() {
-    persistAndFinish({ declarationSigned: false });
+    persistAndFinish({ declarationSigned: false, uploadDocument: false });
   }
 
   return (
@@ -171,10 +225,21 @@ export default function VerifyIdentity() {
           The ordering constraint is now stated in one line above the
           declaration, which is all it ever needed.
         */}
+        {/*
+          TWO AGREEMENTS, SIDE BY SIDE, EACH SAYING WHICH IT IS.
+
+          They used to sit on two different screens, which is why the owner
+          asked why she had to confirm twice. They are not the same
+          confirmation: one is about the truth of what she has entered, the
+          other is permission to store a file. Shown together, with a heading
+          each, the difference is visible in the half-second anybody actually
+          gives it.
+        */}
         <View style={styles.card}>
-          <Text style={styles.uploadNote}>
-            Your document comes next. It cannot be attached until your declaration is on file, so
-            you sign here first and upload on the following screen.
+          <Text style={styles.stepLabel}>1. YOUR DECLARATION</Text>
+          <Text style={styles.stepBody}>
+            This says the details you have given are true. It has to be on file before any
+            document can be attached to it.
           </Text>
 
           <Pressable
@@ -193,6 +258,56 @@ export default function VerifyIdentity() {
           </Pressable>
         </View>
 
+        <View style={styles.card}>
+          <Text style={styles.stepLabel}>2. YOUR DOCUMENT</Text>
+          <Text style={styles.stepBody}>
+            A photo or scan of your licence, certificate or council registration. This is a
+            different agreement from the one above: it is your permission for VHub to store the
+            file.
+          </Text>
+
+          {consentRecorded ? (
+            <View style={styles.consentDone}>
+              <MaterialCommunityIcons name="check-circle-outline" size={16} color={colors.success} />
+              <Text style={styles.consentDoneText}>
+                You have already agreed to how your documents are stored.
+              </Text>
+            </View>
+          ) : (
+            <>
+              {/*
+                The points are listed, not hidden behind an arrow. On the
+                standalone screen they collapse because that screen is revisited;
+                this one is seen once, by somebody handing over a photograph of
+                their nursing licence, and they are entitled to read what happens
+                to it at the moment they do it.
+              */}
+              {CREDENTIAL_CONSENT_POINTS.map((point) => (
+                <View key={point} style={styles.consentPointRow}>
+                  <View style={styles.consentBullet} />
+                  <Text style={styles.consentPointText}>{point}</Text>
+                </View>
+              ))}
+
+              <Pressable
+                onPress={() => setConsented((prev) => !prev)}
+                style={styles.confirmRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: consented }}
+              >
+                <View style={[styles.checkbox, consented && styles.checkboxChecked]}>
+                  {consented ? (
+                    <MaterialCommunityIcons name="check" size={14} color={colors.white} />
+                  ) : null}
+                </View>
+                <Text style={styles.confirmText}>
+                  I agree to VHub storing my document for verification.
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+
         <View style={styles.warningBanner}>
           <MaterialCommunityIcons name="alert-outline" size={16} color={colors.warning} />
           <Text style={styles.warningText}>CLINICAL ROLES LOCKED UNTIL VERIFIED</Text>
@@ -201,14 +316,14 @@ export default function VerifyIdentity() {
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
         <Button
-          title="Secure Verification"
+          title={submitting ? 'Saving...' : 'Sign and choose my document'}
           variant="solid"
-          disabled={!confirmed || submitting}
+          disabled={!confirmed || !consentReady || submitting}
           onPress={handleSecureVerification}
           style={styles.verifyButton}
         />
         <Pressable onPress={handleCompleteLater} disabled={submitting} style={styles.completeLater}>
-          <Text style={styles.completeLaterText}>Complete Later</Text>
+          <Text style={styles.completeLaterText}>Skip for now</Text>
         </Pressable>
 
         <OnboardingStepFooter step={5} total={5} section="Identity Assurance" />
@@ -222,12 +337,50 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  uploadNote: {
+  stepLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    color: colors.primary,
+  },
+  stepBody: {
     fontFamily: fontFamily.regular,
     fontSize: 13,
     lineHeight: 19,
     color: colors.textSecondary,
+    marginTop: spacing.xs,
     marginBottom: spacing.base,
+  },
+  consentDone: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  consentDoneText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+  },
+  consentPointRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  consentBullet: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+    marginTop: 7,
+  },
+  consentPointText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
   },
   content: {
     paddingHorizontal: spacing.xl,
