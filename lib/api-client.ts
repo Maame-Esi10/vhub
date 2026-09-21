@@ -923,8 +923,19 @@ export interface SignedDocument {
  * `ownerId` omitted means "my own document".
  */
 export interface SkillSuggestionResponse {
-  /** Always a subset of constants/skills.ts, most relevant first. Empty when unavailable. */
+  /** Always a subset of constants/skills.ts, most relevant first. */
   skills: string[];
+  /**
+   * Which kind of answer this is.
+   *
+   * 'matched' -- Gemini read the text and these are its picks.
+   * 'general' -- nothing was read, or nothing matched, and these are the work
+   *              every outreach needs whatever its subject.
+   *
+   * The screen MUST label the two differently. They are both useful and they
+   * are not the same claim.
+   */
+  basis: 'matched' | 'general';
 }
 
 /**

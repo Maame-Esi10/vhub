@@ -74,7 +74,19 @@ export async function POST(req: Request): Promise<Response> {
       judged at all. The screen labels these as general rather than topical, so
       nothing here claims they were matched.
     */
-    return Response.json({ skills: skills ?? [...UNIVERSAL_SUPPORT_SKILLS] });
+    /*
+      `basis` SAYS WHICH ANSWER THIS IS, and the screen must not guess.
+
+      "matched" means Gemini read the text and these are its picks.
+      "general" means nothing was read or nothing matched, and these are the
+      work every outreach needs whatever its subject. They are both useful and
+      they are not the same claim, so labelling them identically was telling
+      somebody their own words had produced a shortlist when they had not.
+    */
+    if (skills && skills.length > 0) {
+      return Response.json({ skills, basis: "matched" });
+    }
+    return Response.json({ skills: [...UNIVERSAL_SUPPORT_SKILLS], basis: "general" });
   } catch (err) {
     return errorResponse(err, req);
   }

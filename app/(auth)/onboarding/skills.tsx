@@ -16,6 +16,7 @@ import { colors, fontFamily, spacing } from '@/constants/theme';
 import { SKILL_CATEGORIES, companionSkills } from '@/constants/skills';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { SkillSuggestBox } from '@/components/skills/SkillSuggestBox';
+import type { SkillSuggestion } from '@/hooks/useSuggestSkills';
 
 const GROUPS: SkillGroup[] = SKILL_CATEGORIES.map((category) => ({
   title: category.name,
@@ -29,7 +30,15 @@ export default function OnboardingSkills() {
   const initialSkillTags = useOnboardingStore((state) => state.skillTags);
   const [selected, setSelected] = useState<Set<string>>(new Set(initialSkillTags));
   const [query, setQuery] = useState('');
-  const [suggested, setSuggested] = useState<string[]>([]);
+  /*
+    THE SUGGESTION AND WHAT KIND IT IS ARE ONE PIECE OF STATE.
+
+    Held together because the heading above the chips depends on both: a list
+    of skills with no record of where it came from is exactly what let
+    "Recommended for you" sit above five generic support skills that nothing
+    had read.
+  */
+  const [suggestion, setSuggestion] = useState<SkillSuggestion | null>(null);
 
   // Opens on the category the volunteer already has something in, so returning
   // to this step shows their own answers rather than the first card.
@@ -58,6 +67,12 @@ export default function OnboardingSkills() {
         })).filter((group) => group.data.length > 0)
       : GROUPS;
 
+    /*
+      Derived INSIDE the memo, not above it. `suggestion?.skills ?? []` builds
+      a new array on every render, so as a dependency it changed every time and
+      the memo never memoised anything.
+    */
+    const suggested = suggestion?.skills ?? [];
     const shortlist = trimmed
       ? suggested.filter((skill) => skill.toLowerCase().includes(trimmed))
       : suggested;
@@ -79,16 +94,47 @@ export default function OnboardingSkills() {
     );
 
     const extras: SkillGroup[] = [];
+    /*
+      THE TWO SUGGESTION GROUPS SAY WHERE THEY CAME FROM (owner, 2026-09-21:
+      "are the recommended based on what I entered or general recommendations?
+      make a clear distinction" and "when i choose 2 skills, theres now an
+      often chosen together... whats going on").
+
+      Three different things can put a skill at the top of this list and they
+      were all unlabelled. Gemini reading the sentence you wrote, the universal
+      fallback when nothing read it, and a fixed table of skills that travel
+      together at a real outreach. Each is useful and each is a different
+      claim, so each now names its own basis in the one line under its heading.
+    */
     if (shortlist.length > 0) {
-      extras.push({ title: 'Recommended for you', icon: 'lightbulb-on-outline', data: shortlist });
+      extras.push(
+        suggestion?.basis === 'matched'
+          ? {
+              title: 'From what you wrote',
+              icon: 'lightbulb-on-outline',
+              data: shortlist,
+              note: 'Picked by reading your description. Tap any that fit.',
+            }
+          : {
+              title: 'Every outreach needs these',
+              icon: 'account-group-outline',
+              data: shortlist,
+              note: 'General suggestions, not based on your description. Tap any that fit.',
+            }
+      );
     }
     if (companions.length > 0) {
-      extras.push({ title: 'Often chosen together', icon: 'link-variant', data: companions });
+      extras.push({
+        title: 'Often chosen together',
+        icon: 'link-variant',
+        data: companions,
+        note: 'People who picked what you picked usually do these too. Nothing is added unless you tap it.',
+      });
     }
 
     if (extras.length === 0) return base;
     return [...extras, ...base];
-  }, [query, suggested, selected]);
+  }, [query, suggestion, selected]);
 
   const matchCount = useMemo(
     () => groups.reduce((sum, group) => sum + group.data.length, 0),
@@ -156,7 +202,7 @@ export default function OnboardingSkills() {
                 editable
                 label="Describe what you do"
                 placeholder="e.g. I take blood pressure at community clinics"
-                onSuggestions={setSuggested}
+                onSuggestions={setSuggestion}
               />
             </>
           ) : null}

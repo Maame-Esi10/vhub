@@ -1,6 +1,12 @@
 import { useMutation } from '@tanstack/react-query';
 import { suggestSkills } from '@/lib/api-client';
 
+export interface SkillSuggestion {
+  skills: string[];
+  /** See SkillSuggestionResponse: 'matched' read the text, 'general' did not. */
+  basis: 'matched' | 'general';
+}
+
 /**
  * Asks the API which of the existing skills fit a piece of free text.
  *
@@ -19,9 +25,15 @@ import { suggestSkills } from '@/lib/api-client';
  */
 export function useSuggestSkills() {
   return useMutation({
-    mutationFn: async (description: string): Promise<string[]> => {
+    mutationFn: async (description: string): Promise<SkillSuggestion> => {
       const result = await suggestSkills(description);
-      return Array.isArray(result.skills) ? result.skills : [];
+      return {
+        skills: Array.isArray(result.skills) ? result.skills : [],
+        // An older deployment answers without `basis`. Treating that as
+        // 'general' is the safe direction: it under-claims rather than telling
+        // somebody their words produced a shortlist when they may not have.
+        basis: result.basis === 'matched' ? 'matched' : 'general',
+      };
     },
   });
 }

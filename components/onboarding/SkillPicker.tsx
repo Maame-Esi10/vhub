@@ -10,6 +10,15 @@ export interface SkillGroup {
   title: string;
   icon?: string;
   data: string[];
+  /**
+   * One line saying where this group came from, shown above its chips.
+   *
+   * Only the suggestion groups use it. A real category needs no explanation --
+   * "Nursing Procedures" is its own justification -- but a group of skills
+   * that appeared because something guessed does, and three different things
+   * can do that guessing here. See the note in the skills step.
+   */
+  note?: string;
 }
 
 export interface SkillPickerProps {
@@ -69,8 +78,43 @@ export function SkillPicker({
     return map;
   }, [groups, selected]);
 
+  const activeNote = useMemo(() => {
+    if (searching) return null;
+    const group = groups.find((g) => g.title === activeGroup) ?? groups[0];
+    return group?.note ?? null;
+  }, [groups, activeGroup, searching]);
+
   const visible = useMemo(() => {
-    if (searching) return groups.flatMap((group) => group.data);
+    if (searching) {
+      /*
+        DEDUPED, and this was a real crash-adjacent bug (owner, 2026-09-21:
+        "Encountered two children with the same key, Community mobilisation").
+
+        The caller PREPENDS "Recommended for you" and "Often chosen together"
+        to the real categories, and a suggested skill is by definition also a
+        member of its own category -- so flattening every group put the same
+        string in the list twice and React saw two children with one key.
+
+        It only happened while SEARCHING, because that is the one path that
+        flattens across groups; browsing shows a single group at a time and
+        could never collide. React's warning is the mild version of the
+        consequence: with duplicate keys it is free to drop or duplicate a
+        child, so a skill could silently fail to render or fail to toggle.
+
+        First occurrence wins, which keeps the recommended ones at the top
+        where the caller put them.
+      */
+      const seen = new Set<string>();
+      const flat: string[] = [];
+      for (const group of groups) {
+        for (const skill of group.data) {
+          if (seen.has(skill)) continue;
+          seen.add(skill);
+          flat.push(skill);
+        }
+      }
+      return flat;
+    }
     const group = groups.find((g) => g.title === activeGroup) ?? groups[0];
     return group?.data ?? [];
   }, [groups, activeGroup, searching]);
@@ -162,6 +206,7 @@ export function SkillPicker({
         the line or takes the next one. There is no column for it to be
         squeezed into and therefore nothing to break a word across.
       */}
+      {activeNote ? <Text style={styles.groupNote}>{activeNote}</Text> : null}
       <View style={styles.grid}>
         {visible.map((skill) => {
           const isSelected = selected.has(skill);
@@ -275,6 +320,13 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
 
+  groupNote: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

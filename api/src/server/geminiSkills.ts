@@ -141,9 +141,17 @@ export async function suggestSkills(description: string): Promise<string[] | nul
     if (!Array.isArray(parsed.skills)) return null;
 
     const matched = matchBackToVocabulary(parsed.skills);
-    // A topic with no match in the vocabulary still has an honest answer: the
-    // work every outreach needs regardless of subject.
-    return matched.length > 0 ? matched : [...UNIVERSAL_SUPPORT_SKILLS];
+    /*
+      AN EMPTY MATCH RETURNS NULL, NOT THE UNIVERSAL LIST.
+
+      The fallback is now applied in ONE place, the route, so that it can also
+      label what it did. Returning the universal skills from here as though
+      they had been matched is what let the screen call them "Recommended for
+      you" when nothing had been read at all (owner, 2026-09-21: "are the
+      recommended based on what I entered or general recommendations? make a
+      clear distinction").
+    */
+    return matched.length > 0 ? matched : null;
   } catch {
     return null;
   } finally {

@@ -4,7 +4,7 @@ import { Text } from '@/components/ui/Text';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { useSuggestSkills } from '@/hooks/useSuggestSkills';
+import { useSuggestSkills, type SkillSuggestion } from '@/hooks/useSuggestSkills';
 import { humanErrorOrNull } from '@/lib/errorMessage';
 
 export interface SkillSuggestBoxProps {
@@ -32,8 +32,16 @@ export interface SkillSuggestBoxProps {
   editable?: boolean;
   label: string;
   placeholder?: string;
-  /** Handed the ranked skills. Always a subset of constants/skills.ts. */
-  onSuggestions: (skills: string[]) => void;
+  /**
+   * Handed the ranked skills AND which kind of answer they are. Always a
+   * subset of constants/skills.ts.
+   *
+   * The caller has to label the two differently: 'matched' came from what the
+   * person wrote, 'general' is the work every outreach needs whatever its
+   * subject. Calling both "recommended for you" is what made an unreachable
+   * Gemini look like a reading of somebody's own words.
+   */
+  onSuggestions: (result: SkillSuggestion) => void;
 }
 
 /**
@@ -90,14 +98,32 @@ export function SkillSuggestBox({
   const description = editable ? seeded : (sourceText ?? '');
   const ready = description.trim().length >= 10;
   const [empty, setEmpty] = useState(false);
+  const [tooShort, setTooShort] = useState(false);
 
   function handlePress() {
-    if (!ready || suggest.isPending) return;
+    if (suggest.isPending) return;
+
+    /*
+      PRESSING WITH TOO LITTLE TEXT NOW SAYS SO (owner, 2026-09-21: "nothing
+      happens when i click the suggest skills on onboarding").
+
+      The button was disabled below ten characters, with the reason in small
+      grey type underneath it. A disabled button that has been pressed is the
+      exact failure this app has been bitten by twice already: nothing happens,
+      nothing errors, and the person cannot tell a refusal from a broken
+      control. It is now always pressable and answers every press.
+    */
+    if (!ready) {
+      setTooShort(true);
+      return;
+    }
+
+    setTooShort(false);
     setEmpty(false);
     suggest.mutate(description, {
-      onSuccess: (skills) => {
-        setEmpty(skills.length === 0);
-        onSuggestions(skills);
+      onSuccess: (result) => {
+        setEmpty(result.skills.length === 0);
+        onSuggestions(result);
       },
     });
   }
@@ -126,13 +152,13 @@ export function SkillSuggestBox({
 
       <Pressable
         onPress={handlePress}
-        disabled={!ready || suggest.isPending}
+        disabled={suggest.isPending}
         accessibilityRole="button"
-        accessibilityState={{ disabled: !ready || suggest.isPending }}
+        accessibilityState={{ disabled: suggest.isPending }}
         accessibilityLabel="Suggest skills"
         style={({ pressed }) => [
           styles.button,
-          (!ready || suggest.isPending) && styles.buttonDisabled,
+          suggest.isPending && styles.buttonDisabled,
           pressed && styles.pressed,
         ]}
       >
@@ -146,9 +172,11 @@ export function SkillSuggestBox({
         </Text>
       </Pressable>
 
-      {!ready ? (
+      {tooShort && !ready ? (
         <Text style={styles.hint}>
-          {editable ? 'Write a sentence first.' : 'Add a description first.'}
+          {editable
+            ? 'Write a sentence about what you do first, then press again.'
+            : 'Add a description to the outreach first, then press again.'}
         </Text>
       ) : null}
 

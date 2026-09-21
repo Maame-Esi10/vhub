@@ -48,6 +48,7 @@ import { colors, fontFamily, spacing } from '@/constants/theme';
 import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { SKILL_CATEGORIES } from '@/constants/skills';
 import { SkillSuggestBox } from '@/components/skills/SkillSuggestBox';
+import type { SkillSuggestion } from '@/hooks/useSuggestSkills';
 import { VenueLocationField } from '@/components/organisation/VenueLocationField';
 import {
   MAX_GALLERY_IMAGES,
@@ -77,24 +78,41 @@ const SKILL_SECTIONS = SKILL_CATEGORIES.map((c) => ({
 }));
 
 /**
- * Prepends a "Recommended" section when Gemini has suggested anything.
+ * Prepends a suggestion section, NAMED FOR WHERE IT CAME FROM.
  *
- * REORDERING, NOT FILTERING. The nine real categories follow untouched, so a
+ * REORDERING, NOT FILTERING. The real categories follow untouched, so a
  * suggestion can only ever add a shortcut to the top of the list -- never take
  * an option away from somebody whose event is not what their description made
  * it sound like.
+ *
+ * THE HEADING DEPENDS ON THE BASIS (owner, 2026-09-21: "are the recommended
+ * based on what I entered or general recommendations? make a clear
+ * distinction"). "Recommended for this outreach" above five generic support
+ * skills that nothing had read was a claim the app could not support -- and
+ * since an unreachable Gemini now falls back rather than returning nothing,
+ * that is the case an organisation will meet most often.
  */
-function withSuggestions(suggested: readonly string[]) {
-  if (suggested.length === 0) return SKILL_SECTIONS;
+function withSuggestions(suggestion: SkillSuggestion | null) {
+  if (!suggestion || suggestion.skills.length === 0) return SKILL_SECTIONS;
   return [
-    { title: 'Recommended for this outreach', icon: 'lightbulb-on-outline', data: [...suggested] },
+    suggestion.basis === 'matched'
+      ? {
+          title: 'From your description',
+          icon: 'lightbulb-on-outline',
+          data: [...suggestion.skills],
+        }
+      : {
+          title: 'Every outreach needs these',
+          icon: 'account-group-outline',
+          data: [...suggestion.skills],
+        },
     ...SKILL_SECTIONS,
   ];
 }
 
 export default function CreateOutreach() {
-  const [suggestedSkills, setSuggestedSkills] = useState<string[]>([]);
-  const suggestedSections = useMemo(() => withSuggestions(suggestedSkills), [suggestedSkills]);
+  const [suggestion, setSuggestion] = useState<SkillSuggestion | null>(null);
+  const suggestedSections = useMemo(() => withSuggestions(suggestion), [suggestion]);
   // The fixed footer below the scroller needs its own offset: the scroll
   // content's padding does nothing for a sibling. See useTabBarFooterOffset.
   const tabBarFooter = useTabBarFooterOffset();
@@ -844,7 +862,7 @@ export default function CreateOutreach() {
                 editable
                 placeholder="Describe the day in your own words. What will volunteers actually be doing?"
                 sourceText={[state.title, state.description].filter(Boolean).join('. ')}
-                onSuggestions={setSuggestedSkills}
+                onSuggestions={setSuggestion}
               />
 
               {/*
