@@ -455,8 +455,34 @@ export function useAuthGuard() {
       const onEntryScreen = inAuthGroup && !!authScreen && AUTH_ENTRY_SCREENS.has(authScreen);
       const atWelcome = authScreen === 'welcome';
 
+      /*
+        THE WIZARD, NOT WELCOME (owner, 2026-09-21: "why doesn't the onboarding
+        process begin right after the otp? It takes me back to the welcome
+        screen with the buttons... this process is for someone who didn't leave
+        the process halfway, not everyone").
+
+        Exactly right. `confirm-email` replaces to the root on success, which
+        lands here, and this sent every newly confirmed volunteer to welcome --
+        a screen whose job is to introduce the app to somebody who has not
+        signed up, wearing a "continue where you left off" action for somebody
+        who did and then stopped. Neither describes a person who finished
+        registering ten seconds ago. They had already been welcomed, they had
+        already chosen a role, and they were shown a carousel and asked to
+        press Continue to begin a thing they had just asked to begin.
+
+        `/(auth)/onboarding` redirects to the wizard's first step, which is
+        where they were always going. Resuming mid-wizard still works: the
+        store keeps what has been answered.
+
+        WELCOME STAYS EXCLUDED from the pull, and must. The wizard's back
+        button goes to welcome, so pulling a user off welcome into the wizard
+        would make that button do nothing and strand them with no way out
+        except signing out. Somebody who deliberately navigates back to welcome
+        is allowed to sit there; its resume action is still the way forward for
+        them, and is now the only place that action is needed.
+      */
       if ((!inAuthGroup && !atOffline) || (onEntryScreen && !atWelcome)) {
-        router.replace('/(auth)/welcome');
+        router.replace('/(auth)/onboarding');
       }
       return;
     }

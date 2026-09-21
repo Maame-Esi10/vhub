@@ -1,8 +1,15 @@
-import { useState, type ReactNode } from 'react';
+import {
+  Children,
+  isValidElement,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {
   LayoutAnimation,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   UIManager,
   View,
@@ -72,6 +79,97 @@ export function InfoSection({
   );
 }
 
+
+/**
+ * The Info Hub as a rail of topics with one of them open.
+ *
+ * WHY THE ACCORDION WENT (owner, 2026-09-21: "the Info Hub redesign is not
+ * better. It still does not look clean").
+ *
+ * Both hubs were five collapsed InfoSection cards. Closed, that is five
+ * near-identical rounded boxes with an icon, a title, a subtitle and a
+ * chevron, stacked -- so the screen a volunteer opens to have something
+ * explained opens showing five boxes and no explanation. Nothing is legible
+ * except the furniture, which is precisely the "not clean" being reported, and
+ * it is the same fault as the skills picker's blocks with arrows: a table of
+ * contents presented as though it were the content.
+ *
+ * It is also self-defeating for this screen in particular. An accordion is a
+ * reasonable way to skim a reference you already understand; the Info Hub
+ * exists for people who do not, and asking them which of five drawers holds
+ * the answer is asking the question they came to have answered.
+ *
+ * So: one horizontal rail, one topic open beneath it, always. The screen now
+ * opens with real prose on it. Switching topic changes only the body, so the
+ * rail stays put and comparing two topics is two taps rather than two scrolls.
+ * The rail is styled from SkillPicker's, like the skills tabs, so the third
+ * place in the app that says "pick one of these and read it" looks like the
+ * other two.
+ *
+ * IT READS ITS CHILDREN'S PROPS. Each child is an <InfoSection>, and this
+ * takes that element's icon, title and subtitle for the rail and renders its
+ * children as the body. That keeps both hub screens exactly as they were
+ * written -- a list of sections with JSX inside -- rather than forcing their
+ * bodies into an array of render functions, which is a large mechanical change
+ * to two long files for no gain the reader can see. InfoSection still renders
+ * on its own as a collapsible card when used outside this wrapper.
+ */
+export function InfoTopics({ children }: { children: ReactNode }) {
+  const topics = Children.toArray(children).filter(isValidElement) as ReactElement<InfoSectionProps>[];
+  const [active, setActive] = useState(0);
+
+  if (topics.length === 0) return null;
+
+  // Clamped rather than trusted: a hub that conditionally renders a section
+  // can shrink between renders, and an index past the end would blank the
+  // body with no way back to it.
+  const index = Math.min(active, topics.length - 1);
+  const current = topics[index]!;
+
+  return (
+    <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.rail}
+      >
+        {topics.map((topic, topicIndex) => {
+          const isActive = topicIndex === index;
+          return (
+            <Pressable
+              key={topic.props.title}
+              onPress={() => setActive(topicIndex)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={topic.props.title}
+              style={({ pressed }) => [
+                styles.railChip,
+                isActive && styles.railChipActive,
+                pressed && styles.pressed,
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={topic.props.icon}
+                size={16}
+                color={isActive ? colors.white : colors.textSecondary}
+              />
+              <Text style={[styles.railChipText, isActive && styles.railChipTextActive]}>
+                {topic.props.title}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View style={styles.topicCard}>
+        <Text style={styles.topicTitle}>{current.props.title}</Text>
+        <Text style={styles.topicSubtitle}>{current.props.subtitle}</Text>
+        <View style={styles.topicBody}>{current.props.children}</View>
+      </View>
+    </View>
+  );
+}
+
 /** Body paragraph inside an InfoSection. */
 export function InfoBody({ children }: { children: ReactNode }) {
   return <Text style={styles.body}>{children}</Text>;
@@ -132,6 +230,61 @@ export function InfoCallout({ icon = 'information-outline', children }: { icon?:
 }
 
 const styles = StyleSheet.create({
+  /* Copied from components/onboarding/SkillPicker's rail, for the same reason
+     the skills tabs were: three places in the app now say "pick one of these
+     and read it", and they should not look like three different apps. */
+  rail: {
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.base,
+  },
+  railChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+  },
+  railChipActive: {
+    backgroundColor: colors.navy,
+  },
+  railChipText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  railChipTextActive: {
+    color: colors.white,
+  },
+  topicCard: {
+    marginTop: spacing.base,
+    borderRadius: radius.lg,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  topicTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 20,
+    lineHeight: 26,
+    color: colors.textPrimary,
+  },
+  topicSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  topicBody: {
+    marginTop: spacing.base,
+    paddingTop: spacing.base,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
   section: {
     borderRadius: radius.md,
     borderWidth: 1,

@@ -11,7 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 // InfoSection is the SHARED card, and is now the only one on either hub.
 // This screen used to declare its own `Section` with identical props and a
 // different look, so the two Info Hubs read as two designs.
-import { InfoSection, RoleTypeExplainer, ScreenHeader } from '@/components/ui';
+import { InfoSection, InfoTopics, RoleTypeExplainer, ScreenHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { LAYER1_WEIGHTS } from '@/lib/matching/layer1';
 import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS, V_SCORE_PENALTIES } from '@/lib/vscore';
@@ -73,11 +73,16 @@ export default function InfoHub() {
           It also removes the second card design from a screen that was
           supposed to have one.
         */}
+        {/*
+          ONE TOPIC OPEN AT A TIME, CHOSEN FROM A RAIL. See InfoTopics:
+          five collapsed cards meant the screen somebody opens to have
+          something explained opened with no explanation on it.
+        */}
+        <InfoTopics>
         <InfoSection
           icon="compare-horizontal"
           title="Clinical or support?"
           subtitle="What the work is, not who may do it"
-          defaultOpen
         >
           <RoleTypeExplainer audience="volunteer" />
         </InfoSection>
@@ -86,7 +91,6 @@ export default function InfoHub() {
           icon="target"
           title="Your match score"
           subtitle="Shown on every outreach in your feed"
-          defaultOpen
         >
           <Text style={styles.body}>
             When you open your feed, every open outreach is scored out of 100 for how well it fits
@@ -217,6 +221,7 @@ export default function InfoHub() {
             organisation can edit a V-Score directly.
           </Text>
         </InfoSection>
+        </InfoTopics>
       </ScrollView>
     </SafeAreaView>
   );

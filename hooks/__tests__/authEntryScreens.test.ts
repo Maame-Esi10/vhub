@@ -100,7 +100,26 @@ describe('a signed-in volunteer is never stranded on login', () => {
 
   it('pulls them off an entry screen rather than leaving them there', () => {
     expect(branch).toContain('AUTH_ENTRY_SCREENS');
-    expect(branch).toContain("router.replace('/(auth)/welcome')");
+    expect(branch).toMatch(/router\.replace\('\/\(auth\)\//);
+  });
+
+  /*
+    THE DESTINATION IS THE WIZARD, NOT WELCOME (changed 2026-09-21).
+
+    This test used to assert `router.replace('/(auth)/welcome')` literally,
+    which made it a record of the destination rather than of the rule. The rule
+    is that a volunteer with unfinished onboarding is never left standing on a
+    screen that does nothing for them; welcome was a poor answer to that for
+    the commonest case of all, somebody who has just confirmed their email and
+    is being shown an introduction to an app they have already joined.
+
+    Asserted as "somewhere in the wizard" rather than the exact path, so moving
+    the wizard's entry point is not a test failure. Sending them to welcome
+    again WOULD be, which is the thing worth catching.
+  */
+  it('sends them into the wizard rather than back to the introduction', () => {
+    expect(branch).toContain("router.replace('/(auth)/onboarding')");
+    expect(branch).not.toContain("router.replace('/(auth)/welcome')");
   });
 
   it('still excludes welcome, which would otherwise redirect to itself', () => {

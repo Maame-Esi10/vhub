@@ -8,6 +8,7 @@ import { InfoBandRow,
   InfoBody,
   InfoCallout,
   InfoSection,
+  InfoTopics,
   InfoSubheading,
   InfoWeightRow,
   ScreenHeader, RoleTypeExplainer } from '@/components/ui';
@@ -64,11 +65,16 @@ export default function OrganisationInfoHub() {
           It also removes the second card design from a screen that was
           supposed to have one.
         */}
+        {/*
+          ONE TOPIC OPEN AT A TIME, CHOSEN FROM A RAIL. See InfoTopics:
+          five collapsed cards meant the screen somebody opens to have
+          something explained opened with no explanation on it.
+        */}
+        <InfoTopics>
         <InfoSection
           icon="compare-horizontal"
           title="Clinical or support?"
           subtitle="Choose by what the work is"
-          defaultOpen
         >
           <RoleTypeExplainer audience="organisation" />
         </InfoSection>
@@ -77,7 +83,6 @@ export default function OrganisationInfoHub() {
           icon="target"
           title="How volunteers are matched"
           subtitle="The score beside every applicant"
-          defaultOpen
         >
           <InfoBody>
             Every volunteer who applies is scored out of 100 for how well they fit that specific
@@ -210,6 +215,7 @@ export default function OrganisationInfoHub() {
             the system.
           </InfoCallout>
         </InfoSection>
+        </InfoTopics>
       </ScrollView>
     </SafeAreaView>
   );

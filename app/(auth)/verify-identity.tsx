@@ -150,26 +150,32 @@ export default function VerifyIdentity() {
 
         <Text style={styles.heading}>Verify Your Credentials</Text>
         <Text style={styles.subtext}>
-          Upload a credential document and sign the declaration below. This is a one-time
-          verification process required for clinical access.
+          Sign the declaration below. You will upload your licence, certificate or council
+          registration on the next screen. This is a one-time process and only clinical roles
+          require it.
         </Text>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardLabel}>Credential Document</Text>
-            <View style={styles.nextStepBadge}>
-              <Text style={styles.nextStepBadgeText}>NEXT STEP</Text>
-            </View>
-          </View>
+        {/*
+          THE FAKE UPLOAD CARD IS GONE (owner, 2026-09-21: "why is the upload
+          docx card/tab there if the docx selection is not going on?").
 
-          <View style={styles.uploadPlaceholder}>
-            <MaterialCommunityIcons name="tray-arrow-up" size={22} color={colors.primary} />
-            <Text style={styles.uploadPlaceholderText}>
-              Sign the declaration below, then upload your licence, certificate or council
-              registration on the next screen. Your declaration has to be on file before a document
-              can be attached to it.
-            </Text>
-          </View>
+          It was a card headed "Credential Document" with a NEXT STEP badge, an
+          upload tray icon and a dashed placeholder -- every visual signal of a
+          file picker, on a control that could not pick a file and was never
+          meant to. The document genuinely cannot be uploaded here, because
+          /api/verification-document refuses one while `declaration_signed` is
+          false and the declaration is written by this very submit. But the
+          answer to "the upload cannot happen yet" is a SENTENCE saying so, not
+          a disabled-looking uploader that invites a tap and answers nothing.
+
+          The ordering constraint is now stated in one line above the
+          declaration, which is all it ever needed.
+        */}
+        <View style={styles.card}>
+          <Text style={styles.uploadNote}>
+            Your document comes next. It cannot be attached until your declaration is on file, so
+            you sign here first and upload on the following screen.
+          </Text>
 
           <Pressable
             onPress={() => setConfirmed((prev) => !prev)}
@@ -215,6 +221,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  uploadNote: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+    marginBottom: spacing.base,
   },
   content: {
     paddingHorizontal: spacing.xl,
