@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
+import { isPlausibleOtp, OTP_MAX_LENGTH, sanitiseOtp } from '@/lib/otp';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,7 +22,6 @@ import { useConfirmSignUp, useResendConfirmation } from '@/hooks';
 import { humanError } from '@/lib/errorMessage';
 
 /** The confirmation code Supabase puts in the email. */
-const CODE_LENGTH = 6;
 
 /**
  * Confirming a brand-new account WITHOUT LEAVING THE APP.
@@ -63,13 +63,13 @@ export default function ConfirmEmail() {
   const [resent, setResent] = useState(false);
 
   const codeError =
-    attempted && code.trim().length !== CODE_LENGTH
-      ? `Enter the ${CODE_LENGTH}-digit code from the email.`
+    attempted && !isPlausibleOtp(code)
+      ? 'Enter the code from the email.'
       : undefined;
 
   const handleConfirm = useCallback(() => {
     setAttempted(true);
-    if (code.trim().length !== CODE_LENGTH) return;
+    if (!isPlausibleOtp(code)) return;
 
     confirmSignUp.mutate(
       { email, code },
@@ -130,8 +130,8 @@ export default function ConfirmEmail() {
           <Text style={styles.title}>Check your email</Text>
           <Text style={styles.subtitle}>
             {email
-              ? `We sent a ${CODE_LENGTH}-digit code to ${email}. Enter it below to finish setting up your account.`
-              : `Enter the ${CODE_LENGTH}-digit code from your email to finish setting up your account.`}
+              ? `We sent a code to ${email}. Enter it below to finish setting up your account.`
+              : 'Enter the code from your email to finish setting up your account.'}
           </Text>
           {/* The confirmation email is the most spam-prone message VHub
               sends: it goes to somebody who has never heard from the sender.
@@ -141,16 +141,16 @@ export default function ConfirmEmail() {
           <View style={styles.form}>
             <Input
               label="Confirmation Code"
-              placeholder="123456"
+              placeholder="Code from the email"
               value={code}
-              onChangeText={(next) => setCode(next.replace(/\D/g, '').slice(0, CODE_LENGTH))}
+              onChangeText={(next) => setCode(sanitiseOtp(next))}
               keyboardType="number-pad"
               autoCapitalize="none"
               autoCorrect={false}
               // Lets the keyboard offer the code straight from the email on
               // both platforms, which is the whole ergonomic win over a link.
               textContentType="oneTimeCode"
-              maxLength={CODE_LENGTH}
+              maxLength={OTP_MAX_LENGTH}
               accessibilityLabel="Confirmation code"
               error={codeError}
               leadingIcon={

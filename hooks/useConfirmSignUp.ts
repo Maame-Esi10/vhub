@@ -6,7 +6,7 @@ import { createProfileRowsFromMetadata } from '@/lib/profileRows';
 
 export interface ConfirmSignUpParams {
   email: string;
-  /** The six-digit code from the confirmation email. */
+  /** The code from the confirmation email. Its length is a Supabase Auth setting, not ours: see lib/otp.ts. */
   code: string;
 }
 

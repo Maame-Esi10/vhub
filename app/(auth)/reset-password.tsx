@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
+import { isPlausibleOtp, OTP_MAX_LENGTH, sanitiseOtp } from '@/lib/otp';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,7 +25,6 @@ import {
 import { humanError } from '@/lib/errorMessage';
 
 /** The recovery code Supabase puts in the email. */
-const CODE_LENGTH = 6;
 
 /**
  * The second half of "I have forgotten my password": type the code from the
@@ -77,9 +77,9 @@ export default function ResetPassword() {
     if (!attempted) return {};
     return {
       code:
-        code.trim().length === CODE_LENGTH
+        isPlausibleOtp(code)
           ? undefined
-          : `Enter the ${CODE_LENGTH}-digit code from the email.`,
+          : 'Enter the code from the email.',
       password:
         password.length >= MIN_PASSWORD_LENGTH
           ? undefined
@@ -93,7 +93,7 @@ export default function ResetPassword() {
     setResent(false);
 
     if (
-      code.trim().length !== CODE_LENGTH ||
+      !isPlausibleOtp(code) ||
       password.length < MIN_PASSWORD_LENGTH ||
       password !== confirmPassword
     ) {
@@ -159,21 +159,21 @@ export default function ResetPassword() {
           <Text style={styles.title}>Check your email</Text>
           <Text style={styles.subtitle}>
             {email
-              ? `If ${email} has a VHub account, we have sent it a ${CODE_LENGTH}-digit code. Enter it below and choose a new password.`
-              : `Enter the ${CODE_LENGTH}-digit code from your email and choose a new password.`}
+              ? `If ${email} has a VHub account, we have sent it a code. Enter it below and choose a new password.`
+              : 'Enter the code from your email and choose a new password.'}
           </Text>
 
           <View style={styles.form}>
             <Input
               label="Reset Code"
-              placeholder="123456"
+              placeholder="Code from the email"
               value={code}
-              onChangeText={(next) => setCode(next.replace(/\D/g, '').slice(0, CODE_LENGTH))}
+              onChangeText={(next) => setCode(sanitiseOtp(next))}
               keyboardType="number-pad"
               autoCapitalize="none"
               autoCorrect={false}
               textContentType="oneTimeCode"
-              maxLength={CODE_LENGTH}
+              maxLength={OTP_MAX_LENGTH}
               accessibilityLabel="Reset code"
               error={errors.code}
               leadingIcon={

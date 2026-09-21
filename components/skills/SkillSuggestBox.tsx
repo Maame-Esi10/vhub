@@ -25,7 +25,7 @@ export interface SkillSuggestBoxProps {
 /**
  * "Describe it, and we will point at the likely skills."
  *
- * WHY THIS EARNS ITS PLACE. The vocabulary is seventy-five skills across nine
+ * WHY THIS EARNS ITS PLACE. The vocabulary is eighty-six skills across ten
  * categories. Search only finds words that are already in it, so an
  * organisation running a breast cancer screening day finds nothing by typing
  * "breast cancer" -- it is not a skill and never will be -- while clinical

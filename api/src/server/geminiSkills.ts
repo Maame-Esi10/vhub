@@ -41,7 +41,7 @@ export const UNIVERSAL_SUPPORT_SKILLS: readonly string[] = [
  *
  * `gemini.ts` answers "are these two skill strings the same thing?" for the
  * matcher. This answers a different question for a HUMAN filling in a form:
- * "given what this person just wrote, which of our seventy-five skills are they
+ * "given what this person just wrote, which of our skills are they
  * most likely to want?" An organisation typing "breast cancer screening" should
  * be offered clinical breast examination, patient registration and health
  * education -- none of which any keyword search can find, because "breast

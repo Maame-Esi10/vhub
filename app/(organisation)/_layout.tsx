@@ -84,6 +84,7 @@ export default function OrganisationTabsLayout() {
       <Tabs.Screen name="verification" options={{ href: null }} />
       <Tabs.Screen name="info-hub" options={{ href: null }} />
       <Tabs.Screen name="account-security" options={{ href: null }} />
+      <Tabs.Screen name="notification-settings" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
     </Tabs>
   );

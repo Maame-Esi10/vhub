@@ -69,11 +69,18 @@ export default function OrganisationSettings() {
           us", which is a different question with a different audience.
         */}
         {/* Short fixed label — see the volunteer twin for why not the email. */}
+        {/*
+          POINTS AT SETTINGS, NOT AT THE INBOX (owner, 2026-09-21). A row under
+          PREFERENCES that opened a list of messages meant somebody looking for
+          a preference found an inbox, and there was nowhere in the app to turn
+          pushes off. The settings screen links on to the inbox, so nothing
+          became harder to reach.
+        */}
         <SettingsRow
           icon="bell-outline"
           label="Notifications"
-          value="Applicants, reminders and alerts"
-          onPress={() => router.push('/(organisation)/notifications')}
+          value="Push notifications on this device"
+          onPress={() => router.push('/(organisation)/notification-settings')}
         />
         <SettingsRow
           icon="lock-outline"

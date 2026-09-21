@@ -60,6 +60,10 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
       'Anthropometric measurement',
       'Dental and oral health screening',
       'Oral health education',
+      // Named alongside blood pressure and blood sugar in Ghanaian screening
+      // days (CBG/Adaklu 2026, GCGL). We measured two of that trio and not the
+      // third.
+      'Cholesterol and lipid testing',
     ],
   },
   {
@@ -80,6 +84,11 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
       'HIV counselling and testing',
       'Malaria rapid diagnostic testing',
       'Sickle cell screening',
+      // Both named explicitly by the Ministry of Health's own Community Health
+      // Screening Outreach Project, alongside malaria and hepatitis B, and
+      // neither was expressible.
+      'Typhoid testing',
+      'Skin condition screening',
       'Referral and follow-up coordination',
     ],
   },
@@ -102,13 +111,11 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
     icon: 'needle',
     skills: [
       'Venipuncture',
-      'Intravenous cannulation',
       'Wound dressing',
       'Injection administration',
       'Medication administration',
       'Infection control',
       'Vaccination administration',
-      'Sterile technique',
     ],
   },
   {
@@ -160,12 +167,26 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
     skills: [
       'Antenatal care',
       'Postnatal care',
-      'Normal delivery assistance',
-      'Newborn resuscitation',
       'Child growth monitoring',
       'Immunisation counselling',
       'Family planning counselling',
       'Breastfeeding support',
+      /*
+        The Child Health Promotion Week package, run nationally every May since
+        2004 and the single most common child-focused outreach in Ghana. Its
+        named interventions are immunisation (covered), vitamin A, deworming
+        with albendazole, growth monitoring (covered), MUAC nutrition screening
+        and nutrition counselling. Four of the six had no entry.
+
+        MUAC is listed separately from 'Anthropometric measurement' on purpose:
+        the general skill is measuring people, this one is the specific
+        technique used to find acute malnutrition, and it is what a volunteer
+        is actually trained and rostered to do.
+      */
+      'Vitamin A supplementation',
+      'Deworming administration',
+      'Malnutrition screening (MUAC)',
+      'Nutrition counselling',
     ],
   },
   {
@@ -206,6 +227,11 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
       'Logistics and setup',
       'Community mobilisation',
       'Record keeping',
+      // Both are real outreach work with no entry: the MOH's outreach project
+      // distributes free insecticide-treated nets, and Child Health Promotion
+      // Week bundles birth registration with the clinical services.
+      'Insecticide-treated net distribution',
+      'Birth registration support',
     ],
   },
 ];
@@ -228,6 +254,25 @@ export const RETIRED_SKILLS: string[] = [
   'Compounding',
   'Pharmacovigilance',
   'Advanced Cardiac Life Support (ACLS)',
+  /*
+    Retired 2026-09-21, owner-approved, on one test: is this outreach work or
+    facility work?
+
+    Deliveries do not happen at an outreach, so 'Normal delivery assistance'
+    and 'Newborn resuscitation' described hospital work the platform can never
+    match anybody to -- a midwife ticking them was describing her job, not what
+    she could be rostered for here. Cannulation is a ward procedure; the
+    outreach equivalent is venipuncture, which stays. 'Sterile technique' was
+    too abstract to match on and is implied by every procedure that needs it.
+
+    RETIRED, NOT DELETED. Anyone already holding one keeps it and is shown it
+    under "No longer offered"; deleting the strings outright would drop them
+    silently the next time that volunteer edited their profile.
+  */
+  'Normal delivery assistance',
+  'Newborn resuscitation',
+  'Intravenous cannulation',
+  'Sterile technique',
 ];
 
 export const ALL_SKILLS = SKILL_CATEGORIES.flatMap((category) => category.skills);

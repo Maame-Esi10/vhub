@@ -78,6 +78,7 @@ export default function VolunteerTabsLayout() {
       <Tabs.Screen name="scan" options={{ href: null }} />
       <Tabs.Screen name="feedback" options={{ href: null }} />
       <Tabs.Screen name="account-security" options={{ href: null }} />
+      <Tabs.Screen name="notification-settings" options={{ href: null }} />
       <Tabs.Screen name="verify-identity" options={{ href: null }} />
       <Tabs.Screen name="credential-guidelines" options={{ href: null }} />
     </Tabs>

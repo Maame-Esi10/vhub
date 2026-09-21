@@ -127,10 +127,21 @@ export default function VolunteerSettings() {
         />
 
         <SettingsGroupLabel>PREFERENCES</SettingsGroupLabel>
+        {/*
+          POINTS AT SETTINGS, NOT AT THE INBOX (owner, 2026-09-21: "the
+          Notifications row opens the notifications page. It should open
+          notification settings").
+
+          A row under a PREFERENCES heading that opened a list of messages was
+          the bug: somebody looking for a preference found an inbox, and there
+          was nowhere in the app to turn pushes off at all. The settings screen
+          links on to the inbox, so nothing became harder to reach.
+        */}
         <SettingsRow
           icon="bell-outline"
           label="Notifications"
-          onPress={() => router.push('/(volunteer)/notifications')}
+          value="Push notifications on this device"
+          onPress={() => router.push('/(volunteer)/notification-settings')}
         />
 
         <SettingsGroupLabel>ABOUT</SettingsGroupLabel>

@@ -68,7 +68,7 @@ export function useRequestPasswordReset() {
 
 export interface CompletePasswordResetParams {
   email: string;
-  /** The six-digit code from the recovery email. */
+  /** The code from the recovery email. Its length is a Supabase Auth setting, not ours: see lib/otp.ts. */
   code: string;
   newPassword: string;
 }
