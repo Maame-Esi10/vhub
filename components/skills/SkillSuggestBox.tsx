@@ -14,7 +14,21 @@ export interface SkillSuggestBoxProps {
    * asking them to write it twice would be absurd.
    */
   sourceText?: string;
-  /** Renders its own short input. Used in volunteer onboarding. */
+  /**
+   * Renders its own short input.
+   *
+   * WITH `sourceText`, the input is SEEDED from it and stays editable (owner,
+   * 2026-09-21: "add an input field for Gemini if reading the title alone is
+   * not enough. Let the organisation describe the event in their own words so
+   * Gemini has something to work with").
+   *
+   * That is the real fix for a thin result. An outreach title is often three
+   * words, and "Eye Screening" is a topic rather than a description of the
+   * work -- there is very little in it for a model to reason from. The title
+   * and description are still the starting point, because making somebody
+   * retype what they have already written would be absurd, but they are now a
+   * DRAFT the organisation can add to rather than the whole of the input.
+   */
   editable?: boolean;
   label: string;
   placeholder?: string;
@@ -53,10 +67,27 @@ export function SkillSuggestBox({
   placeholder,
   onSuggestions,
 }: SkillSuggestBoxProps) {
-  const [text, setText] = useState('');
   const suggest = useSuggestSkills();
 
-  const description = editable ? text : (sourceText ?? '');
+  /*
+    Seeded ONCE, then owned by the person typing.
+
+    A `useState` initialiser rather than an effect syncing on `sourceText`:
+    the outreach description keeps changing while the wizard is open, and an
+    effect would overwrite whatever the organisation had added to the box
+    every time they went back and edited a field. Their words have to win.
+  */
+  const [text, setText] = useState(() => (editable ? (sourceText ?? '') : ''));
+  const [touched, setTouched] = useState(false);
+
+  /*
+    Until they touch it, the box follows the form. After that it is theirs.
+    This is what makes opening the step with a description already written
+    show that description in the box, without freezing it at whatever the
+    description happened to be on first render.
+  */
+  const seeded = editable && !touched ? (sourceText ?? '') : text;
+  const description = editable ? seeded : (sourceText ?? '');
   const ready = description.trim().length >= 10;
   const [empty, setEmpty] = useState(false);
 
@@ -81,8 +112,11 @@ export function SkillSuggestBox({
       {editable ? (
         <Input
           placeholder={placeholder}
-          value={text}
-          onChangeText={setText}
+          value={seeded}
+          onChangeText={(next) => {
+            setTouched(true);
+            setText(next);
+          }}
           multiline
           numberOfLines={3}
           accessibilityLabel={label}

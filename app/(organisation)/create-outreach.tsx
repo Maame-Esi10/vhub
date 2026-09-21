@@ -836,6 +836,13 @@ export default function CreateOutreach() {
                 // "my outreach title was Mental Health Awareness and it returned
                 // nothing"). The title is the most concentrated statement of what
                 // an event is, and an organisation reasonably expects it to count.
+                //
+                // EDITABLE, seeded from those two (owner, 2026-09-21). A title is
+                // often three words and a topic rather than a description of the
+                // work, which is very little for a model to reason from. The form's
+                // text is now a starting draft the organisation can add to.
+                editable
+                placeholder="Describe the day in your own words. What will volunteers actually be doing?"
                 sourceText={[state.title, state.description].filter(Boolean).join('. ')}
                 onSuggestions={setSuggestedSkills}
               />
