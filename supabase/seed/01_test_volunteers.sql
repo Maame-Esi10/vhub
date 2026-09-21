@@ -16,7 +16,7 @@
 --
 -- EVERY ROW IS IDENTIFIABLE AND REMOVABLE. Emails all end in
 -- `@seed.vhub.test`, which is a reserved TLD that can never be a real address,
--- so 02_teardown.sql removes exactly these accounts and nothing else. Nothing
+-- so 03_teardown.sql removes exactly these accounts and nothing else. Nothing
 -- here touches a row it did not create.
 --
 -- THESE ACCOUNTS CAN SIGN IN. Password for all ten: SeedVolunteer1

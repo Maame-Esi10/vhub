@@ -26,7 +26,7 @@
 --
 --     Nima Community Eye Screening
 --
--- with the EXACT title of your outreach. It appears five times below. A psql
+-- with the EXACT title of your outreach. It appears seven times below. A psql
 -- variable would be tidier and the Supabase SQL editor does not support one --
 -- \set is a psql meta-command and the editor rejects it -- so find-and-replace
 -- is genuinely the mechanism here rather than laziness.
