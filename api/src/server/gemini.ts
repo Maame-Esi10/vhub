@@ -11,7 +11,56 @@ export interface SkillPairResult extends SkillPair {
   isMatch: boolean;
 }
 
-const GEMINI_TIMEOUT_MS = 6000;
+/**
+ * WHY THINKING IS TURNED OFF, AND WHY THE TIMEOUT MOVED (2026-09-21).
+ *
+ * The owner's Gemini key and project were verified working, `gemini-2.5-flash`
+ * was verified available, and no GEMINI_MODEL override existed -- yet the
+ * skill suggestions reported "no close match", which is only reachable when
+ * this layer returns null. So the call was failing, and the model listing
+ * showed why: gemini-2.5-flash has `"thinking": true`.
+ *
+ * That breaks this code in two independent ways, either of which is enough.
+ *
+ * 1. LATENCY. A thinking model reasons before it answers, and these prompts
+ *    carry the whole skills vocabulary. Six seconds is a plausible budget for
+ *    a non-thinking flash model and a poor one here, so the abort fired and
+ *    the caller saw a silent null.
+ * 2. THE RESPONSE SHAPE. With thinking, `candidates[0].content.parts` can hold
+ *    more than the answer, and this read `parts[0].text` -- so even a fast,
+ *    successful response could yield a thought rather than the JSON, and
+ *    JSON.parse would throw into the catch that returns null.
+ *
+ * `thinkingBudget: 0` disables it. That is the right call on the merits, not
+ * just a workaround: both jobs here are closed-vocabulary selection against an
+ * explicit list, which is exactly the kind of task reasoning tokens do not
+ * improve, and they cost latency and quota on a free tier shared by every user.
+ *
+ * The parts are now joined rather than indexed, so a model that does return
+ * several still parses.
+ */
+// Raised from 6s. Kept under Vercel's 10s Hobby function ceiling, so this
+// aborts and falls back rather than the whole request timing out.
+const GEMINI_TIMEOUT_MS = 8000;
+
+/**
+ * All the text parts, joined.
+ *
+ * `parts[0].text` was the old read, and a model that returns a thought part
+ * before its answer makes that the wrong part. Joining is correct whether
+ * there is one part or several, and returns null rather than an empty string
+ * when there is nothing, so the caller's existing falsy check still works.
+ */
+function joinTextParts(
+  candidates: { content?: { parts?: { text?: string }[] } }[] | undefined
+): string | null {
+  const parts = candidates?.[0]?.content?.parts ?? [];
+  const text = parts
+    .map((part) => part.text ?? "")
+    .join("")
+    .trim();
+  return text.length > 0 ? text : null;
+}
 /** Hard cap on pairs sent in a single Gemini call -- keeps prompts small and the ~1,500/day free-tier quota healthy. */
 const MAX_PAIRS_PER_CALL = 60;
 
@@ -53,6 +102,10 @@ export async function checkSkillEquivalences(
           generationConfig: {
             temperature: 0,
             responseMimeType: "application/json",
+            // See the note at the top of this file: closed-vocabulary
+            // selection gains nothing from reasoning tokens and pays for them
+            // in latency and quota.
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
         signal: controller.signal,
@@ -68,7 +121,7 @@ export async function checkSkillEquivalences(
     const payload = (await response.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
-    const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+    const text = joinTextParts(payload.candidates);
     if (!text) return null;
 
     const parsed = JSON.parse(text) as { matches?: unknown };

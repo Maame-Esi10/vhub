@@ -1,7 +1,56 @@
 import { env } from "./env";
 import { ALL_SKILLS } from "@/constants/skills";
 
-const GEMINI_TIMEOUT_MS = 6000;
+/**
+ * WHY THINKING IS TURNED OFF, AND WHY THE TIMEOUT MOVED (2026-09-21).
+ *
+ * The owner's Gemini key and project were verified working, `gemini-2.5-flash`
+ * was verified available, and no GEMINI_MODEL override existed -- yet the
+ * skill suggestions reported "no close match", which is only reachable when
+ * this layer returns null. So the call was failing, and the model listing
+ * showed why: gemini-2.5-flash has `"thinking": true`.
+ *
+ * That breaks this code in two independent ways, either of which is enough.
+ *
+ * 1. LATENCY. A thinking model reasons before it answers, and these prompts
+ *    carry the whole skills vocabulary. Six seconds is a plausible budget for
+ *    a non-thinking flash model and a poor one here, so the abort fired and
+ *    the caller saw a silent null.
+ * 2. THE RESPONSE SHAPE. With thinking, `candidates[0].content.parts` can hold
+ *    more than the answer, and this read `parts[0].text` -- so even a fast,
+ *    successful response could yield a thought rather than the JSON, and
+ *    JSON.parse would throw into the catch that returns null.
+ *
+ * `thinkingBudget: 0` disables it. That is the right call on the merits, not
+ * just a workaround: both jobs here are closed-vocabulary selection against an
+ * explicit list, which is exactly the kind of task reasoning tokens do not
+ * improve, and they cost latency and quota on a free tier shared by every user.
+ *
+ * The parts are now joined rather than indexed, so a model that does return
+ * several still parses.
+ */
+// Raised from 6s. Kept under Vercel's 10s Hobby function ceiling, so this
+// aborts and falls back rather than the whole request timing out.
+const GEMINI_TIMEOUT_MS = 8000;
+
+/**
+ * All the text parts, joined.
+ *
+ * `parts[0].text` was the old read, and a model that returns a thought part
+ * before its answer makes that the wrong part. Joining is correct whether
+ * there is one part or several, and returns null rather than an empty string
+ * when there is nothing, so the caller's existing falsy check still works.
+ */
+function joinTextParts(
+  candidates: { content?: { parts?: { text?: string }[] } }[] | undefined
+): string | null {
+  const parts = candidates?.[0]?.content?.parts ?? [];
+  const text = parts
+    .map((part) => part.text ?? "")
+    .join("")
+    .trim();
+  return text.length > 0 ? text : null;
+}
 
 /** Never surface more than this many; the point is a shortlist, not a re-sort. */
 const MAX_SUGGESTIONS = 8;
@@ -103,7 +152,12 @@ export async function suggestSkills(description: string): Promise<string[] | nul
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: buildPrompt(text) }] }],
-          generationConfig: { temperature: 0, responseMimeType: "application/json" },
+          generationConfig: {
+            temperature: 0,
+            responseMimeType: "application/json",
+            // See the note at the top of this file.
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
         signal: controller.signal,
       }
@@ -134,7 +188,7 @@ export async function suggestSkills(description: string): Promise<string[] | nul
     const payload = (await response.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
-    const raw = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+    const raw = joinTextParts(payload.candidates);
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as { skills?: unknown };
@@ -152,7 +206,18 @@ export async function suggestSkills(description: string): Promise<string[] | nul
       clear distinction").
     */
     return matched.length > 0 ? matched : null;
-  } catch {
+  } catch (error) {
+    /*
+      An abort (the 8s timeout) and a malformed reply both land here, and they
+      were indistinguishable from a quiet "nothing matched". Named, because
+      these are the two failures that a thinking model caused and that nothing
+      anywhere reported.
+    */
+    console.warn(
+      `[skill-suggest] Gemini call failed: ${
+        error instanceof Error ? `${error.name}: ${error.message}` : "unknown"
+      }`
+    );
     return null;
   } finally {
     clearTimeout(timeoutHandle);
