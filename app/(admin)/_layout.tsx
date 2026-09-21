@@ -1,7 +1,10 @@
+import { StyleSheet } from 'react-native';
 import { Redirect, Tabs } from 'expo-router';
 import { ROLE_HOME } from '@/lib/roleRoutes';
 import { useAuthStore } from '@/stores/authStore';
 import { useTabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
+import { useCredentialQueue, useDisputeQueue, useVerificationQueue } from '@/hooks';
+import { colors } from '@/constants/theme';
 
 /**
  * The admin tab group.
@@ -26,6 +29,33 @@ export default function AdminTabsLayout() {
   // branches below can return early.
   const screenOptions = useTabBarScreenOptions();
 
+  /*
+    THE COUNTS BELONG ON THE TABS THEMSELVES (owner, 2026-09-21: "there are
+    some on the navbar, why are on the home screen??").
+
+    The home screen had grown three rows -- Organisations, Credentials,
+    Disputes -- each showing a pending count and each linking to a tab that was
+    already sitting on the bar underneath it. That is a second navigation layer
+    for destinations that needed none, and it is the duplication being
+    reported.
+
+    The only thing those rows carried that the bar could not was the NUMBER, so
+    the number moves to the bar and the rows go. A badge is also strictly
+    better than a card: it is visible from every screen in the group rather
+    than only from Home, which is what an admin actually wants from "is
+    anybody waiting on me".
+
+    Hooks run before the early returns below, because hooks must run
+    unconditionally. Each is `enabled: role === 'admin'` internally, so a
+    non-admin reaching this file fetches nothing.
+  */
+  const organisations = useVerificationQueue();
+  const credentials = useCredentialQueue();
+  const disputes = useDisputeQueue();
+
+  /** Undefined hides the badge; zero would render an empty circle. */
+  const badge = (count: number | undefined) => (count && count > 0 ? count : undefined);
+
   if (!user) {
     return <Redirect href="/(auth)/welcome" />;
   }
@@ -45,6 +75,8 @@ export default function AdminTabsLayout() {
         options={{
           title: 'Orgs',
           tabBarIcon: tabBarIcon('business', 'business-outline'),
+          tabBarBadge: badge(organisations.data?.length),
+          tabBarBadgeStyle: styles.badge,
         }}
       />
       <Tabs.Screen
@@ -54,6 +86,8 @@ export default function AdminTabsLayout() {
           // of the three bars and it set the floor for how short the pill could be.
           title: 'Creds',
           tabBarIcon: tabBarIcon('id-card', 'id-card-outline'),
+          tabBarBadge: badge(credentials.data?.length),
+          tabBarBadgeStyle: styles.badge,
         }}
       />
       <Tabs.Screen
@@ -65,7 +99,12 @@ export default function AdminTabsLayout() {
       />
       <Tabs.Screen
         name="disputes"
-        options={{ title: 'Disputes', tabBarIcon: tabBarIcon('git-compare', 'git-compare-outline') }}
+        options={{
+          title: 'Disputes',
+          tabBarIcon: tabBarIcon('git-compare', 'git-compare-outline'),
+          tabBarBadge: badge(disputes.data?.length),
+          tabBarBadgeStyle: styles.badge,
+        }}
       />
 
       {/*
@@ -88,3 +127,11 @@ export default function AdminTabsLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  badge: {
+    backgroundColor: colors.primary,
+    color: colors.white,
+    fontSize: 10,
+  },
+});

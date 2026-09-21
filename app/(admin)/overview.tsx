@@ -44,15 +44,25 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
  * dispute waiting on a decision -- had no count anywhere on the home at all.
  * They were each a tab you had to open to discover whether it held anything.
  *
- * SO THE HOME LEADS WITH WHAT IS WAITING, and every figure is a link to the
- * queue it counts. This is the same rule the Statistics screen already
- * follows: a number with no question attached is decoration. The question here
- * is "is anybody waiting on me", and it is the only question this screen needs
- * to answer well.
+ * THE FIRST ATTEMPT AT FIXING THAT WAS ALSO WRONG, and the correction is the
+ * more useful lesson. It put a row per queue on this screen, each with its
+ * count and a chevron into the queue -- and every one of those queues is
+ * already a tab on the bar directly underneath. Owner: "there are some on the
+ * navbar, why are on the home screen??" Quite. Adding a second way to reach
+ * something is not the same as making it visible, and a home screen that
+ * re-lists the navigation below it is furniture.
  *
- * The explanatory paragraphs went with it. They belong on the screens they
+ * WHAT THE ROWS ACTUALLY ADDED WAS THE NUMBER, so the number moved to the tab
+ * badge, where it is visible from every screen in the group rather than only
+ * from here. What is left on this screen is the one thing a badge cannot say:
+ * a sentence totalling them, including the case where the total is zero, which
+ * no badge can express because an absent badge and an unloaded one look
+ * identical.
+ *
+ * The explanatory paragraphs went too. They belong on the screens they
  * describe, where somebody is actually looking at the thing; on the home they
- * were four paragraphs to scroll past on every visit, read once.
+ * were four paragraphs to scroll past on every visit, read once. And Settings
+ * has one door rather than a gear and a row saying the same thing.
  *
  * NO FIGMA DESIGN EXISTS for the admin side, so this reuses the language the
  * rest of the app now uses -- the metric card, the settings row, the same
@@ -82,46 +92,24 @@ export default function AdminOverview() {
     return actions.filter((action) => new Date(action.created_at) >= startOfToday).length;
   }, [actions]);
 
-  const waiting = [
-    {
-      key: 'organisations',
-      label: 'Organisations',
-      detail: 'Documents submitted, awaiting your decision',
-      icon: 'domain' as IconName,
-      count: organisations.data?.length,
-      loading: organisations.isLoading,
-      route: '/(admin)/organisations',
-    },
-    {
-      key: 'credentials',
-      label: 'Credentials',
-      detail: 'Volunteers whose document needs checking',
-      icon: 'card-account-details-outline' as IconName,
-      count: credentials.data?.length,
-      loading: credentials.isLoading,
-      route: '/(admin)/credentials',
-    },
-    {
-      key: 'disputes',
-      label: 'Disputes',
-      detail: 'Volunteers challenging a record about them',
-      icon: 'scale-balance' as IconName,
-      count: disputes.data?.length,
-      loading: disputes.isLoading,
-      route: '/(admin)/disputes',
-    },
-  ];
+  /*
+    THE COUNTS THEMSELVES LIVE ON THE TAB BAR, not here (owner, 2026-09-21:
+    "there are some on the navbar, why are on the home screen??").
 
-  const totalWaiting = waiting.reduce((sum, row) => sum + (row.count ?? 0), 0);
-  const anyLoading = waiting.some((row) => row.loading);
+    This screen had grown a row per queue, each linking to a tab that was
+    already on the bar beneath it. The only thing those rows added was the
+    number, so the number moved to the tab badge and the rows went. What is
+    kept is the one thing a badge cannot say: a single sentence totalling them,
+    including the case where the total is zero, which no badge can express at
+    all because an absent badge and an unloaded one look identical.
+  */
+  const counts = [organisations, credentials, disputes];
+  const totalWaiting = counts.reduce((sum, query) => sum + (query.data?.length ?? 0), 0);
+  const anyLoading = counts.some((query) => query.isLoading);
 
   const links: { label: string; detail: string; icon: IconName; route: string }[] = [
-    {
-      label: 'Activity log',
-      detail: 'Every decision, who made it and why',
-      icon: 'history',
-      route: '/(admin)/activity',
-    },
+    // No "Activity log" entry: the decisions row above already opens it, and
+    // two links to one screen on one screen is the duplication being removed.
     {
       label: 'Statistics',
       detail: 'Fill rate, no-show trend and your backlog',
@@ -195,15 +183,12 @@ export default function AdminOverview() {
               {profile?.full_name ?? 'Admin'}
             </Text>
           </View>
-          <Pressable
-            onPress={() => router.push('/(admin)/settings')}
-            accessibilityRole="button"
-            accessibilityLabel="Settings and sign out"
-            hitSlop={8}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-          >
-            <MaterialCommunityIcons name="cog-outline" size={20} color={colors.textPrimary} />
-          </Pressable>
+          {/*
+            NO COG HERE. Settings has exactly one door, and it is the labelled
+            row at the end of the list. A gear in the corner AND a row saying
+            the same thing is two controls for one destination, which is the
+            duplication being removed, and the gear was the one nobody found.
+          */}
         </View>
 
         {/*
@@ -226,45 +211,6 @@ export default function AdminOverview() {
                   ? '1 thing is waiting for a decision from you.'
                   : `${totalWaiting} things are waiting for a decision from you.`}
           </Text>
-        </View>
-
-        <Text style={styles.sectionLabel}>WAITING ON YOU</Text>
-        <View style={styles.queueList}>
-          {waiting.map((row) => {
-            const count = row.count ?? 0;
-            const clear = !row.loading && count === 0;
-            return (
-              <Pressable
-                key={row.key}
-                onPress={() => router.push(row.route as Parameters<typeof router.push>[0])}
-                accessibilityRole="button"
-                accessibilityLabel={`${row.label}, ${count} waiting`}
-                style={({ pressed }) => [styles.queueRow, pressed && styles.pressed]}
-              >
-                <View style={[styles.queueIcon, clear && styles.queueIconClear]}>
-                  <MaterialCommunityIcons
-                    name={row.icon}
-                    size={20}
-                    color={clear ? colors.textSecondary : colors.primary}
-                  />
-                </View>
-                <View style={styles.queueText}>
-                  <Text style={styles.queueLabel}>{row.label}</Text>
-                  <Text style={styles.queueDetail}>{row.detail}</Text>
-                </View>
-                {/*
-                  The number is the point of the row, so it is the largest
-                  thing in it. Zero is drawn quietly rather than hidden: an
-                  absent number reads as "not loaded", which is the one thing
-                  it must not be confused with.
-                */}
-                <Text style={[styles.queueCount, clear && styles.queueCountClear]}>
-                  {row.loading ? '' : count}
-                </Text>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-              </Pressable>
-            );
-          })}
         </View>
 
         <Text style={styles.sectionLabel}>YOUR RECORD</Text>
@@ -346,14 +292,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   greeting: { fontFamily: fontFamily.semiBold, fontSize: 20, color: colors.textPrimary },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
   pressed: { opacity: 0.7 },
   summaryCard: {
     flexDirection: 'row',
@@ -381,26 +319,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   queueList: { gap: spacing.md },
-  queueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.base,
-    minHeight: 72,
-  },
-  queueIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 107, 107, 0.12)',
-  },
-  queueIconClear: { backgroundColor: colors.surface },
   queueText: { flex: 1 },
   queueLabel: { fontFamily: fontFamily.semiBold, fontSize: 15, color: colors.textPrimary },
   queueDetail: {
@@ -410,14 +328,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
-  queueCount: {
-    fontFamily: fontFamily.bold,
-    fontSize: 22,
-    color: colors.primary,
-    minWidth: 24,
-    textAlign: 'right',
-  },
-  queueCountClear: { color: colors.textSecondary },
   recordCard: {
     flexDirection: 'row',
     alignItems: 'center',
