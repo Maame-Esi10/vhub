@@ -1,31 +1,39 @@
 import { useState } from 'react';
 import {
-  ActivityIndicator,
   Linking,
-  Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { AlertDialog, ErrorState, ScreenHeader, SettingsGroupLabel } from '@/components/ui';
+import {
+  AlertDialog,
+  ErrorState,
+  ScreenHeader,
+  SettingsGroupLabel,
+  SettingsRow,
+  SettingsToggleRow,
+} from '@/components/ui';
+import type { ScreenHeaderProps } from '@/components/ui';
 import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 import { usePushPreference, useSetPushEnabled } from '@/hooks/usePushPreference';
 import { useMutation } from '@tanstack/react-query';
 import { sendTestPush } from '@/lib/api-client';
-import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 import { humanError } from '@/lib/errorMessage';
 
 export interface NotificationSettingsScreenProps {
   /** Where back goes when no `from` param was supplied. */
-  fallback: Parameters<ReturnType<typeof useRouter>['replace']>[0];
-  /** This role's notifications inbox. */
-  inboxRoute: string;
-  /** What this role actually receives, in plain words. */
+  fallback: ScreenHeaderProps['fallback'];
+  /**
+   * What this role actually receives, in plain words.
+   *
+   * `inboxRoute` used to sit beside this and is gone with the row it fed: the
+   * inbox has a bell on both home screens and its own row one tap from here,
+   * so a third door to it on the screen ABOUT it pointed back where the reader
+   * had just come from.
+   */
   whatYouGet: string[];
 }
 
@@ -56,11 +64,9 @@ export interface NotificationSettingsScreenProps {
  */
 export function NotificationSettingsScreen({
   fallback,
-  inboxRoute,
   whatYouGet,
 }: NotificationSettingsScreenProps) {
   const tabBarPadding = useTabBarContentPadding();
-  const router = useRouter();
   const preference = usePushPreference();
   const setEnabled = useSetPushEnabled();
   // `tone` because this popup now reports a SUCCESS as well as failures, and a
@@ -209,45 +215,39 @@ export function NotificationSettingsScreen({
       <ScrollView contentContainerStyle={[styles.content, tabBarPadding]}>
         <SettingsGroupLabel>ON THIS DEVICE</SettingsGroupLabel>
 
-        <View style={styles.card}>
-          <View style={styles.switchRow}>
-            <View style={styles.switchText}>
-              <Text style={styles.switchTitle}>Push notifications</Text>
-              <Text style={styles.switchBody}>
-                {blockedByOs
-                  ? 'Blocked in your Android settings.'
-                  : state?.enabled
-                    ? 'This phone will buzz when something needs you.'
-                    : 'This phone stays quiet.'}
-              </Text>
-            </View>
-            {preference.isLoading || setEnabled.isPending ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Switch
-                value={state?.enabled ?? false}
-                onValueChange={handleToggle}
-                disabled={state?.supported === false}
-                accessibilityLabel="Push notifications on this device"
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.white}
-              />
-            )}
-          </View>
+        {/*
+          NO BOX AROUND THE TOGGLE (owner, 2026-09-22: "toggles don't need those
+          boxes"). This was a bordered card built before SettingsRow existed, so
+          the screen carried two different treatments for rows doing the same
+          kind of job -- and the box was drawing a frame around a control that
+          needs no separating from anything.
+        */}
+        <SettingsToggleRow
+          icon="bell-outline"
+          label="Push notifications"
+          value={
+            blockedByOs
+              ? 'Blocked in your Android settings'
+              : state?.enabled
+                ? 'This phone will buzz when something needs you'
+                : 'This phone stays quiet'
+          }
+          checked={state?.enabled ?? false}
+          onChange={handleToggle}
+          busy={preference.isLoading || setEnabled.isPending}
+          disabled={state?.supported === false}
+        />
 
-          {/*
-            THE SENTENCE THAT MAKES TURNING IT OFF A SAFE DECISION. Somebody
-            weighing this needs to know it silences the phone and not the
-            record, and they need to know BEFORE they decide, not after.
-          */}
-          <View style={styles.reassurance}>
-            <MaterialCommunityIcons name="information-outline" size={16} color={colors.textSecondary} />
-            <Text style={styles.reassuranceText}>
-              Turning this off only stops your phone buzzing. Everything is still saved and you can
-              read it in your notifications list at any time.
-            </Text>
-          </View>
-        </View>
+        {/*
+          THE SENTENCE THAT MAKES TURNING IT OFF A SAFE DECISION, and it is now
+          a plain line under the row rather than a panel inside it. Somebody
+          weighing this needs to know it silences the phone and not the record,
+          and they need to know BEFORE they decide.
+        */}
+        <Text style={styles.note}>
+          Turning this off only stops your phone buzzing. Everything is still saved and you can read
+          it in your notifications at any time.
+        </Text>
 
         {/*
           Only offered when the switch is on. Testing delivery to a device that
@@ -255,67 +255,40 @@ export function NotificationSettingsScreen({
           for and then report a failure that is not one.
         */}
         {state?.enabled ? (
-          <Pressable
+          <SettingsRow
+            icon="bell-ring-outline"
+            label="Send a test notification"
+            value={
+              testPush.isPending
+                ? 'Sending...'
+                : 'Goes to this phone only, so you can see whether pushes arrive'
+            }
             onPress={() => testPush.mutate()}
-            disabled={testPush.isPending}
-            accessibilityRole="button"
-            accessibilityLabel="Send yourself a test notification"
-            style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
-          >
-            <MaterialCommunityIcons name="bell-ring-outline" size={20} color={colors.primary} />
-            <View style={styles.linkText}>
-              <Text style={styles.linkTitle}>Send a test notification</Text>
-              <Text style={styles.linkBody}>
-                {testPush.isPending
-                  ? 'Sending...'
-                  : 'Goes to this phone only, so you can see whether pushes arrive at all.'}
-              </Text>
-            </View>
-            {testPush.isPending ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-            )}
-          </Pressable>
+          />
         ) : null}
 
-        <Pressable
+        <SettingsRow
+          icon="cog-outline"
+          label="Android notification settings"
+          value="Sounds, banners and the lock screen are set here"
           onPress={() => void Linking.openSettings()}
-          accessibilityRole="button"
-          accessibilityLabel="Open the Android notification settings for VHub"
-          style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
-        >
-          <MaterialCommunityIcons name="cog-outline" size={20} color={colors.textSecondary} />
-          <View style={styles.linkText}>
-            <Text style={styles.linkTitle}>Android notification settings</Text>
-            <Text style={styles.linkBody}>Sounds, banners and the lock screen are set here.</Text>
-          </View>
-          <MaterialCommunityIcons name="open-in-new" size={18} color={colors.textSecondary} />
-        </Pressable>
+        />
 
         <SettingsGroupLabel>WHAT VHUB SENDS</SettingsGroupLabel>
-        <View style={styles.card}>
-          {whatYouGet.map((line) => (
-            <View key={line} style={styles.bulletRow}>
-              <View style={styles.bullet} />
-              <Text style={styles.bulletText}>{line}</Text>
-            </View>
-          ))}
-        </View>
-
-        <Pressable
-          onPress={() => router.push(inboxRoute as Parameters<typeof router.push>[0])}
-          accessibilityRole="button"
-          accessibilityLabel="Open your notifications"
-          style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
-        >
-          <MaterialCommunityIcons name="bell-outline" size={20} color={colors.textSecondary} />
-          <View style={styles.linkText}>
-            <Text style={styles.linkTitle}>See your notifications</Text>
-            <Text style={styles.linkBody}>Everything VHub has sent you, newest first.</Text>
+        {whatYouGet.map((line) => (
+          <View key={line} style={styles.bulletRow}>
+            <View style={styles.bullet} />
+            <Text style={styles.bulletText}>{line}</Text>
           </View>
-          <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-        </Pressable>
+        ))}
+
+        {/*
+          "See your notifications" WAS HERE AND IS GONE (owner: "remove the see
+          your notification, redundancy"). The inbox has its own bell on both
+          home screens and its own row is one tap from here in either
+          direction; a third door to it on the screen ABOUT it was a link back
+          to where the reader almost certainly just came from.
+        */}
       </ScrollView>
 
       <AlertDialog
@@ -346,74 +319,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xxl,
   },
-  card: {
-    borderRadius: radius.md,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.base,
-    marginBottom: spacing.base,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.base,
-  },
-  switchText: {
-    flex: 1,
-  },
-  switchTitle: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  switchBody: {
+  /** The reassurance under the toggle, on the page rather than in a panel. */
+  note: {
     fontFamily: fontFamily.regular,
-    fontSize: 13,
+    fontSize: 12.5,
     lineHeight: 18,
     color: colors.textSecondary,
-    marginTop: 2,
-  },
-  reassurance: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.base,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  reassuranceText: {
-    flex: 1,
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    lineHeight: 18,
-    color: colors.textSecondary,
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.base,
+    marginTop: spacing.xs,
     marginBottom: spacing.base,
-  },
-  linkText: {
-    flex: 1,
-  },
-  linkTitle: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  linkBody: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    lineHeight: 17,
-    color: colors.textSecondary,
-    marginTop: 2,
   },
   pressed: {
     opacity: 0.7,

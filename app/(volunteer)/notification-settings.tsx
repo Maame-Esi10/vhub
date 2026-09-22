@@ -11,7 +11,6 @@ export default function VolunteerNotificationSettings() {
   return (
     <NotificationSettingsScreen
       fallback="/(volunteer)/profile"
-      inboxRoute="/(volunteer)/notifications?from=/(volunteer)/notification-settings"
       whatYouGet={[
         'An outreach that matches your profile is published near you.',
         'An organisation accepts, waitlists or turns down one of your applications.',

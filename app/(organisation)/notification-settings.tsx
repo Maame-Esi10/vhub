@@ -5,7 +5,6 @@ export default function OrganisationNotificationSettings() {
   return (
     <NotificationSettingsScreen
       fallback="/(organisation)/profile"
-      inboxRoute="/(organisation)/notifications?from=/(organisation)/notification-settings"
       whatYouGet={[
         'A volunteer applies to one of your outreaches.',
         'One of your outreaches is short of volunteers as the date approaches.',

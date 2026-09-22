@@ -6402,3 +6402,52 @@ the one screen where white icons are correct.
 **The general shape:** an imperative global with no restore is a resource that
 has to be released, and React gives no warning when it is not. The same trap
 applies to anything else set that way; there is nothing else today.
+
+## Two rows removed, and what had to be kept when they went (2026-09-22)
+
+The merged Profile screen shipped with two rows the owner asked to remove. Both
+removals were right and neither was free.
+
+**Close Account was a second door to Account & Security**, listed directly under
+the row that opens the same screen. On a merged page that is plain duplication.
+But the row existed for a reason recorded a day earlier: she could not find
+closure at all, because it is the last block INSIDE Account & Security, under
+the login email and the password form, so finding it meant knowing that closing
+an account is filed as a security matter. **Deleting the row silently would have
+walked straight back into the original complaint**, so the value line under
+Account & Security now names closure: "Login email, password, and closing your
+account". One row, still findable.
+
+**"See your notifications" was a link back to where the reader came from.** The
+inbox has a bell on both home screens and a row one tap away from the
+notification settings screen. A third door to it, on the screen ABOUT it,
+pointed at the place most of its readers had just left.
+
+**The general rule this pass keeps running into:** a row added to fix
+discoverability is not the same as the thing being discoverable. When such a row
+is later removed as duplication, the discoverability it was buying has to be
+bought again somewhere else, or the original bug returns with nothing recording
+that it was ever fixed.
+
+## The notification toggle stops being a card (2026-09-22)
+
+Owner: "toggles don't need those boxes". The push switch was a bordered card
+with a divider and a panel of reassurance text inside it, built before
+`SettingsRow` existed, so that screen carried two different treatments for rows
+doing the same kind of job, and the box drew a frame around a control that
+needed separating from nothing.
+
+`SettingsToggleRow` now lives in the same file as `SettingsRow` and shares its
+style objects outright: the same slab, radius, gaps and icon column, with a
+switch where the chevron sits. **Sharing the file is the point.** The two rows
+drifted apart the first time precisely because they were defined in different
+places, and two components that must look identical will not stay identical
+across two files. The reassurance sentence moved out of the panel and onto the
+page as a plain line, which is where a caveat about a control belongs.
+
+**The test-push row was NOT removed**, though the owner asked whether it could
+be. It is the only instrument that can tell the four possible push faults apart,
+and that bug is still open: the diagnostic reached the repository after the last
+deploy, so the reading she has seen is from the old code. It comes out as soon
+as push is confirmed working, and it is listed here so that removal is not
+forgotten once it is.

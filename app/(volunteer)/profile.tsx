@@ -176,30 +176,25 @@ export default function VolunteerProfile() {
 
         <SettingsGroupLabel>ACCOUNT</SettingsGroupLabel>
         {/*
-          A fixed short label, not the email address: the address is shown on
-          the screen this opens, where it has room.
+          THE VALUE LINE NAMES CLOSURE, and that is what pays for removing the
+          separate Close Account row (owner, 2026-09-22). That row existed
+          because she could not find closure at all -- it is the last block
+          INSIDE this screen, under the login email and the password form, so
+          finding it meant knowing that closing an account is filed as a
+          security matter. On the merged screen a second row pointing at a
+          screen already listed directly above it was plain duplication, but
+          deleting it silently would walk straight back into the original
+          complaint. Naming it here keeps it findable with one row instead of
+          two.
+
+          Still not called "delete": closure anonymises the person and revokes
+          the login while keeping the record of work, and calling that a
+          deletion would be a promise the app does not keep.
         */}
         <SettingsRow
           icon="lock-outline"
           label="Account & Security"
-          value="Login email and password"
-          onPress={() => router.push('/(volunteer)/account-security')}
-        />
-        {/*
-          A SECOND DOOR TO THE SAME SCREEN (owner, 2026-09-21: "where is delete
-          account? I cannot find it"). It was never missing -- it is the last
-          block on Account & Security, so finding it meant knowing that closing
-          an account is filed as a security matter and scrolling past two forms.
-
-          Deliberately NOT called "Delete": closure anonymises the person and
-          revokes the login while keeping the record of work, and calling that a
-          deletion would be a promise the app does not keep. The value line says
-          what really happens, so the row is findable without being untrue.
-        */}
-        <SettingsRow
-          icon="account-remove-outline"
-          label="Close Account"
-          value="Remove your details and leave VHub"
+          value="Login email, password, and closing your account"
           onPress={() => router.push('/(volunteer)/account-security')}
         />
         {/*

@@ -123,23 +123,26 @@ export default function OrganisationProfile() {
         />
 
         <SettingsGroupLabel>ACCOUNT</SettingsGroupLabel>
-        {/* Short fixed label, not the address: the screen this opens has room for it. */}
+        {/*
+          THE VALUE LINE NAMES CLOSURE, and that is what pays for removing the
+          separate Close Account row (owner, 2026-09-22). The row existed
+          because she could not find closure at all -- it is the last block
+          inside this screen, under the login email and the password form, so
+          finding it meant knowing that closing an account is filed as a
+          security matter. On the merged screen a second row to a screen
+          already listed directly above it was plain duplication, but deleting
+          it without saying anything would walk straight back into the original
+          complaint. Naming it here keeps it findable with one row instead of
+          two.
+
+          Still not called "delete": closure anonymises the person and revokes
+          the login while keeping the record of work, and calling that a
+          deletion would be a promise the app does not keep.
+        */}
         <SettingsRow
           icon="lock-outline"
           label="Account & Security"
-          value="Login email and password"
-          onPress={() => router.push('/(organisation)/account-security')}
-        />
-        {/*
-          A SECOND DOOR TO THE SAME SCREEN (owner, 2026-09-21: "where is delete
-          account? I cannot find it"). Deliberately NOT called "Delete":
-          closure anonymises and revokes while keeping the record of work, and
-          calling that a deletion would be a promise the app does not keep.
-        */}
-        <SettingsRow
-          icon="account-remove-outline"
-          label="Close Account"
-          value="Remove your details and leave VHub"
+          value="Login email, password, and closing your account"
           onPress={() => router.push('/(organisation)/account-security')}
         />
         {/*

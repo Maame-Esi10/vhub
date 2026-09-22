@@ -1,6 +1,8 @@
 import {
+  ActivityIndicator,
   Pressable,
   StyleSheet,
+  Switch,
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -90,6 +92,72 @@ export function SettingsRow({ icon, label, value, onPress, destructive = false }
   );
 }
 
+export interface SettingsToggleRowProps {
+  icon: IconName;
+  label: string;
+  /** The supporting line under the label, usually the state in words. */
+  value?: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  /** Replaces the switch with a spinner and blocks the change. */
+  busy?: boolean;
+  disabled?: boolean;
+}
+
+/**
+ * A settings row that ends in a switch instead of a chevron.
+ *
+ * WHY IT LIVES IN THIS FILE rather than beside the one screen that uses it
+ * (owner, 2026-09-22: "toggles don't need those boxes"). The notification
+ * toggle was a bordered card of its own, built before SettingsRow existed, so
+ * that screen carried two different treatments for two rows doing the same kind
+ * of job. Sharing the file means the slab, the radius, the gaps and the icon
+ * column are literally the same style objects: the two rows cannot drift apart
+ * later, which is exactly what happened the first time.
+ *
+ * The switch replaces the chevron in the same position, so a column of rows
+ * reads as one list whether each one navigates or toggles.
+ */
+export function SettingsToggleRow({
+  icon,
+  label,
+  value,
+  checked,
+  onChange,
+  busy = false,
+  disabled = false,
+}: SettingsToggleRowProps) {
+  return (
+    <View style={styles.row}>
+      <MaterialCommunityIcons
+        name={icon}
+        size={22}
+        color={colors.textPrimary}
+        style={styles.icon}
+      />
+
+      <View style={styles.text}>
+        <Text style={styles.label}>{label}</Text>
+        {value ? <Text style={styles.value}>{value}</Text> : null}
+      </View>
+
+      {busy ? (
+        <ActivityIndicator size="small" color={colors.primary} style={styles.switchSlot} />
+      ) : (
+        <Switch
+          value={checked}
+          onValueChange={onChange}
+          disabled={disabled}
+          accessibilityLabel={label}
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor={colors.white}
+          style={styles.switchSlot}
+        />
+      )}
+    </View>
+  );
+}
+
 /** Small letterspaced caption above a group of SettingsRows. */
 export function SettingsGroupLabel({ children }: { children: string }) {
   return <Text style={styles.groupLabel}>{children}</Text>;
@@ -142,6 +210,11 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     lineHeight: 17,
     color: colors.textSecondary,
+  },
+  /* The switch takes the chevron's place, so a mixed list stays aligned. */
+  switchSlot: {
+    flexGrow: 0,
+    flexShrink: 0,
   },
   chevronDisc: {
     width: 30,

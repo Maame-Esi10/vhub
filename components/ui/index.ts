@@ -30,7 +30,7 @@ export {
   InfoCallout,
 } from './InfoSection';
 export type { InfoSectionProps } from './InfoSection';
-export { SettingsRow, SettingsGroupLabel } from './SettingsRow';
+export { SettingsRow, SettingsToggleRow, SettingsGroupLabel } from './SettingsRow';
 // DateTimeField is deliberately NOT exported here. It imports
 // @react-native-community/datetimepicker, a NATIVE module, and this barrel is
 // imported by essentially every screen -- so when a dev client hasn't been
@@ -39,7 +39,7 @@ export { SettingsRow, SettingsGroupLabel } from './SettingsRow';
 // uses it. Import it directly: `import { DateTimeField } from
 // '@/components/ui/DateTimeField';`. Same rule applies to any future native
 // dependency (e.g. expo-image-picker for the flyer upload).
-export type { SettingsRowProps } from './SettingsRow';
+export type { SettingsRowProps, SettingsToggleRowProps } from './SettingsRow';
 export { AvailabilityGrid } from './AvailabilityGrid';
 export type { AvailabilityGridProps } from './AvailabilityGrid';
 export { EditSectionCard } from './EditSectionCard';
