@@ -15,6 +15,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AlertDialog, ErrorState, ScreenHeader, SettingsGroupLabel } from '@/components/ui';
 import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 import { usePushPreference, useSetPushEnabled } from '@/hooks/usePushPreference';
+import { useMutation } from '@tanstack/react-query';
+import { sendTestPush } from '@/lib/api-client';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { humanError } from '@/lib/errorMessage';
 
@@ -61,7 +63,70 @@ export function NotificationSettingsScreen({
   const router = useRouter();
   const preference = usePushPreference();
   const setEnabled = useSetPushEnabled();
-  const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
+  // `tone` because this popup now reports a SUCCESS as well as failures, and a
+  // successful test dressed in red reads as the test having failed.
+  const [notice, setNotice] = useState<
+    { title: string; message: string; tone?: 'success' | 'error' } | null
+  >(null);
+
+  /*
+    THE TEST PUSH (owner, 2026-09-22: the toggle is on and nothing arrives on
+    the phone).
+
+    A push crosses four things VHub cannot see into: whether this device ever
+    registered a token, whether Google accepted the message, whether Android
+    decided to show it, and whether the phone was awake. When none of them
+    reports back, "I am not getting notifications" is one sentence covering four
+    completely different faults, and there is no way to tell them apart by
+    looking at the app.
+
+    This separates them in one tap, because each outcome is a different answer:
+
+      - It refuses with "no push token" -> this device never registered. The
+        switch says on because the switch reflects the OS permission, which was
+        granted; the token write is a separate step and it did not happen.
+      - It reports 0 sent -> the token was removed, most often by signing out on
+        this phone or reinstalling.
+      - It reports 1 or more and the phone buzzes -> delivery works, and a
+        missing notification is about that particular sender.
+      - It reports 1 or more and the phone stays silent -> delivery is the
+        problem, which on Android is nearly always the FCM credential or battery
+        optimisation, and neither is visible from in here.
+
+    The endpoint it calls can only ever target the CALLER's own devices, so this
+    is not a way to send anybody else a notification.
+  */
+  const testPush = useMutation({
+    mutationFn: () =>
+      sendTestPush(
+        'Test notification',
+        'If you can read this on your phone, VHub push notifications are working.'
+      ),
+    onSuccess: (result) => {
+      setNotice(
+        result.dispatched > 0
+          ? {
+              tone: 'success' as const,
+              title: 'Test sent',
+              message:
+                'It went to ' +
+                (result.dispatched === 1 ? 'this device' : `${result.dispatched} devices`) +
+                '. If nothing appears on your phone within a minute, the problem is in delivery rather than in VHub. It has been added to your notifications list either way.',
+            }
+          : {
+              title: 'No device is registered',
+              message:
+                'This phone is not set up to receive pushes, even though the switch is on. Turn the switch off and on again to register it, then send another test.',
+            }
+      );
+    },
+    onError: (error) => {
+      setNotice({
+        title: 'Could not send the test',
+        message: humanError(error, 'Please try again in a moment.'),
+      });
+    },
+  });
 
   const state = preference.data;
   const blockedByOs = state?.supported === true && state.permission === 'denied';
@@ -161,6 +226,36 @@ export function NotificationSettingsScreen({
           </View>
         </View>
 
+        {/*
+          Only offered when the switch is on. Testing delivery to a device that
+          has deliberately been silenced would send a notification nobody asked
+          for and then report a failure that is not one.
+        */}
+        {state?.enabled ? (
+          <Pressable
+            onPress={() => testPush.mutate()}
+            disabled={testPush.isPending}
+            accessibilityRole="button"
+            accessibilityLabel="Send yourself a test notification"
+            style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
+          >
+            <MaterialCommunityIcons name="bell-ring-outline" size={20} color={colors.primary} />
+            <View style={styles.linkText}>
+              <Text style={styles.linkTitle}>Send a test notification</Text>
+              <Text style={styles.linkBody}>
+                {testPush.isPending
+                  ? 'Sending...'
+                  : 'Goes to this phone only, so you can see whether pushes arrive at all.'}
+              </Text>
+            </View>
+            {testPush.isPending ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+            )}
+          </Pressable>
+        ) : null}
+
         <Pressable
           onPress={() => void Linking.openSettings()}
           accessibilityRole="button"
@@ -202,7 +297,7 @@ export function NotificationSettingsScreen({
 
       <AlertDialog
         visible={notice !== null}
-        tone="error"
+        tone={notice?.tone ?? 'error'}
         title={notice?.title ?? ''}
         message={notice?.message}
         actionLabel={blockedByOs ? 'Open Android settings' : undefined}

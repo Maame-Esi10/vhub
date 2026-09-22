@@ -5977,3 +5977,53 @@ The branch is now on `hasDocument`, which is what it always meant. The "What
 should I send?" link moved out of the upload branch at the same time, because
 the person whose document has just been sent back is precisely the reader it
 exists for, and it was rendered only when there was no document at all.
+
+## The notification row, again: a preview is not the same as a short row (2026-09-22)
+
+The first pass at the owner's "the boxes are too big" shortened the row by
+about a third and deliberately did not truncate the message, on the reasoning
+that two of the nine kinds of notification (a suspension, a test push) have no
+destination, so their row is the only place their text is ever read.
+
+That reasoning was sound and the conclusion was still wrong. **The answer was
+not to leave the message unclamped; it was to give those rows somewhere to
+open.** A navigable row now opens its screen and a row with no destination
+expands in place, and the trailing glyph says which it will be. The clamp could
+not have shipped on its own, which is exactly why it did not; what was missing
+was the second half of the feature, not permission to truncate.
+
+**And the row read as centred because four things were eating the text column
+at once.** The owner asked why the text was centred with space on both sides.
+It was not centred. The screen's list inset (24), the card's own padding (16),
+the gap after the icon (12) and the chevron with its own gap (32) came off both
+ends, leaving roughly 250px of a 400px screen for the words. Short lines in a
+narrow channel with wide empty margins either side is indistinguishable from
+centred text, and every one of those four numbers had been chosen sensibly in
+isolation. **The lesson is that horizontal padding compounds and nothing in the
+code makes that visible**: each value looks reasonable where it is written, and
+only their sum is wrong.
+
+**"Plain and dull" was solved with state rather than decoration.** The icon tile
+is filled with the notification's tone while unread and only tinted once read,
+and the New badge and chevron take the same colour. That adds colour that is
+carrying information, rather than a coloured bar down the left edge, which was
+removed from these rows once already and would have been decoration saying
+nothing the row does not already say three other ways.
+
+## A test push, because four failures look identical from inside the app (2026-09-22)
+
+The owner confirmed the push toggle was on and notifications still were not
+arriving on her phone. Nothing in the app could distinguish the possibilities,
+and there are four: this device never registered a token; the token was removed
+(a sign-out on that phone, or a reinstall); Google accepted the message and
+Android chose not to show it; or the send never happened.
+
+`sendTestPush` already existed in the API client and had no button anywhere.
+Settings, Notifications now has one, and each outcome is a different diagnosis
+rather than a different wording of the same one. It can only ever target the
+caller's own devices.
+
+**The switch being "on" was never evidence that the token exists.** It reflects
+the operating system permission, which is a separate thing from the row in
+`push_tokens`, and the two can disagree in exactly this direction: permission
+granted, token never written. That is the case the test names.

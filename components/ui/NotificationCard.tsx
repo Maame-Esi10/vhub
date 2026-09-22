@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -18,9 +19,9 @@ export interface NotificationCardProps {
   onPress: () => void;
   /**
    * Whether tapping actually goes somewhere. Comes from
-   * `notificationDestination()` on the screen, so the chevron and the tap can
-   * never disagree: a row that offers to open something always opens
-   * something, and a notice that leads nowhere does not pretend to.
+   * `notificationDestination()` on the screen, so the trailing glyph and the
+   * tap can never disagree: a row that offers to open a screen always opens
+   * one, and a notice that leads nowhere does not pretend to.
    */
   navigable?: boolean;
 }
@@ -28,56 +29,49 @@ export interface NotificationCardProps {
 /**
  * One notification, as an inbox row.
  *
- * WHY IT NO LONGER LOOKS LIKE A CHAT BUBBLE (owner, 2026-09-21: "the
- * notification messages read like chat bubbles. Tell me whether that is only
- * the reminder ones or all of them").
+ * A PREVIEW THAT OPENS (owner, 2026-09-22: "it is supposed to display a
+ * preview, then tap for it to be opened or direct you to the screen").
  *
- * IT WAS ALL OF THEM. There is no per-type styling anywhere in this component
- * and never was -- every notification, reminder or not, renders through this
- * one file. The reminders merely stood out because their body text is the
- * longest, which made the box taller and the resemblance more obvious. The
- * cause was the anatomy I gave the card in the first rebuild, which was
- * accidentally the anatomy of a chat message:
+ * The message is clamped to two lines. What a tap then does depends on whether
+ * the notification has anywhere to go, and both answers come from the single
+ * `navigable` flag the screen derives from `notificationDestination()`:
  *
- *   - a large CIRCULAR icon, which reads as an avatar;
- *   - a rounded box (radius.lg, 20px) wrapped tightly around a short line of
- *     prose, which is a speech bubble;
- *   - a TIMESTAMP UNDER THE MESSAGE, bottom-aligned, which is the single
- *     strongest signal of the lot. Every messaging app on the phone puts the
- *     time there and almost nothing else does.
+ *   - It HAS a destination: the tap opens that screen, which is where the full
+ *     story lives anyway. The tracker states an application's status in words;
+ *     the verification screen shows the document and the reason.
+ *   - It has NONE (a suspension, a test push): the tap expands the row in
+ *     place. Those two are the only kinds whose row is the one and only place
+ *     their text is ever read, so clamping them with no way to open them would
+ *     hide the sentence that matters most. That is why the clamp could not be
+ *     added on its own, and why it was left off when the rows were first
+ *     shortened.
  *
- * So it is rebuilt as a LIST ROW rather than a bubble. The icon is a plain
- * glyph in a small rounded tile, not a circle. The time moved to the top
- * right, on the caption's line, where a news list puts it. The footer and its
- * dividing rule are gone, replaced by one chevron at the trailing edge,
- * vertically centred -- the universal "this row opens something" mark, and a
- * thing no chat app has. The corner radius dropped to radius.md.
+ * The trailing glyph says which it will be: a right chevron opens a screen, a
+ * down chevron opens the message. It used to be a right chevron or an empty
+ * spacer, so a row that did nothing on tap looked like a row with nothing to do.
  *
- * WHAT WAS KEPT, and why the answer was not "go back to plain rows": the
- * bordered container is what makes this list belong with the feed and the
- * applications tracker, and the previous full-bleed rows with hairline
- * dividers are the pattern the owner called outdated in the first place. The
- * container stays; the contents stopped imitating a conversation.
+ * WHY THE ROW LOOKED EMPTY DOWN THE MIDDLE (owner, same round: "why are the
+ * texts centered and space is at the left and right"). The text column was
+ * being squeezed from four directions at once: the screen's 24px list inset,
+ * the card's own 16px padding, a 12px gap after the icon, and a 20px chevron
+ * with another 12px gap before it. That left roughly 250px of a 400px screen
+ * for the words, so short lines sat in a narrow channel with wide empty margins
+ * either side, which reads as centred text. The list inset, the card padding,
+ * both gaps and the chevron all came down and the words got the space back.
  *
- * THE CATEGORY CAPTION is still the substantive part. Nine kinds of news share
- * four `type` values, so without it an identity-verification decision, a
- * dispute outcome and an ordinary application update are indistinguishable.
- * See lib/notificationPresentation.ts.
+ * AND WHY IT IS STILL NOT A CHAT BUBBLE. That was the fault before this one and
+ * the anatomy that fixed it is unchanged: a rounded-square icon tile rather
+ * than a circular avatar, the timestamp on the caption line rather than under
+ * the message, and radius.md corners rather than radius.lg.
  *
- * Unread is said three ways, one of them a word: a "New" badge, a faint ground
- * and full-strength title text. The word is the cue that survives a
- * red/green deficiency and bright sunlight.
- *
- * DENSITY (owner, 2026-09-22: the rows "take up too much screen space... they
- * should not occupy almost half the screen for only a few lines of
- * information"). The anatomy above was right and did not change; what changed
- * is that it was drawn at essay spacing. A row is now about a third shorter,
- * taken from the four places that were paying for it -- the vertical padding,
- * the gap between the caption and the title, the two line heights, and the
- * icon tile and New badge, which were both sized for a card rather than for a
- * list row. Nothing is truncated: every notification still shows its whole
- * message, because two of the nine kinds (a suspension, a test push)
- * deliberately go nowhere, so a row is the only place their text is ever read.
+ * COLOUR CARRIES THE STATE ("the boxes are too plain, dull"). The icon tile is
+ * FILLED with the notification's own tone while it is unread and only tinted
+ * once it has been read, and the New badge and the chevron take the same
+ * colour. An unread row is now a different thing at a glance rather than on
+ * inspection. That is deliberately not a coloured bar down the left edge: the
+ * bar was removed from these rows and from the application cards for a reason
+ * that still holds, which is that it is a decoration saying nothing the row
+ * does not already say three other ways.
  */
 export function NotificationCard({ notification, onPress, navigable = true }: NotificationCardProps) {
   const unread = !notification.read_at;
@@ -85,25 +79,33 @@ export function NotificationCard({ notification, onPress, navigable = true }: No
   const tint = notificationToneColors(tone);
   const time = formatRelativeTime(notification.created_at);
 
+  const [expanded, setExpanded] = useState(false);
+
+  function handlePress() {
+    // Always called: this is what marks the notification read, which is true
+    // whether or not there is anywhere to go afterwards.
+    onPress();
+    if (!navigable) setExpanded((open) => !open);
+  }
+
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       accessibilityRole="button"
       // Spoken before the title so the state and the kind are known without
       // relying on the visual cues at all.
       accessibilityLabel={`${unread ? 'Unread. ' : ''}${category}. ${notification.title}. ${notification.body}. ${time}`}
+      accessibilityHint={navigable ? 'Opens the related screen' : 'Shows the whole message'}
+      accessibilityState={navigable ? undefined : { expanded }}
       style={({ pressed }) => [
         styles.row,
         unread && styles.rowUnread,
+        unread && { borderColor: tint.bg },
         pressed && styles.pressed,
       ]}
     >
-      {/*
-        A ROUNDED SQUARE, NOT A CIRCLE. A circle at this size beside a line of
-        prose is an avatar, and an avatar beside prose is a chat message.
-      */}
-      <View style={[styles.iconTile, { backgroundColor: tint.bg }]}>
-        <MaterialCommunityIcons name={icon} size={20} color={tint.fg} />
+      <View style={[styles.iconTile, { backgroundColor: unread ? tint.fg : tint.bg }]}>
+        <MaterialCommunityIcons name={icon} size={18} color={unread ? colors.white : tint.fg} />
       </View>
 
       <View style={styles.content}>
@@ -112,34 +114,37 @@ export function NotificationCard({ notification, onPress, navigable = true }: No
             {category}
           </Text>
           {unread ? (
-            <View style={styles.newBadge}>
+            <View style={[styles.newBadge, { backgroundColor: tint.fg }]}>
               <Text style={styles.newBadgeText}>New</Text>
             </View>
           ) : null}
           {/*
-            THE TIME BELONGS UP HERE. Under the message it is a chat
-            timestamp; on the caption line it is a dateline, which is what a
-            list of news items uses.
+            THE TIME BELONGS UP HERE. Under the message it is a chat timestamp;
+            on the caption line it is a dateline, which is what a list of news
+            items uses.
           */}
           <Text style={styles.time}>{time}</Text>
         </View>
 
-        <Text style={[styles.title, !unread && styles.titleRead]}>{notification.title}</Text>
-        <Text style={styles.body}>{notification.body}</Text>
+        <Text style={[styles.title, !unread && styles.titleRead]} numberOfLines={2}>
+          {notification.title}
+        </Text>
+        {/*
+          THE PREVIEW. `undefined` removes the clamp when expanded, rather than
+          0: both work, but undefined is the documented way to say "no limit"
+          and does not rely on 0 being treated as absent.
+        */}
+        <Text style={styles.body} numberOfLines={expanded ? undefined : 2}>
+          {notification.body}
+        </Text>
       </View>
 
-      {navigable ? (
-        <MaterialCommunityIcons
-          name="chevron-right"
-          size={20}
-          color={colors.textSecondary}
-          style={styles.chevron}
-        />
-      ) : (
-        // Holds the column so every row's text stops at the same place,
-        // whether or not it navigates.
-        <View style={styles.chevronSpacer} />
-      )}
+      <MaterialCommunityIcons
+        name={navigable ? 'chevron-right' : expanded ? 'chevron-up' : 'chevron-down'}
+        size={18}
+        color={unread ? tint.fg : colors.textSecondary}
+        style={styles.chevron}
+      />
     </Pressable>
   );
 }
@@ -148,30 +153,29 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     // flex-start, not center: the icon and the chevron align to the TOP of a
-    // multi-line row, which is what keeps a tall row reading as a list entry
-    // rather than as a block with something floating beside it.
+    // multi-line row, which keeps a tall row reading as a list entry rather
+    // than as a block with something floating beside it.
     alignItems: 'flex-start',
-    gap: spacing.md,
-    // radius.md, not radius.lg. Twenty-pixel corners on a box wrapped around
-    // a sentence is a speech bubble.
+    // 10, not 12. Every pixel between the icon and the words is a pixel the
+    // words do not get, and the column was the thing that was short.
+    gap: spacing.sm + 2,
     borderRadius: radius.md,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
   },
   rowUnread: {
-    backgroundColor: '#FFF8F7',
-    borderColor: colors.borderOnSurface,
+    backgroundColor: colors.surfaceSubtle,
   },
   pressed: {
     opacity: 0.85,
   },
   iconTile: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -184,12 +188,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     // Both are needed on a row that wraps: alignItems centres children within
-    // their line, alignContent places the line itself and otherwise pins it
-    // to the top of the box.
+    // their line, alignContent places the line itself and otherwise pins it to
+    // the top of the box.
     flexWrap: 'wrap',
     alignContent: 'center',
     rowGap: spacing.xs,
-    marginBottom: 2,
+    marginBottom: 3,
   },
   category: {
     flexShrink: 1,
@@ -199,7 +203,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   newBadge: {
-    backgroundColor: colors.primary,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.xs + 2,
     paddingVertical: 1,
@@ -222,7 +225,7 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fontFamily.semiBold,
     fontSize: 14,
-    lineHeight: 18,
+    lineHeight: 19,
     color: colors.textPrimary,
   },
   titleRead: {
@@ -237,9 +240,6 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   chevron: {
-    marginTop: spacing.xs,
-  },
-  chevronSpacer: {
-    width: 20,
+    marginTop: spacing.xs + 1,
   },
 });

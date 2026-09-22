@@ -105,7 +105,9 @@ export default function Notifications() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         {header}
-        <ListSkeleton rows={5} rowHeight={128} />
+        {/* 88, matching the real row now that the message is clamped to a two-line
+            preview. A skeleton taller than what replaces it makes the list jump. */}
+        <ListSkeleton rows={6} rowHeight={88} />
       </SafeAreaView>
     );
   }
@@ -250,8 +252,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.primary,
   },
+  /*
+    THE LIST IS INSET AT spacing.base, NOT spacing.xl (owner, 2026-09-22: "why
+    are the texts centered and space is at the left and right"). 24px here plus
+    the card's own padding plus the icon column plus the chevron column left the
+    words about 250px of a 400px screen, so short lines sat in a narrow channel
+    with wide empty margins and read as centred. The header above keeps its
+    wider inset on purpose: a page title wants the generous margin, a dense list
+    of rows does not.
+  */
   listContent: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.base,
     paddingTop: spacing.base,
     paddingBottom: spacing.xxl,
   },

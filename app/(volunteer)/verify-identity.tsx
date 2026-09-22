@@ -166,6 +166,26 @@ export default function VolunteerVerifyIdentity() {
   const presentation = STATUS_PRESENTATION[status] ?? STATUS_PRESENTATION.unverified;
   const declarationSigned = volunteerProfile?.declaration_signed === true;
 
+  /*
+    WHERE BACK GOES, AND WHY IT DEPENDS ON THE STATUS (owner, 2026-09-22: "I
+    think it should take me to home when I click back in the review, since I am
+    done with the process").
+
+    This screen has two jobs and the right exit is different for each. While
+    there is something to DO here -- sign the declaration, send a document,
+    replace one that was turned down -- it is a settings screen reached from
+    Settings, and going back to where the row was tapped is correct. Once the
+    document is in and waiting on a human, there is nothing left to do and
+    nothing to come back for: the volunteer has finished, and the app should
+    return them to the thing the app is for rather than to a menu.
+
+    A `from` on the route still wins over this, which is what keeps the inbox
+    route honest: somebody who opened their verification from a notification
+    lands back in the inbox whatever their status is. See ScreenHeader.
+  */
+  const backFallback =
+    status === 'documents_pending' ? '/(volunteer)/feed' : '/(volunteer)/settings';
+
   function handleSign() {
     if (!user || !confirmed) return;
     signDeclaration.mutate(user.id);
@@ -184,7 +204,7 @@ export default function VolunteerVerifyIdentity() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {fromOnboarding ? null : (
-        <ScreenHeader title="Identity Verification" fallback="/(volunteer)/settings" />
+        <ScreenHeader title="Identity Verification" fallback={backFallback} />
       )}
 
       <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
