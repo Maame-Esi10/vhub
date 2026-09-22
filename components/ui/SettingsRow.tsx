@@ -6,94 +6,68 @@ import {
 import { Text } from '@/components/ui/Text';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { scaleWithFont, useFontScale } from '@/constants/typography';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 export interface SettingsRowProps {
   icon: IconName;
   label: string;
-  /** Muted text shown before the chevron, e.g. a current value or status. */
+  /** The supporting line under the label: a current value, or a status. */
   value?: string;
   /** Omit to render a read-only status row: no chevron, not pressable. */
   onPress?: () => void;
+  /** Draws the row and its glyph in the danger tone, for Sign Out and the like. */
+  destructive?: boolean;
 }
 
 /**
- * One row in a settings group — icon tile, label, optional trailing value,
- * chevron. Matches the row treatment in design-refs/Settings.png.
+ * One row in a settings group.
  *
- * `onPress` is optional so a group can carry a row that only reports state.
- * A row that looks tappable but leads nowhere (or somewhere harmful) is
- * worse than one that plainly doesn't move.
+ * REDRAWN TO THE OWNER'S REFERENCE (2026-09-22, `design-refs/Reference -
+ * settings list.png`): a soft grey slab, a bare line glyph at the leading edge,
+ * the label, and the chevron sitting in a WHITE CIRCLE at the trailing edge.
+ * The circle is the whole trick in that reference -- it lifts the arrow off the
+ * grey without a border, and it is what makes a flat row read as tappable.
+ *
+ * THE LABEL AND VALUE NOW ALWAYS STACK, and that is a simplification worth
+ * stating rather than a style change. They used to sit SIDE BY SIDE, and this
+ * one row had been broken three separate times by that arrangement:
+ *
+ *   - give the label `flex: 1` and the value keeps its full content width, so
+ *     "Login email & password" squeezes the title to one letter per line;
+ *   - give the label a fixed basis and the value starves instead, so "Not
+ *     verified" becomes "Not / verifi / ed";
+ *   - fix both with pixel floors, and they stop being right the moment the
+ *     phone's font scale moves, which is how "Notificatio / ns" happened.
+ *
+ * Every one of those is the same defect: two text nodes competing for about
+ * 230dp on a 360dp phone, with nothing guaranteeing either enough room for its
+ * own longest word. Stacked, each gets the full column and the competition does
+ * not exist. It needs no `scaleWithFont` floors, no line caps, no
+ * `prefersStackedLayout` branch and no measurement -- the arithmetic that kept
+ * going wrong is simply gone, and it happens to be what the reference does too.
  */
-export function SettingsRow({ icon, label, value, onPress }: SettingsRowProps) {
-  // The hook's subscription is what re-renders this row when the phone's font
-  // size changes; `scaleWithFont` below reads the live value.
-  const { stacked } = useFontScale();
-
-  /*
-    AT A LARGE SYSTEM FONT THE LABEL AND VALUE STOP SHARING A LINE.
-
-    This row has four things across it, and on a 360dp phone there are about
-    232dp of width for the two text nodes once the icon, the chevron and the
-    gaps are paid for. At 1.3x that is not enough for "Notifications" and a
-    value beside it, and no redistribution of the same 232dp makes it enough —
-    which is how "Notificatio / ns" happened: squeezed below the width of its
-    own longest word, Android breaks inside the word as a last resort.
-
-    So past `prefersStackedLayout()` the value moves UNDER the label and both
-    get the full column. It is the ordinary settings-row treatment on both
-    platforms, it reads better at that size anyway, and it is the only answer
-    that does not involve taking the user's accessibility setting away.
-  */
-  const text = stacked ? (
-    <View style={styles.stack}>
-      <Text style={styles.label}>{label}</Text>
-      {value ? <Text style={styles.stackedValue}>{value}</Text> : null}
-    </View>
-  ) : (
-    <>
-      {/*
-        numberOfLines on BOTH is what makes a squeezed column impossible. A
-        Text with no line limit will keep wrapping however narrow it gets, and
-        once it is narrower than a single word React Native breaks INSIDE the
-        word -- which is the "Not / verifi / ed" stack. With a limit it
-        ellipsizes instead, so the worst case is a clipped string rather than a
-        vertical ladder of letters.
-      */}
-      <Text
-        style={[styles.label, { minWidth: scaleWithFont(96) }]}
-        numberOfLines={2}
-        ellipsizeMode="tail"
-      >
-        {label}
-      </Text>
-      {value ? (
-        <Text
-          style={[styles.value, { minWidth: scaleWithFont(84) }]}
-          numberOfLines={2}
-          ellipsizeMode="tail"
-        >
-          {value}
-        </Text>
-      ) : null}
-    </>
-  );
+export function SettingsRow({ icon, label, value, onPress, destructive = false }: SettingsRowProps) {
+  const tint = destructive ? colors.danger : colors.textPrimary;
 
   const content = (
     <>
-      <View style={styles.iconTile}>
-        <MaterialCommunityIcons name={icon} size={20} color={colors.textPrimary} />
+      <MaterialCommunityIcons name={icon} size={22} color={tint} style={styles.icon} />
+
+      <View style={styles.text}>
+        <Text style={[styles.label, destructive && styles.labelDestructive]}>{label}</Text>
+        {value ? <Text style={styles.value}>{value}</Text> : null}
       </View>
-      {text}
+
       {onPress ? (
-        <MaterialCommunityIcons
-          name="chevron-right"
-          size={20}
-          color={colors.textSecondary}
-          style={styles.chevron}
-        />
+        /*
+          A WHITE DISC, not a bare chevron. On a grey slab a loose arrow reads
+          as decoration; in a disc it reads as a button, which is what the
+          reference uses and why its rows look tappable without borders.
+        */
+        <View style={styles.chevronDisc}>
+          <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textPrimary} />
+        </View>
       ) : null}
     </>
   );
@@ -106,7 +80,9 @@ export function SettingsRow({ icon, label, value, onPress }: SettingsRowProps) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      // The value is part of what the row says, so it is spoken with the label
+      // rather than left as a second unlabelled node.
+      accessibilityLabel={value ? `${label}. ${value}` : label}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
       {content}
@@ -123,24 +99,53 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    // spacing.md, not spacing.base: three gaps sit between the four parts, so
-    // every 4px here costs 12px of text width on the narrowest phone.
-    gap: spacing.md,
-    minHeight: 64,
+    gap: spacing.base,
+    minHeight: 60,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.md,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   pressed: {
     opacity: 0.8,
   },
-  iconTile: {
-    width: 40,
-    height: 40,
-    // Fixed means fixed: without this the tile is a flex item like any other
-    // and squashes into an oval when the text either side is long.
+  /*
+    An icon is a Text node underneath, so without these it is a shrinkable flex
+    item and clips to a sliver when the label is long.
+  */
+  icon: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: 24,
+    textAlign: 'center',
+  },
+  text: {
+    flexGrow: 1,
+    flexShrink: 1,
+    // A basis of 0 lets the column take exactly the slack and no more, which
+    // is what keeps the chevron disc pinned to the trailing edge.
+    flexBasis: 0,
+    gap: 1,
+  },
+  label: {
+    fontFamily: fontFamily.medium,
+    fontSize: 15,
+    lineHeight: 20,
+    color: colors.textPrimary,
+  },
+  labelDestructive: {
+    color: colors.danger,
+  },
+  value: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: colors.textSecondary,
+  },
+  chevronDisc: {
+    width: 30,
+    height: 30,
     flexGrow: 0,
     flexShrink: 0,
     borderRadius: radius.pill,
@@ -148,99 +153,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // ---------------------------------------------------------------------
-  // The four parts get ONE explicit distribution, and every part has a floor.
-  //
-  // This row has now been broken twice by fixing one side at the other's
-  // expense, so the model is written out rather than tuned:
-  //
-  //   icon      fixed 40           (flexGrow 0, flexShrink 0)
-  //   label     takes the slack    (flexGrow 1, flexBasis 0, minWidth 96)
-  //   value     sized to content   (flexGrow 0, capped 40%, minWidth 84)
-  //   chevron   fixed 20           (flexShrink 0)
-  //
-  // Attempt one gave the label `flex: 1` and the value nothing: flexBasis 0
-  // meant the label started at zero and only grew into whatever the value had
-  // not already claimed at full content width, so "Login email & password"
-  // left the title a few characters wide -- the "one letter per line" bug.
-  //
-  // Attempt two gave the label flexBasis 55% and flexShrink 0. That saved the
-  // title and starved the VALUE instead, because the value could shrink
-  // without limit and had no line cap: hence "Not / verifi / ed".
-  //
-  // The real defect was shared by both: two unbounded text nodes competing for
-  // one row, with nothing stopping either from being squeezed below the width
-  // of a single word. So now BOTH have a minWidth wide enough for the longest
-  // word they must hold ("Verification" ~88px at 15px, "password" ~57px at
-  // 13px), and BOTH cap their line count so the fallback is an ellipsis rather
-  // than a vertical stack.
-  //
-  // The 40% cap on the value is what keeps the arithmetic safe on a 360dp
-  // phone: 328 content - 40 icon - 20 chevron - 36 gaps = 232 for text; the
-  // value takes at most 131 of it, leaving the label 101, comfortably above
-  // its 96 floor. On a 320dp phone the value shrinks to its own floor and the
-  // row still fits without overflowing.
-  //
-  // ATTEMPT THREE (2026-09-11) found the assumption underneath all of that:
-  // every number above is a fixed pixel, while the font sizes they were
-  // measured against scale with the phone's accessibility setting. At 1.3x
-  // the same 232dp has to hold text that is a third wider, and the arithmetic
-  // stops working however it is divided -- hence "Notificatio / ns". So the
-  // two floors now come from scaleWithFont(), and past 1.2x the row stops
-  // being a row at all. The distribution below only describes the side-by-side
-  // form.
-  // ---------------------------------------------------------------------
-  // The stacked form: label and value share one column, each on its own line.
-  stack: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 0,
-    gap: 2,
-  },
-  stackedValue: {
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.textSecondary,
-  },
-  // minWidth is applied inline from scaleWithFont(96): a floor written in
-  // fixed pixels is exactly the bug, because it stays 96 while the text in it
-  // grows by a third.
-  label: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 0,
-    fontFamily: fontFamily.medium,
-    fontSize: 15,
-    lineHeight: 20,
-    color: colors.textPrimary,
-  },
-  value: {
-    flexGrow: 0,
-    flexShrink: 1,
-    // Content-sized, so a short value ("Verified") gives its space back to the
-    // title instead of holding a fixed column open.
-    flexBasis: 'auto',
-    maxWidth: '40%',
-    textAlign: 'right',
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.textSecondary,
-  },
-  // An icon is a Text node underneath, so without this it is a shrinkable flex
-  // item and the arrow clips to a sliver when the row is tight.
-  chevron: {
-    flexGrow: 0,
-    flexShrink: 0,
-    width: 20,
-  },
   groupLabel: {
     fontFamily: fontFamily.semiBold,
     fontSize: 11,
     letterSpacing: 1,
+    textTransform: 'uppercase',
     color: colors.textSecondary,
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
     marginBottom: spacing.md,
   },
 });

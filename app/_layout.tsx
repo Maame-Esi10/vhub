@@ -158,7 +158,17 @@ function RootNavigator() {
       {/* Above the Stack so it overlays every screen rather than being
           re-implemented per screen and forgotten on half of them. */}
       <OfflineBanner />
-      <StatusBar style="auto" />
+      {/*
+        `dark`, NOT `auto`. VHub is a light app -- `userInterfaceStyle` is
+        pinned to "light" in app.json and every screen but the welcome hero has
+        a white ground -- so the icons that have to sit on top of it are always
+        the dark ones. `auto` resolves from the DEVICE colour scheme, so on a
+        phone set to dark mode it asked for white icons and put them on VHub's
+        white screens, where they cannot be seen. Each role group asserts this
+        again on entry; see the note there for why one declaration is not
+        enough.
+      */}
+      <StatusBar style="dark" />
     </>
   );
 }

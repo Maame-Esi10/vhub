@@ -10,5 +10,5 @@ import { AccountSecurityScreen } from '@/components/account/AccountSecurityScree
  * navigator.
  */
 export default function VolunteerAccountSecurity() {
-  return <AccountSecurityScreen fallback="/(volunteer)/settings" />;
+  return <AccountSecurityScreen fallback="/(volunteer)/profile" />;
 }

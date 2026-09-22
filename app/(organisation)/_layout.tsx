@@ -1,4 +1,5 @@
 import { Redirect, Tabs } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { ROLE_HOME } from '@/lib/roleRoutes';
 import { useAuthStore } from '@/stores/authStore';
 import { CreateTabIcon, useTabBarScreenOptions, tabBarIcon } from '@/components/ui/tabBarOptions';
@@ -31,61 +32,84 @@ export default function OrganisationTabsLayout() {
   }
 
   return (
-    <Tabs screenOptions={screenOptions}>
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          // "Home", not "Dashboard": the shorter word fits the five-tab bar
-          // without truncating, and matches the HOME label on this tab in
-          // design-refs/Organization Dashboard.png. Route stays dashboard.tsx.
-          title: 'Home',
-          tabBarIcon: tabBarIcon('grid', 'grid-outline'),
-        }}
-      />
-      <Tabs.Screen
-        name="create-outreach"
-        options={{
-          title: 'Create',
-          // A filled coral disc, not another outline glyph. This is the one
-          // tab that is an action rather than a destination, and it is the
-          // action the whole organisation side exists for.
-          tabBarIcon: CreateTabIcon,
-        }}
-      />
-      <Tabs.Screen
-        name="applicants"
-        options={{
-          title: 'Applicants',
-          tabBarIcon: tabBarIcon('people', 'people-outline'),
-        }}
-      />
-      <Tabs.Screen
-        name="reviews"
-        options={{ title: 'Reviews', tabBarIcon: tabBarIcon('star', 'star-outline') }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: tabBarIcon('person-circle', 'person-circle-outline'),
-        }}
-      />
-
+    <>
       {/*
-        Pushed from the profile tab rather than selected from the bar — every
-        route file in this group becomes a tab unless it opts out.
+        THE STATUS BAR IS RE-ASSERTED ON ENTERING THE GROUP (owner-reported,
+        2026-09-22: "the app has covered my phone's status bar... my time and
+        battery").
+
+        The app is edge-to-edge, which Expo SDK 57 defaults to and Android 15
+        enforces, so VHub genuinely draws BEHIND the status bar and the clock
+        and battery are painted on top of whatever is there. That part is
+        correct and is not what went wrong. What went wrong is the COLOUR of
+        those icons: at white-on-white they are invisible, which looks exactly
+        like the bar being covered, and pulling the shade down reveals them
+        because the shade brings its own dark ground with it.
+
+        `expo-status-bar` is last-writer-wins with no restore. The root sets
+        the app default, but any screen that overrides it -- welcome, whose
+        hero is near-black and which correctly asks for light icons -- leaves
+        that override in place for every screen afterwards, because the root's
+        own component never re-runs. Declaring it here means arriving in this
+        group always sets the icons back to dark, which is right for every
+        screen in it.
       */}
-      <Tabs.Screen name="edit-profile" options={{ href: null }} />
-      <Tabs.Screen name="outreach/[id]" options={{ href: null }} />
-      <Tabs.Screen name="edit-outreach/[id]" options={{ href: null }} />
-      <Tabs.Screen name="checkin/[id]" options={{ href: null }} />
-      <Tabs.Screen name="attendance/[id]" options={{ href: null }} />
-      <Tabs.Screen name="settings" options={{ href: null }} />
-      <Tabs.Screen name="verification" options={{ href: null }} />
-      <Tabs.Screen name="info-hub" options={{ href: null }} />
-      <Tabs.Screen name="account-security" options={{ href: null }} />
-      <Tabs.Screen name="notification-settings" options={{ href: null }} />
-      <Tabs.Screen name="notifications" options={{ href: null }} />
-    </Tabs>
+      <StatusBar style="dark" />
+      <Tabs screenOptions={screenOptions}>
+        <Tabs.Screen
+          name="dashboard"
+          options={{
+            // "Home", not "Dashboard": the shorter word fits the five-tab bar
+            // without truncating, and matches the HOME label on this tab in
+            // design-refs/Organization Dashboard.png. Route stays dashboard.tsx.
+            title: 'Home',
+            tabBarIcon: tabBarIcon('grid', 'grid-outline'),
+          }}
+        />
+        <Tabs.Screen
+          name="create-outreach"
+          options={{
+            title: 'Create',
+            // A filled coral disc, not another outline glyph. This is the one
+            // tab that is an action rather than a destination, and it is the
+            // action the whole organisation side exists for.
+            tabBarIcon: CreateTabIcon,
+          }}
+        />
+        <Tabs.Screen
+          name="applicants"
+          options={{
+            title: 'Applicants',
+            tabBarIcon: tabBarIcon('people', 'people-outline'),
+          }}
+        />
+        <Tabs.Screen
+          name="reviews"
+          options={{ title: 'Reviews', tabBarIcon: tabBarIcon('star', 'star-outline') }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: tabBarIcon('person-circle', 'person-circle-outline'),
+          }}
+        />
+
+        {/*
+          Pushed from the profile tab rather than selected from the bar — every
+          route file in this group becomes a tab unless it opts out.
+        */}
+        <Tabs.Screen name="edit-profile" options={{ href: null }} />
+        <Tabs.Screen name="outreach/[id]" options={{ href: null }} />
+        <Tabs.Screen name="edit-outreach/[id]" options={{ href: null }} />
+        <Tabs.Screen name="checkin/[id]" options={{ href: null }} />
+        <Tabs.Screen name="attendance/[id]" options={{ href: null }} />
+        <Tabs.Screen name="verification" options={{ href: null }} />
+        <Tabs.Screen name="info-hub" options={{ href: null }} />
+        <Tabs.Screen name="account-security" options={{ href: null }} />
+        <Tabs.Screen name="notification-settings" options={{ href: null }} />
+        <Tabs.Screen name="notifications" options={{ href: null }} />
+      </Tabs>
+    </>
   );
 }

@@ -6304,3 +6304,101 @@ it costs at most one query per visit on a per-user table capped at 100 rows.
 case where somebody opens the inbox themselves. It does nothing at all for
 somebody who does not know there is anything to open, which is the case push
 exists for and the reason the delivery fault above still matters.
+
+## Profile and Settings become one screen (2026-09-22)
+
+The owner called the separation "kind of a mess" and asked for one screen in a
+stated order: name details, then the V-Score card, then the settings. She is
+right, and the mess had a specific shape worth recording because it is a
+general one.
+
+**The boundary between the two screens was never decidable.** Identity
+Verification is arguably profile. Edit Profile is arguably settings. My Feedback
+is neither. Every row needed an argument about which of two screens it belonged
+on, and the git history shows several of those arguments being had more than
+once, with rows moving back and forth. A boundary that has to be re-litigated
+per item is not a boundary; it is two screens that want to be one.
+
+**The duplication was the visible symptom.** Both screens carried their own
+identity header, at two different sizes, and on the organisation side the two
+disagreed about what the organisation is called: Profile read
+`profiles.full_name` while Settings read `organisation_profiles.org_name`. Those
+are different columns and can legitimately hold different strings, so the app
+could show an organisation two different names one tap apart. The merged screen
+reads `org_name`, because that is the name volunteers see on an outreach.
+
+**What did NOT get merged**, and the distinction matters: the forms. Edit
+Profile, Account & Security, Identity Verification and notification settings
+remain their own screens. Merging two screens that held only NAVIGATION ROWS is
+not an argument for inlining the things those rows lead to.
+
+**The trap in doing it** was the back destinations. A tab group keeps no history
+of its own, so `ScreenHeader` navigates to an explicit `fallback`, and ten of
+those pointed at a settings route that no longer exists. A stale fallback is not
+a crash and not a type error: it is a silent wrong destination, exactly the
+class of bug that produced "back goes to Settings" a week earlier. They were
+found by grep rather than by the compiler, which is worth remembering.
+
+## The settings row stops arbitrating and starts stacking (2026-09-22)
+
+`SettingsRow` put the label and the value SIDE BY SIDE, and that one row had
+been broken three separate times:
+
+1. Label given `flex: 1`, value keeping its content width: "Login email &
+   password" squeezed the title to roughly one letter per line.
+2. Label given a fixed basis instead: the value starved, producing
+   "Not / verifi / ed".
+3. Both given pixel floors: correct until the phone's font scale moved, which
+   is how "Notificatio / ns" happened.
+
+Each fix arbitrated between two text nodes competing for about 230dp on a 360dp
+phone. **None of them questioned the competition.** Stacking the value under the
+label gives each the full column and the contest does not exist: no
+`scaleWithFont` floors, no `numberOfLines` caps, no `prefersStackedLayout`
+branch, no measurement, no hook subscription. The owner's reference design
+stacks them too, which is how the question came to be asked at all.
+
+**A consequence to be aware of:** `scaleWithFont`, `prefersStackedLayout`,
+`useFontScale` and `clampedFontScale` in `constants/typography.ts` now have no
+callers. They are KEPT deliberately, because the standing rule that any layout
+constant sized by the words inside it must go through `scaleWithFont` still
+applies to the next fixed-width row somebody writes. CLAUDE.md was corrected so
+it no longer points at `SettingsRow` as the worked example, which it is not any
+more.
+
+## The status bar was not covered, it was invisible (2026-09-22)
+
+The owner: "it seems the app has covered my phone status bar, like my time and
+battery, so unless I pull from the top to show then I swipe up and it is gone."
+
+**Both halves of that description are real and they have different causes.**
+
+VHub genuinely draws BEHIND the status bar. That is edge-to-edge, which Expo
+SDK 57 turns on by default and Android 15 enforces, and it is correct: the clock
+and battery are painted on top of the app rather than in a reserved strip. The
+same change is why every form in the app needs a `KeyboardAvoidingView`.
+
+What was wrong is the COLOUR of those icons. The root layout asked for
+`<StatusBar style="auto" />`, and `auto` resolves from the DEVICE colour scheme,
+not from the app. VHub pins `userInterfaceStyle` to "light" and every screen
+except the welcome hero has a white ground, so on a phone set to dark mode
+`auto` asked for WHITE icons and put them on white screens. Invisible icons over
+app content look exactly like the app having covered the bar, and pulling the
+shade down reveals them because the shade brings its own dark ground with it.
+
+**The second cause is that `expo-status-bar` is last-writer-wins with no
+restore.** The welcome screen correctly asks for light icons, because its hero
+is near-black. When it unmounts, nothing puts them back: the root component does
+not re-run, because its own props never changed. So a single pass through
+welcome left white icons for the rest of the session, whatever the device's
+colour scheme was.
+
+The fix addresses both. The root now says `dark`, which is what a light app
+always wants and which does not consult the device. Each of the three role
+groups asserts `dark` again on entry, which is what undoes an override left
+behind by a screen outside the group. `welcome` keeps its `light`, because it is
+the one screen where white icons are correct.
+
+**The general shape:** an imperative global with no restore is a resource that
+has to be released, and React gives no warning when it is not. The same trap
+applies to anything else set that way; there is nothing else today.

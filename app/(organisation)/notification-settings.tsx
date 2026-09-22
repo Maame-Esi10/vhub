@@ -4,7 +4,7 @@ import { NotificationSettingsScreen } from '@/components/account/NotificationSet
 export default function OrganisationNotificationSettings() {
   return (
     <NotificationSettingsScreen
-      fallback="/(organisation)/settings"
+      fallback="/(organisation)/profile"
       inboxRoute="/(organisation)/notifications?from=/(organisation)/notification-settings"
       whatYouGet={[
         'A volunteer applies to one of your outreaches.',

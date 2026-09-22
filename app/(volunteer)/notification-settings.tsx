@@ -10,7 +10,7 @@ import { NotificationSettingsScreen } from '@/components/account/NotificationSet
 export default function VolunteerNotificationSettings() {
   return (
     <NotificationSettingsScreen
-      fallback="/(volunteer)/settings"
+      fallback="/(volunteer)/profile"
       inboxRoute="/(volunteer)/notifications?from=/(volunteer)/notification-settings"
       whatYouGet={[
         'An outreach that matches your profile is published near you.',

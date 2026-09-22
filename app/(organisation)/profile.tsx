@@ -1,121 +1,163 @@
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar, SettingsRow } from '@/components/ui';
+import { Avatar, SettingsGroupLabel, SettingsRow, SignOutButton } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { useAuthStore } from '@/stores/authStore';
 import { useMyOrganisationProfile } from '@/hooks';
-import { tabBarClearance } from '@/components/ui/tabBarOptions';
+import { useAuthStore } from '@/stores/authStore';
+import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
+/** What the verification row says, per state. */
+const VERIFICATION_ROW_VALUE: Record<string, string> = {
+  unverified: 'Not submitted',
+  documents_submitted: 'Waiting on review',
+  verified: 'Verified',
+  rejected: 'Not approved, tap to fix',
+  suspended: 'Suspended',
+  banned: 'Removed',
+};
+
+/**
+ * Profile AND Settings, on one screen. The organisation twin of the volunteer
+ * merge, done in the same pass and for the same reason (owner, 2026-09-22:
+ * "the separated is kind of a mess").
+ *
+ * The split was worse here than on the volunteer side, because the two screens
+ * disagreed about what an organisation IS: Profile showed the name from
+ * `profiles.full_name`, Settings showed it from
+ * `organisation_profiles.org_name`, and those are different columns that can
+ * legitimately hold different strings. One identity header now reads one of
+ * them, and `org_name` wins because it is the name volunteers see on an
+ * outreach.
+ *
+ * THERE IS NO V-SCORE HERE, and the screen says so by its shape rather than by
+ * leaving a hole where the volunteer's card sits. An organisation has no score:
+ * `event_reviews` runs one way only, and whether organisations should be rated
+ * in return is an open question recorded in docs/REPORT_NOTES.md. What takes
+ * that position instead is verification, which is the organisation's equivalent
+ * standing and the thing volunteers actually judge an outreach by.
+ */
 export default function OrganisationProfile() {
-  const insets = useSafeAreaInsets();
+  // The floating tab bar is absolute and reserves no space, so the last element
+  // needs this or it sits under the pill and cannot be tapped.
+  const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
-  /*
-    Read for the verified tick alone. The auth store holds the `profiles` row
-    for every role, but `verified` lives on `organisation_profiles`, which only
-    this hook fetches -- and it is a STORED GENERATED COLUMN derived from
-    `verification_state`, so it cannot disagree with the review that produced it.
-  */
   const org = useMyOrganisationProfile(profile?.id).data;
+
+  const displayName = org?.org_name ?? profile?.full_name ?? 'Organisation';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/*
-        THE WHOLE SCREEN SCROLLS, AND IT DID NOT BEFORE. Same defect as the
-        volunteer Profile tab and the same cause: a plain flex column with a
-        `flex: 1` spacer at the bottom, which fits at the default font size and
-        runs off the phone at a large one with nothing to scroll. A drag that
-        scrolls nothing still reads as a press to the card under the finger, so
-        trying to reach the bottom opened whichever row was beneath the thumb.
+        THE WHOLE SCREEN SCROLLS. At a large system font size a plain flex
+        column runs off the bottom with nothing to scroll, and a drag that
+        scrolls nothing is still a press to the view under the finger, so
+        reaching for the bottom opens whichever row is under the thumb.
       */}
-      <ScrollView contentContainerStyle={[
-          styles.content,
-          { paddingBottom: tabBarClearance(insets.bottom) },
-        ]} showsVerticalScrollIndicator={false}>
-      <View style={styles.headerRow}>
+      <ScrollView
+        contentContainerStyle={[styles.content, tabBarPadding]}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.header}>Profile</Text>
-        <Pressable
-          onPress={() => router.push('/(organisation)/settings')}
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-          hitSlop={12}
-          style={({ pressed }) => [styles.gearButton, pressed && styles.gearPressed]}
-        >
-          <MaterialCommunityIcons name="cog-outline" size={22} color={colors.textPrimary} />
-        </Pressable>
-      </View>
 
-      {/*
-        THE LOGO BELONGS ON THE SCREEN THAT IS ABOUT WHO YOU ARE.
-
-        This card had no image at all — not a broken one, an absent one — so
-        the organisation's own Profile tab was the only identity surface in
-        the app that never showed the logo it had uploaded. Settings, one tap
-        away, always did.
-
-        Initials come from the same `full_name` rendered beside them, so the
-        fallback can never show different letters from the name on the card.
-      */}
-      {/*
-        THE SAME IDENTITY HEADER AS THE VOLUNTEER SIDE (owner, 2026-09-16).
-        This was a bordered card with the badges tucked inside it; the
-        volunteer's is a plain row with the badges underneath. Two designs for
-        the same thing on the two Profile screens, and no reason for either.
-
-        The volunteer's shape won because it is the better one: an avatar-led
-        row needs no container to read as a header, and putting the badges on
-        their own line stops the name column being squeezed by them.
-      */}
-      <View style={styles.identity}>
-        <Avatar
-          name={profile?.full_name ?? 'Organisation'}
-          uri={profile?.avatar_url}
-          size={64}
-          verified={org?.verified === true}
-        />
-        <View style={styles.identityText}>
-          <Text style={styles.name} numberOfLines={2}>
-            {profile?.full_name ?? 'Organisation'}
-          </Text>
-          {profile?.email ? (
-            <Text style={styles.email} numberOfLines={1}>
-              {profile.email}
+        <View style={styles.identity}>
+          <Avatar
+            name={displayName}
+            uri={profile?.avatar_url}
+            size={64}
+            verified={org?.verified === true}
+          />
+          <View style={styles.identityText}>
+            <Text style={styles.name} numberOfLines={2}>
+              {displayName}
             </Text>
+            {profile?.email ? (
+              <Text style={styles.email} numberOfLines={1}>
+                {profile.email}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.badgeRow}>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>Organisation</Text>
+          </View>
+          {org?.org_type ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{org.org_type}</Text>
+            </View>
           ) : null}
         </View>
-      </View>
 
-      <View style={styles.badgeRow}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Organisation</Text>
-        </View>
-      </View>
-
-      {/*
-        SETTINGS ROWS, the standard across the app now. These were bespoke
-        two-line cards that existed only here, so the organisation side carried
-        a different treatment from the volunteer side for identical controls.
-        The supporting sentences went with them: a row that says "Edit Profile"
-        beside a pencil does not need a sentence explaining that it edits the
-        profile.
-      */}
-      <View style={styles.actions}>
+        <SettingsGroupLabel>YOUR ORGANISATION</SettingsGroupLabel>
         <SettingsRow
           icon="account-edit-outline"
           label="Edit Profile"
-          onPress={() => router.push('/(organisation)/edit-profile')}
+          value="Logo, description, contact details and location"
+          onPress={() =>
+            router.push({
+              pathname: '/(organisation)/edit-profile',
+              params: { from: '/(organisation)/profile' },
+            })
+          }
         />
+        {/*
+          `verified` is a STORED GENERATED COLUMN derived from
+          verification_state, so Postgres refuses a write to it outright and
+          nothing here could set it even by mistake. What this row opens is the
+          SUBMISSION: the organisation sends its evidence and an admin decides.
+        */}
         <SettingsRow
-          icon="help-circle-outline"
+          icon="shield-check-outline"
+          label="Organisation Verification"
+          value={VERIFICATION_ROW_VALUE[org?.verification_state ?? 'unverified']}
+          onPress={() =>
+            router.push({
+              pathname: '/(organisation)/verification',
+              params: { from: '/(organisation)/profile' },
+            })
+          }
+        />
+
+        <SettingsGroupLabel>ACCOUNT</SettingsGroupLabel>
+        {/* Short fixed label, not the address: the screen this opens has room for it. */}
+        <SettingsRow
+          icon="lock-outline"
+          label="Account & Security"
+          value="Login email and password"
+          onPress={() => router.push('/(organisation)/account-security')}
+        />
+        {/*
+          A SECOND DOOR TO THE SAME SCREEN (owner, 2026-09-21: "where is delete
+          account? I cannot find it"). Deliberately NOT called "Delete":
+          closure anonymises and revokes while keeping the record of work, and
+          calling that a deletion would be a promise the app does not keep.
+        */}
+        <SettingsRow
+          icon="account-remove-outline"
+          label="Close Account"
+          value="Remove your details and leave VHub"
+          onPress={() => router.push('/(organisation)/account-security')}
+        />
+        {/*
+          POINTS AT SETTINGS, NOT AT THE INBOX (owner, 2026-09-21). A row under
+          a preferences heading that opened a list of messages was the bug.
+        */}
+        <SettingsRow
+          icon="bell-outline"
+          label="Notifications"
+          value="Push notifications on this device"
+          onPress={() => router.push('/(organisation)/notification-settings')}
+        />
+
+        <SettingsGroupLabel>ABOUT</SettingsGroupLabel>
+        <SettingsRow
+          icon="information-outline"
           label="How VHub works"
+          value="Matching, the V-Score, and what verification is for"
           onPress={() =>
             router.push({
               pathname: '/(organisation)/info-hub',
@@ -123,9 +165,22 @@ export default function OrganisationProfile() {
             })
           }
         />
-      </View>
+        <SettingsRow
+          icon="shield-lock-outline"
+          label="Privacy Policy"
+          value="What VHub knows, and what it never keeps"
+          onPress={() => router.push('/policy?from=/(organisation)/profile')}
+        />
+        <SettingsRow
+          icon="file-document-outline"
+          label="Terms of Use"
+          value="What you and organisations each promise"
+          onPress={() => router.push('/policy?tab=terms&from=/(organisation)/profile')}
+        />
 
-      {/* Sign Out lives in Settings (the gear above), not here. */}
+        <View style={styles.signOutBlock}>
+          <SignOutButton />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -138,33 +193,14 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: spacing.xl,
-    // The tab bar carries the device inset itself; this is the room above it,
-    // generous enough that the last card clears the bar at a large font size.
     paddingBottom: spacing.xxl,
   },
   header: {
     fontFamily: fontFamily.bold,
     fontSize: 24,
     color: colors.textPrimary,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginTop: spacing.base,
     marginBottom: spacing.xl,
-  },
-  gearButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gearPressed: {
-    opacity: 0.7,
   },
   identity: {
     flexDirection: 'row',
@@ -176,13 +212,10 @@ const styles = StyleSheet.create({
     rowGap: spacing.md,
     gap: spacing.base,
   },
-  actions: {
-    marginTop: spacing.xl,
-  },
   identityText: {
-    // Takes the remaining width so a long organisation name wraps inside the
-    // card instead of pushing the badge off its edge.
     flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   name: {
     fontFamily: fontFamily.semiBold,
@@ -197,8 +230,9 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
-    marginTop: spacing.base,
+    marginTop: spacing.md,
   },
   badge: {
     backgroundColor: 'rgba(255, 107, 107, 0.12)',
@@ -210,5 +244,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.medium,
     fontSize: 12,
     color: colors.primary,
+  },
+  signOutBlock: {
+    marginTop: spacing.xl,
   },
 });

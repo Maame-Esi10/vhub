@@ -1,3 +1,5 @@
+export { VScoreCard } from './VScoreCard';
+export type { VScoreCardProps } from './VScoreCard';
 export { MatchScoreBadge } from './MatchScoreBadge';
 export type { MatchScoreBadgeProps } from './MatchScoreBadge';
 export { MatchBreakdownSheet } from './MatchBreakdownSheet';

@@ -184,7 +184,7 @@ export default function VolunteerVerifyIdentity() {
     lands back in the inbox whatever their status is. See ScreenHeader.
   */
   const backFallback =
-    status === 'documents_pending' ? '/(volunteer)/feed' : '/(volunteer)/settings';
+    status === 'documents_pending' ? '/(volunteer)/feed' : '/(volunteer)/profile';
 
   function handleSign() {
     if (!user || !confirmed) return;

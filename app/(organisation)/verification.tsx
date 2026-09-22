@@ -214,7 +214,7 @@ export default function OrganisationVerification() {
   if (submissionQuery.isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Organisation Verification" fallback="/(organisation)/settings" />
+        <ScreenHeader title="Organisation Verification" fallback="/(organisation)/profile" />
         <View style={styles.stateWrap}>
           <ListSkeleton rows={3} rowHeight={96} />
         </View>
@@ -225,7 +225,7 @@ export default function OrganisationVerification() {
   if (submissionQuery.isError) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Organisation Verification" fallback="/(organisation)/settings" />
+        <ScreenHeader title="Organisation Verification" fallback="/(organisation)/profile" />
         <View style={styles.stateWrap}>
           <ErrorState
             message={
@@ -240,7 +240,7 @@ export default function OrganisationVerification() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Organisation Verification" fallback="/(organisation)/settings" />
+      <ScreenHeader title="Organisation Verification" fallback="/(organisation)/profile" />
 
       {/*
         THE REASON FIELD WAS BEHIND THE KEYBOARD (owner-reported, 2026-09-22).
