@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "./supabaseAdmin";
-import { dispatchExpoPush, type ExpoPushMessage } from "./expoPush";
+import { dispatchExpoPush, type ExpoPushMessage, type ExpoPushResult } from "./expoPush";
 
 /**
  * The single way to notify a user.
@@ -32,8 +32,19 @@ export interface UserNotification {
   tokens: readonly string[];
 }
 
-export async function notifyUsers(notifications: readonly UserNotification[]): Promise<void> {
-  if (notifications.length === 0) return;
+/**
+ * Records the in-app row for each notification, then pushes to every device.
+ *
+ * RETURNS WHAT THE PUSH SERVICE SAID, which callers are free to ignore and one
+ * deliberately does not: the test-dispatch action exists to prove the push path
+ * works, so for that one caller a silent failure is the entire bug. Everywhere
+ * else this stays best-effort -- the row above is the source of truth and a
+ * push is a courtesy on top of it.
+ */
+export async function notifyUsers(
+  notifications: readonly UserNotification[]
+): Promise<ExpoPushResult> {
+  if (notifications.length === 0) return { accepted: 0, failed: 0, failures: [] };
 
   // One batched insert rather than one per user: notifyCandidates can fan out
   // to every matching volunteer in a region.
@@ -68,5 +79,5 @@ export async function notifyUsers(notifications: readonly UserNotification[]): P
     }
   }
 
-  await dispatchExpoPush(messages);
+  return dispatchExpoPush(messages);
 }

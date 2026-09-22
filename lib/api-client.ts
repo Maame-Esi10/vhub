@@ -691,13 +691,40 @@ export function registerPushToken(
   );
 }
 
-/** Sends a push to the caller's own registered device(s). Manual QA only -- cannot target anyone else. */
+/** Why Expo would not deliver a push, in its own words. */
+export interface PushFailure {
+  /**
+   * Expo's error code. `MismatchSenderId` and `InvalidCredentials` both mean
+   * the Android FCM credential is wrong, which is the fault that reports
+   * success and delivers nothing. `DeviceNotRegistered` means the token is
+   * dead: the app was uninstalled or its data cleared.
+   */
+  code: string | null;
+  message: string;
+}
+
+export interface TestPushResponse {
+  /** Messages Expo ACCEPTED. Not a delivery confirmation -- see below. */
+  dispatched: number;
+  /** Devices registered to this account, which is what was attempted. */
+  tokens: number;
+  failures: PushFailure[];
+}
+
+/**
+ * Sends a push to the caller's own registered device(s). Cannot target anyone
+ * else.
+ *
+ * `dispatched` counts what EXPO ACCEPTED, not what arrived. It used to count
+ * rows in `push_tokens`, which is a number the push service never sees and
+ * which reported success while every message was being rejected.
+ */
 export function sendTestPush(
   title: string,
   body: string,
   options?: RequestOptions
-): Promise<{ dispatched: number }> {
-  return apiPost<{ dispatched: number }>(
+): Promise<TestPushResponse> {
+  return apiPost<TestPushResponse>(
     API_ROUTES.notifications,
     { action: 'test-dispatch', title, body },
     options

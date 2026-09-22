@@ -27,7 +27,17 @@ Every phase of the build order is complete, as is the admin phase that followed 
 
 What is left is an audit, an EAS build and device testing, not features.
 
-Two screens have Figma designs and no implementation, and both are deliberate rather than forgotten. **Map discovery** would need a map dependency, a native rebuild and either a geocoding step or a coordinates column, none of which the rest of the app needs; the region filter and keyword search already answer the question it would answer. **Rate Organization** would need a new table and a decision about whether a volunteer's rating of an organisation is public, which is a reputation system rather than a screen. Neither is a gap left by accident.
+### Scoped out, on purpose
+
+Three things are deliberately not in this version. Each is recorded here so it reads as a decision rather than as an omission, and each has its reasoning in full in [docs/REPORT_NOTES.md](docs/REPORT_NOTES.md).
+
+| | Why it is out | What it would take |
+|---|---|---|
+| **iOS** | Untestable without an Apple Developer membership, which is a cost rather than a technical limit. Nothing in the code is Android-only. | `ios.bundleIdentifier`, an APNs key, and a device to verify on. EAS builds iOS in the cloud, so no Mac is needed. |
+| **Map discovery** | An outreach stores a region, a district and a venue name, and **no coordinates**, so there is nothing to place on a map. The region filter and keyword search already answer "what is near me". | A map dependency and a native rebuild, plus either a geocoding step or a coordinates column and a way to fill it for events that already exist. |
+| **Rate Organization** | A volunteer rating an organisation is a reputation system, not a screen: it needs decisions about who can see a rating, what it feeds, and what stops a rejected applicant leaving a punitive one. | A new table, and those decisions made first. The V-Score exists for volunteers and there is no counterpart for organisations. |
+
+All three have Figma designs. Designs being complete is not the same as the data supporting them, and where the two disagree this repository follows the data.
 
 ## Platform support
 
@@ -40,7 +50,7 @@ It has never been built or run on iOS, and two things would have to be added bef
 - **`ios.bundleIdentifier` in `app.json`.** Every iOS build needs one, and like the Android `package` it is permanent once published.
 - **An APNs key uploaded to Expo.** `google-services.json` is the Android push credential; iOS push needs its own, and without it push would silently not work on iOS while everything else did.
 
-Both of those, and installing on a physical iPhone at all, require a paid Apple Developer Program membership. EAS builds iOS on Apple hardware in the cloud, so a Mac is not needed; the developer account is. Until that exists, anything iOS-specific here is untested by definition, and this section is the honest statement of that rather than a claim of cross-platform support.
+Both of those, and installing on a physical iPhone at all, require a paid Apple Developer Program membership. EAS builds iOS on Apple hardware in the cloud, so **a Mac is not needed; the developer account is**. Until that exists, anything iOS-specific here is untested by definition, and this section is the honest statement of that rather than a claim of cross-platform support.
 
 ## Quick start
 

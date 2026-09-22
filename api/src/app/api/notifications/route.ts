@@ -198,7 +198,7 @@ async function testDispatch(userId: string, title: string, message: string) {
   // Keeps the "no token registered" guard above -- this action exists to prove
   // the PUSH path works, so having nothing to push to is a real failure here,
   // unlike the four production sites where the in-app row stands on its own.
-  await notifyUsers([
+  const push = await notifyUsers([
     {
       userId,
       type: "test",
@@ -207,5 +207,23 @@ async function testDispatch(userId: string, title: string, message: string) {
       tokens: tokens.map((t) => t.expo_push_token as string),
     },
   ]);
-  return { dispatched: tokens.length };
+
+  /*
+    `dispatched` USED TO BE `tokens.length`, which is a count of rows in a table
+    and says nothing whatsoever about whether a notification was sent. The app
+    reported "test sent to this device" on the strength of it while Expo was
+    rejecting the message, which is how "it says it sent and my phone never
+    buzzes" became unanswerable. It is now the number Expo ACCEPTED, and the
+    reason for anything it did not is passed straight through so the screen can
+    name it rather than guess.
+
+    Accepted is still not delivered -- Expo hands off to Google and the phone
+    may be asleep, in Doze, or have the channel switched off -- and the copy on
+    the screen says so.
+  */
+  return {
+    dispatched: push.accepted,
+    tokens: tokens.length,
+    failures: push.failures,
+  };
 }

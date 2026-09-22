@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
@@ -37,13 +39,38 @@ export type NotificationFilter = 'all' | 'matches' | 'updates';
  * Not filtered in SQL. The list is small and per-user, and holding one cached
  * array lets the three tabs switch instantly and share an unread count without
  * three separate queries.
+ *
+ * IT REFETCHES WHEN THE SCREEN COMES INTO VIEW (owner-reported, 2026-09-22: a
+ * notification written at 5:13 was not on the list at 5:15 and appeared, dated
+ * "3m ago", only after a manual pull to refresh).
+ *
+ * The rows were there the whole time. Nothing was ever going to fetch them:
+ * React Query refetches a stale query when its component MOUNTS, and this
+ * screen lives inside a tab navigator, which mounts it once and then keeps it
+ * alive for the life of the session. Its other trigger, `refetchOnWindowFocus`,
+ * is a browser idea -- there is no window to focus on a phone. So between one
+ * mount and the next app restart the only thing that could refresh this list
+ * was the user dragging it down, and a person who has not been told a
+ * notification exists has no reason to drag.
+ *
+ * `useFocusEffect` is the mobile equivalent of the focus event: it fires every
+ * time the screen is navigated to, including a tab switch. Paired with the
+ * one-minute `staleTime` it costs one query per visit at most, which for a
+ * per-user table capped at 100 rows is nothing.
+ *
+ * THIS IS NOT A SUBSTITUTE FOR PUSH and must not be treated as one. It closes
+ * the case where somebody opens the inbox themselves; it does nothing for
+ * somebody who has no idea there is anything to open.
  */
 export function useNotifications() {
   const userId = useAuthStore((state) => state.user?.id);
-
-  return useQuery({
+  const query = useQuery({
     queryKey: notificationKeys.list(userId ?? 'anonymous'),
     enabled: !!userId,
+    // Long enough that switching between the three tabs and returning within a
+    // minute does not re-query, short enough that arriving at the screen at all
+    // gets fresh rows.
+    staleTime: 60_000,
     queryFn: async (): Promise<AppNotification[]> => {
       const { data, error } = await supabase
         .from('notifications')
@@ -57,6 +84,21 @@ export function useNotifications() {
       return (data ?? []) as AppNotification[];
     },
   });
+
+  /*
+    `refetch` is stable across renders, so this runs on focus and not on every
+    render that happens to follow one. It deliberately does NOT depend on
+    `query` itself, which is a new object each render and would make the
+    callback new each render too.
+  */
+  const refetch = query.refetch;
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) void refetch();
+    }, [refetch, userId])
+  );
+
+  return query;
 }
 
 export function filterNotifications(

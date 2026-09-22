@@ -103,22 +103,45 @@ export function NotificationSettingsScreen({
         'If you can read this on your phone, VHub push notifications are working.'
       ),
     onSuccess: (result) => {
-      setNotice(
-        result.dispatched > 0
-          ? {
-              tone: 'success' as const,
-              title: 'Test sent',
-              message:
-                'It went to ' +
-                (result.dispatched === 1 ? 'this device' : `${result.dispatched} devices`) +
-                '. If nothing appears on your phone within a minute, the problem is in delivery rather than in VHub. It has been added to your notifications list either way.',
-            }
-          : {
-              title: 'No device is registered',
-              message:
-                'This phone is not set up to receive pushes, even though the switch is on. Turn the switch off and on again to register it, then send another test.',
-            }
-      );
+      /*
+        THREE OUTCOMES, THREE DIFFERENT FAULTS. The old version had two, and
+        the one it was missing is the one that was actually happening: Expo
+        answers 200 for a request it ACCEPTED and then reports per-message
+        failures in the body, so a push that could never be delivered looked
+        identical to one that was. See server/expoPush.ts.
+      */
+      if (result.failures.length > 0) {
+        const failure = result.failures[0]!;
+        const credentialFault =
+          failure.code === 'MismatchSenderId' || failure.code === 'InvalidCredentials';
+        const deadToken = failure.code === 'DeviceNotRegistered';
+
+        setNotice({
+          title: 'The notification was refused',
+          message: credentialFault
+            ? 'The push service will not deliver to this app. This is a setup problem in the build rather than anything on your phone, and no amount of changing settings here will fix it. Nothing else about VHub is affected.'
+            : deadToken
+              ? 'This phone is registered under an old install of VHub. Turn the switch off and on again to register it fresh, then send another test.'
+              : failure.message,
+        });
+        return;
+      }
+
+      if (result.dispatched === 0) {
+        setNotice({
+          title: 'No device is registered',
+          message:
+            'This phone is not set up to receive notifications, even though the switch is on. Turn the switch off and on again to register it, then send another test.',
+        });
+        return;
+      }
+
+      setNotice({
+        tone: 'success' as const,
+        title: 'Test sent',
+        message:
+          'The push service accepted it. If nothing appears on your phone within a minute, it is being blocked after that point, usually by battery saving. It has been added to your notifications list either way.',
+      });
     },
     onError: (error) => {
       setNotice({

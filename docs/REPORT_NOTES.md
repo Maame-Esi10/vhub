@@ -6214,3 +6214,93 @@ thing they guard is broken.
 empty box on an Android that is otherwise perfectly capable of running the app,
 and nothing reports it. That is the same class of invisible fault as the icon
 name, arriving by a different door.
+
+## Map discovery and Rate Organization are scoped out (decided 2026-09-22)
+
+Both have Figma designs and neither is built. The owner asked for them to be
+recorded as future improvements alongside iOS, which is the right call for both,
+and the reasons are different enough to be worth separating.
+
+**Map discovery is blocked on data, not on effort.** An outreach stores a
+region, a district and a venue NAME. It has no coordinates and nothing in the
+schema has ever produced any. A map screen therefore has nothing to place on it,
+and the work is not the screen: it is a map dependency, a native rebuild, and
+then either a geocoding step at creation time or a coordinates column plus a way
+to fill it for every outreach that already exists. Against that, the question a
+map answers -- "what is happening near me" -- is already answered by the region
+filter on the feed and, since today, by keyword search over the venue and
+district. It would be a large change buying a second route to an answer the app
+already gives.
+
+**Rate Organization is blocked on a decision, not on data.** `event_reviews` is
+one-directional by design: it is the organisation's review of a volunteer, and
+it feeds the V-Score. The reverse is not a mirror of it. It needs answers first:
+is a volunteer's rating of an organisation visible to other volunteers, does it
+feed anything or is it advisory, and what stops a rejected applicant leaving a
+punitive review of the organisation that rejected them. Those are product
+questions with consequences for people's reputations, and building the table
+before answering them would settle them by accident.
+
+**The general point, which applies to the whole `design-refs/` folder:** a
+completed design is not evidence that the data supports it. Three screens in
+that folder promise things the schema cannot supply -- a match percentage on a
+search result, a distance in miles, a map pin -- and in every case the honest
+move was to narrow the promise in the copy or to leave the screen unbuilt, never
+to invent the number. Where a design and the data disagree, this repository
+follows the data and says so.
+
+## The push said it worked because nothing read the answer (2026-09-22)
+
+The owner tapped the new test-push button. The in-app row appeared, the app
+reported the test had been sent, and **the phone never made a sound.** That
+combination was, until now, undiagnosable from inside VHub, and the reason is a
+single unread response body.
+
+`dispatchExpoPush` fired the request and checked the HTTP status. That is the
+wrong thing to check, in the most misleading possible direction. **Expo answers
+200 for a request it has ACCEPTED**, then reports what happened to each
+individual message in a ticket array in the body. A push that can never be
+delivered -- an Android FCM credential that does not match the one compiled into
+the installed app, a token belonging to an app since reinstalled -- comes back as
+200 with an error ticket saying exactly which of those it is. So the one place
+the real reason was written was the one place nothing looked.
+
+It was made worse by what the endpoint returned. `dispatched` was
+`tokens.length`: a count of rows in our own table, a number the push service
+never sees. The app reported "sent to this device" on the strength of it while
+every message was being rejected. **A success figure that cannot fail is not a
+success figure.**
+
+Now: the tickets are parsed, each distinct failure is logged with its Expo error
+code, `dispatched` counts what Expo ACCEPTED, and the reason travels back to the
+screen so it can name the fault instead of guessing. `MismatchSenderId` and
+`InvalidCredentials` both mean the build's push credential is wrong and no
+setting on the phone will help; `DeviceNotRegistered` means the token is dead
+and re-registering fixes it. The copy distinguishes them, and says plainly that
+accepted is still not delivered.
+
+**This is the same rule, broken in a third place.** "Do not fail loudly here"
+must be implemented as *record it where it can still be read*, never as *forget
+it*. The swallowed email failures and the discarded post-sign-in auth error were
+the first two.
+
+## A notification written at 5:13 was not on the list at 5:15 (2026-09-22)
+
+The rows were there the whole time. Nothing was ever going to fetch them.
+
+React Query refetches a stale query when its component MOUNTS. The notifications
+screen lives inside a tab navigator, which mounts it once and then keeps it
+alive for the rest of the session. Its other trigger, `refetchOnWindowFocus`, is
+a browser idea: there is no window to focus on a phone. So between one mount and
+the next app restart, **the only thing that could refresh the inbox was the user
+dragging it down** -- and somebody who has not been told a notification exists
+has no reason to drag.
+
+`useFocusEffect` is the mobile equivalent of the focus event and fires on every
+navigation to the screen, tab switches included. With a one-minute `staleTime`
+it costs at most one query per visit on a per-user table capped at 100 rows.
+
+**It is not a substitute for push and must not be read as one.** It closes the
+case where somebody opens the inbox themselves. It does nothing at all for
+somebody who does not know there is anything to open, which is the case push
+exists for and the reason the delivery fault above still matters.
