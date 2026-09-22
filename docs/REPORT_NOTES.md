@@ -6027,3 +6027,81 @@ caller's own devices.
 the operating system permission, which is a separate thing from the row in
 `push_tokens`, and the two can disagree in exactly this direction: permission
 granted, token never written. That is the case the test names.
+
+---
+
+## Search, and the three things it could not honestly show (2026-09-22)
+
+`app/(volunteer)/search.tsx` had been a twelve-line stub rendering the word
+"Search" since the scaffold, registered with `href: null` and linked from
+nowhere. The design for it had existed the whole time.
+
+**The gap it filled was real and larger than the screen.** The feed filters by
+region and role type and orders by match, which answers "what suits me". Nothing
+in the app could answer "where is the eye screening in Kumasi", so finding one
+specific thing meant scrolling a ranked list until it appeared.
+
+**The searching itself is two queries, not one clever one.** The text columns go
+through `.or()` with `ilike`; the required skills go through a second request
+using an array overlap. Folding the array into the same `.or()` is possible in
+principle and fragile in practice, because the array literal's own commas
+collide with the comma that separates one filter from the next, and the failure
+mode is not an error but a query that quietly matches the wrong rows. Two
+bounded requests merged by id are cheaper than that bug.
+
+**The skill search goes through the vocabulary rather than the column**, which
+is the part worth keeping. Skills are a closed list, so the term is resolved to
+real skill names on the client before the query runs. That is what makes
+"triage" find an outreach whose description never uses the word, and it costs
+nothing, because the list is already in the bundle.
+
+### Three things the design shows that the app cannot truthfully draw
+
+This is the part that generalises. Each was a small decision and each one was a
+choice between an honest gap and a plausible fabrication.
+
+- **The match percentage.** `/api/match`'s `rank_feed` mode ranks a REGION, not
+  an arbitrary list of ids, so a text query has no score to fetch.
+  `MatchScoreBadge` already refuses to invent one and renders "NOT RANKED YET"
+  instead, which is exactly right on the feed, where an unranked card means the
+  ranking service was unreachable. On the search results it would be a row of
+  identical pills reporting an outage that is not happening. The card gained
+  `showMatchScore` and search passes false.
+- **"1.2 miles away".** An outreach stores a region, a district and a venue
+  name, and no coordinates. There is nothing to measure from.
+- **"Runs this week".** The date chips are measured from the day an outreach
+  STARTS, because that is what `outreaches.date` holds. The broader reading
+  would mean consulting `outreach_days`, whose answer arrives after the list is
+  already drawn and would then change it under the volunteer's thumb. So the
+  chips say "Starting today" and "Next 7 days" and the result line says
+  "starting", and the narrower meaning is stated rather than implied.
+
+**The rule these share:** where the data cannot support what a design promises,
+the options are to narrow the promise or to fabricate. Narrowing is only
+acceptable when the narrower claim is made out loud, which is why all three of
+these are visible in the copy rather than buried in a comment.
+
+## A sentence that told an admin the opposite of what the code does (2026-09-22)
+
+`app/(admin)/disputes.tsx` told the admin, on the screen where a dispute is
+decided: "Upholding records the correction and tells both parties. It does not
+recalculate the volunteer's V-Score. That change is separate and is not switched
+on."
+
+That was true when it was written and stopped being true on 2026-08-26, when the
+V-Score reversal was approved. Upholding now voids the disputed event and
+replays the volunteer's entire history on top of that. The endpoint's own
+docstring says so in full; only the screen was left behind.
+
+**It is not a cosmetic slip, and the reason is the placement.** The sentence sat
+directly above the reason field, at the moment the admin was weighing whether to
+uphold. It told them the decision was symbolic. A marginal dispute could
+therefore be upheld in the belief that it cost the organisation nothing, or
+refused in the belief that upholding would achieve nothing for the volunteer.
+Both are real decisions made on a false premise supplied by us.
+
+**The general form:** when a gate opens, the copy on the screen that describes
+the gate is part of the change. CLAUDE.md already carries this rule for the
+privacy policy, where a claim that stops describing the code IS the bug. It
+applies to every explanatory sentence in the app, and explanatory sentences
+attached to a decision are the ones where it costs most.

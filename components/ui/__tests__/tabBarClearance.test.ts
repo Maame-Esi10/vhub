@@ -29,7 +29,6 @@ const GROUPS = ['(volunteer)', '(organisation)', '(admin)'] as const;
  */
 const EXEMPT: Record<string, string> = {
   '(volunteer)/map': 'placeholder stub: a centred label, no controls',
-  '(volunteer)/search': 'placeholder stub: a centred label, no controls',
   '(volunteer)/scan': 'full-bleed camera; its buttons are vertically centred, never at the bottom',
 };
 

@@ -154,6 +154,25 @@ export default function Feed() {
               : 'Find outreaches that need you'}
           </Text>
         </View>
+        {/*
+          THE WAY INTO SEARCH, and the only one. The screen is registered with
+          `href: null`, so it has no tab button; without this it existed and was
+          unreachable, which is what it had been since the scaffold.
+
+          Beside the bell rather than as a full search bar across the header:
+          the feed is a ranked list a volunteer is meant to read, and a search
+          box at the top of it says the opposite, that the list below is a
+          starting point to be typed past.
+        */}
+        <Pressable
+          onPress={() => router.push('/(volunteer)/search')}
+          accessibilityRole="button"
+          accessibilityLabel="Search outreaches"
+          hitSlop={8}
+          style={({ pressed }) => [styles.bellButton, pressed && styles.pressed]}
+        >
+          <MaterialCommunityIcons name="magnify" size={20} color={colors.textPrimary} />
+        </Pressable>
         <Pressable
           onPress={() => router.push('/(volunteer)/notifications')}
           accessibilityRole="button"

@@ -3,6 +3,7 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import { ApiClientError, rankFeed, setOutreachStatus } from '@/lib/api-client';
 import type { Layer1MatchResult } from '@/lib/matching/layer1';
 import { supabase } from '@/lib/supabase';
+import { ALL_SKILLS } from '@/constants/skills';
 import type {
   ApplicationStatus,
   Outreach,
@@ -21,6 +22,15 @@ export const outreachKeys = {
     [...outreachKeys.all, 'feed', filters.region ?? 'all', filters.roleType ?? 'all'] as const,
   rankedFeed: (filters: FeedFilters) =>
     [...outreachKeys.all, 'ranked-feed', filters.region ?? 'all', filters.roleType ?? 'all'] as const,
+  search: (filters: OutreachSearchFilters) =>
+    [
+      ...outreachKeys.all,
+      'search',
+      filters.query.trim().toLowerCase(),
+      filters.region ?? 'all',
+      filters.roleType ?? 'all',
+      filters.window,
+    ] as const,
 };
 
 /** Per-status applicant tally for one outreach, plus a `total` across all statuses. */
@@ -331,6 +341,176 @@ export function usePublicOrganisationOutreaches(organisationId: string | undefin
       }
 
       return (data ?? []) as Outreach[];
+    },
+  });
+}
+
+/** Bounds each search request. Doubled across the two, which is still a small page. */
+const SEARCH_LIMIT = 50;
+
+/** How long a term has to be before it is worth a round trip. */
+export const MIN_SEARCH_LENGTH = 2;
+
+/** How far ahead a search looks, measured from the day an outreach STARTS. */
+export type OutreachSearchWindow = 'any' | 'today' | 'week' | 'month';
+
+export interface OutreachSearchFilters {
+  /** What the volunteer typed. Trimmed and sanitised before it reaches the query. */
+  query: string;
+  /** Ghana region name, or null for every region. */
+  region: string | null;
+  roleType: OutreachRoleType | null;
+  window: OutreachSearchWindow;
+}
+
+/**
+ * Characters that would be read as PostgREST filter GRAMMAR rather than as part
+ * of what the volunteer typed.
+ *
+ * `.or()` takes a comma-separated list inside parentheses and `ilike` treats
+ * `*` as its wildcard, so a search for "screening, eye (adults)" would be split
+ * into several filters and either fail or, worse, succeed and mean something
+ * nobody asked for. This is NOT about SQL injection: supabase-js parameterises
+ * the values it sends, so the risk here is a broken or wrong query rather than
+ * an unsafe one. Stripped rather than escaped because none of these characters
+ * carries meaning in a search for an outreach, so there is nothing to preserve.
+ */
+const FILTER_GRAMMAR = /[,()*%\\"']/g;
+
+/**
+ * `YYYY-MM-DD` bounds for a search window, or null where that end is open.
+ *
+ * MEASURED FROM THE DAY AN OUTREACH STARTS, which is what `outreaches.date`
+ * holds, and the screen's result line says "starting" for exactly that reason.
+ * The alternative reading -- "runs at any point inside this week" -- would have
+ * to consult `outreach_days`, a second query whose result arrives after the
+ * first and would silently change the list under the volunteer's thumb. A
+ * filter that reorders itself a second after it is tapped is worse than one
+ * with a narrower meaning, as long as the meaning is stated.
+ */
+function searchWindowBounds(window: OutreachSearchWindow): { from: string; to: string | null } {
+  const today = new Date();
+  const from = today.toISOString().slice(0, 10);
+  if (window === 'any') return { from, to: null };
+  if (window === 'today') return { from, to: from };
+
+  const end = new Date(today);
+  end.setDate(end.getDate() + (window === 'week' ? 7 : 30));
+  return { from, to: end.toISOString().slice(0, 10) };
+}
+
+/** Skills from the closed vocabulary whose name contains the term. */
+function skillsMatching(term: string): string[] {
+  const needle = term.toLowerCase();
+  return ALL_SKILLS.filter((skill) => skill.toLowerCase().includes(needle));
+}
+
+/**
+ * Keyword search over open, upcoming outreaches.
+ *
+ * WHY IT EXISTS. The feed filters by region and role type and orders by match,
+ * which answers "what suits me". Nothing in the app could answer "where is the
+ * eye screening in Kumasi": there was no keyword search anywhere, so finding a
+ * specific thing meant scrolling the feed.
+ *
+ * TWO QUERIES, MERGED, RATHER THAN ONE CLEVER ONE. The text columns are matched
+ * with `ilike` through `.or()`; the required skills are matched with an array
+ * overlap in a SECOND request. Folding the array into the same `.or()` is
+ * possible in principle and fragile in practice, because the array literal's
+ * own commas collide with the comma that separates one filter from the next,
+ * and the failure mode is a query that quietly matches the wrong rows. Two
+ * bounded requests are cheaper than a subtle bug.
+ *
+ * THE SKILL SEARCH GOES THROUGH THE VOCABULARY, not through the column. Skills
+ * are a closed list in constants/skills.ts, so the term is resolved to real
+ * skill names on the client and the query then asks for outreaches requiring
+ * any of them. That is what makes "triage" find an outreach whose description
+ * never uses the word.
+ *
+ * NOT RANKED, DELIBERATELY. `/api/match`'s `rank_feed` mode ranks a region, not
+ * an arbitrary list of ids, so there is no honest match score to put on these
+ * cards. They are ordered by the soonest event instead, which is the useful
+ * order for somebody looking for something specific to attend.
+ */
+export function useSearchOutreaches(filters: OutreachSearchFilters) {
+  const term = filters.query.trim();
+  const hasTerm = term.length >= MIN_SEARCH_LENGTH;
+  const hasFilter =
+    filters.region !== null || filters.roleType !== null || filters.window !== 'any';
+
+  return useQuery({
+    queryKey: outreachKeys.search(filters),
+    // Nothing typed and nothing chosen is not an empty result; it is a screen
+    // that has not been asked anything yet, and the screen says so.
+    enabled: hasTerm || hasFilter,
+    queryFn: async (): Promise<OutreachWithOrganisation[]> => {
+      const { from, to } = searchWindowBounds(filters.window);
+
+      const base = () => {
+        let q = supabase
+          .from('outreaches')
+          .select(OUTREACH_WITH_ORGANISATION_SELECT)
+          .eq('status', 'open')
+          // `gte`, not `gt` -- an event happening TODAY is still happening.
+          .gte('date', from);
+
+        if (to) q = q.lte('date', to);
+        if (filters.region) q = q.eq('region', filters.region);
+        if (filters.roleType) q = q.eq('role_type', filters.roleType);
+        return q;
+      };
+
+      const safe = term.replace(FILTER_GRAMMAR, ' ').trim();
+      const requests = [];
+
+      if (hasTerm && safe.length > 0) {
+        const like = `*${safe}*`;
+        requests.push(
+          base()
+            .or(
+              [
+                `title.ilike.${like}`,
+                `description.ilike.${like}`,
+                `location_name.ilike.${like}`,
+                `district.ilike.${like}`,
+                `region.ilike.${like}`,
+              ].join(',')
+            )
+            .order('date', { ascending: true })
+            .limit(SEARCH_LIMIT)
+        );
+
+        const skills = skillsMatching(safe);
+        if (skills.length > 0) {
+          requests.push(
+            base()
+              .overlaps('required_skills', skills)
+              .order('date', { ascending: true })
+              .limit(SEARCH_LIMIT)
+          );
+        }
+      } else {
+        // Filters only, no term: this is browsing rather than searching, and
+        // the same query without the text predicate is exactly right for it.
+        requests.push(base().order('date', { ascending: true }).limit(SEARCH_LIMIT));
+      }
+
+      const responses = await Promise.all(requests);
+      const failure = responses.find((response) => response.error);
+      if (failure?.error) {
+        throw new Error(failure.error.message || 'Could not run that search. Please try again.');
+      }
+
+      // Merged by id: an outreach whose title AND required skills both match
+      // comes back from both requests and must appear once.
+      const byId = new Map<string, OutreachWithOrganisation>();
+      for (const response of responses) {
+        for (const row of (response.data ?? []) as unknown as OutreachWithOrganisation[]) {
+          if (!byId.has(row.id)) byId.set(row.id, row);
+        }
+      }
+
+      return [...byId.values()].sort((a, b) => a.date.localeCompare(b.date));
     },
   });
 }

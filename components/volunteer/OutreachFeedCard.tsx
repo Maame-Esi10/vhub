@@ -40,6 +40,23 @@ export interface OutreachFeedCardProps {
    * the whole list in one query instead of one per card.
    */
   days?: readonly string[];
+  /**
+   * Whether to draw the match pill at all.
+   *
+   * SEARCH TURNS IT OFF. MatchScoreBadge deliberately renders "NOT RANKED YET"
+   * rather than a plausible-looking number when it has no score, which is right
+   * on the feed, where an unranked card means the ranking service was
+   * unreachable and the volunteer should know. It is wrong on the search
+   * results, where NOTHING is ever ranked: `/api/match`'s rank_feed mode ranks
+   * a region rather than an arbitrary list of ids, so there is no score to
+   * fetch. A row of identical "NOT RANKED YET" pills would report an outage
+   * that is not happening.
+   *
+   * This is a stated departure from design-refs/Search Results.png, which shows
+   * a match percentage on each result. The design is right about what would be
+   * best; the honest options today are no pill or a fabricated one.
+   */
+  showMatchScore?: boolean;
 }
 
 /**
@@ -59,6 +76,7 @@ export function OutreachFeedCard({
   onPressScore,
   roleSummary,
   days,
+  showMatchScore = true,
 }: OutreachFeedCardProps) {
   const slotsLeft = Math.max(0, outreach.slots_total - outreach.slots_filled);
   const timeRange = formatEventTimeRange(outreach.start_time, outreach.end_time);
@@ -85,7 +103,9 @@ export function OutreachFeedCard({
     >
       <FlyerBackground uri={outreach.flyer_url} style={styles.header}>
         <View style={styles.headerContent}>
-          <MatchScoreBadge score={matchScore} onDark onPress={onPressScore} />
+          {showMatchScore ? (
+            <MatchScoreBadge score={matchScore} onDark onPress={onPressScore} />
+          ) : null}
           <View style={styles.orgRow}>
             <Avatar
               name={outreach.organisation?.org_name ?? 'Organisation'}

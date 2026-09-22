@@ -163,9 +163,26 @@ export default function AdminDisputes() {
                       )}
                     </View>
 
+                    {/*
+                      THIS SENTENCE USED TO SAY THE OPPOSITE, and it said it on
+                      the screen where the decision is taken: "it does not
+                      recalculate the volunteer’s V-Score. That change is
+                      separate and is not switched on." That stopped being true
+                      on 2026-08-26 when the reversal was approved, and nothing
+                      brought the copy with it.
+
+                      It is not a cosmetic slip. It told an admin that upholding
+                      costs nothing at the exact moment they were weighing
+                      whether to uphold, so a marginal dispute could be upheld
+                      believing it was symbolic, or refused believing it would
+                      achieve nothing. Upholding VOIDS the disputed event and
+                      replays the volunteer’s whole history on top of that.
+                    */}
                     <Text style={styles.limitNote}>
-                      Upholding records the correction and tells both parties. It does not recalculate the
-                      volunteer’s V-Score. That change is separate and is not switched on.
+                      Upholding tells both parties and moves the volunteer’s V-Score: the disputed
+                      event stops counting and their history is recalculated without it. It does not
+                      change the attendance record or the review themselves, which stay as written.
+                      Rejecting moves nothing.
                     </Text>
 
                     <Input
