@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar, Badge, ConfirmDialog, VScoreBadge } from '@/components/ui';
+import { Avatar, Badge, ConfirmDialog, ErrorAlert, VScoreBadge } from '@/components/ui';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { EXPERIENCE_LEVELS, VOLUNTEER_CATEGORIES } from '@/constants/categories';
@@ -115,7 +115,12 @@ export function ApplicantCard({
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Avatar name={name} uri={profile?.avatar_url} size={48} />
+        <Avatar
+          name={name}
+          uri={profile?.avatar_url}
+          size={48}
+          verified={volunteer?.verification_status === 'verified'}
+        />
         <View style={styles.identity}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
@@ -174,6 +179,7 @@ export function ApplicantCard({
       ) : null}
 
       {onViewCredential ? (
+        <>
         <Pressable
           onPress={onViewCredential}
           accessibilityRole="button"
@@ -188,6 +194,25 @@ export function ApplicantCard({
           </Text>
           <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textSecondary} />
         </Pressable>
+        {/*
+          SAYING WHY THIS IS HERE (owner, 2026-09-22: "I thought you said no
+          one sees the cred... there's a view their credential, how??").
+
+          It is not a leak, and the app should say so on the screen rather than
+          only in the design notes. This is Gate 2: the platform's own check of
+          the document is Gate 1 and belongs to VHub, but an organisation
+          putting somebody into a clinical role is entitled to look at the
+          credential of the person who applied TO IT. The link is minted by
+          /api/document-url, which refuses anybody who is not the volunteer
+          themselves, an admin, or an organisation this volunteer has actually
+          applied to -- and the link it returns dies after fifteen minutes.
+          Nothing here changes the volunteer's platform status.
+        */}
+        <Text style={styles.credentialWhy}>
+          You can see this because they applied to your outreach for a clinical role. The link opens
+          for a few minutes and is not shared further.
+        </Text>
+        </>
       ) : null}
 
       {onViewProfile ? (
@@ -291,12 +316,21 @@ export function ApplicantCard({
           <Text style={styles.statusText}>Updating...</Text>
         </View>
       ) : null}
-      {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+      {/* A failed decision is a popup, never a line at the foot of the card. */}
+      <ErrorAlert error={errorMessage} fallback="Could not update this applicant." />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  credentialWhy: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.base,
+    marginTop: spacing.xs,
+  },
   credentialRow: {
     flexDirection: 'row',
     alignItems: 'center',

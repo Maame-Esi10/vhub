@@ -141,7 +141,12 @@ export default function PublicVolunteerProfile() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <View style={styles.identityRow}>
-            <Avatar name={volunteer.full_name} uri={volunteer.avatar_url} size={64} />
+            <Avatar
+              name={volunteer.full_name}
+              uri={volunteer.avatar_url}
+              size={64}
+              verified={volunteer.verification_status === 'verified'}
+            />
             <View style={styles.identityText}>
               <Text style={styles.name} numberOfLines={2}>
                 {volunteer.full_name}

@@ -131,7 +131,12 @@ export default function PublicOrganisationProfile() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <View style={styles.identityRow}>
-            <Avatar name={organisation.org_name} uri={organisation.avatar_url} size={56} />
+            <Avatar
+              name={organisation.org_name}
+              uri={organisation.avatar_url}
+              size={56}
+              verified={organisation.verified === true}
+            />
             <View style={styles.identityText}>
               <Text style={styles.orgName} numberOfLines={2}>
                 {organisation.org_name}

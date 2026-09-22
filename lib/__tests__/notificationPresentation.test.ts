@@ -218,10 +218,18 @@ describe('notificationDestination', () => {
     expect(destination).toContain('from=/(organisation)/notifications');
   });
 
-  it('sends an organisation its own verification decision', () => {
-    expect(
-      notificationDestination(notification({ data: { kind: 'organisation_verification' } }), 'organisation')
-    ).toBe('/(organisation)/verification');
+  it('sends an organisation its own verification decision, and says where from', () => {
+    // The `from` is the half that was missing and was reported: a tab group
+    // keeps no history, so ScreenHeader falls back to the screen's own default
+    // -- Settings, in this case -- for anyone who did not say where they came
+    // from. Asserted with toContain so the destination and the origin are two
+    // separate claims rather than one brittle string.
+    const destination = notificationDestination(
+      notification({ data: { kind: 'organisation_verification' } }),
+      'organisation'
+    );
+    expect(destination).toContain('/(organisation)/verification');
+    expect(destination).toContain('from=/(organisation)/notifications');
   });
 
   it('routes the same row differently for the two audiences', () => {

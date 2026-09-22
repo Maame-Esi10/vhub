@@ -10,7 +10,7 @@ import {
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button } from '@/components/ui';
+import { Button, SheetError } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { CONSTRUCTIVE_REMARKS, POSITIVE_REMARKS } from '@/constants/review-remarks';
 import type { ReviewRemark } from '@/constants/review-remarks';
@@ -143,6 +143,9 @@ export function EventReviewSheet({
             </Pressable>
           </View>
 
+          {/* At the TOP of the sheet, outside the scroller: see SheetError. */}
+          <SheetError error={errorMessage} fallback="Could not save this review." />
+
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <Text style={styles.volunteerName} numberOfLines={1}>
               {volunteerName}
@@ -252,8 +255,6 @@ export function EventReviewSheet({
                 of their history and 30% of how today went.
               </Text>
             </View>
-
-            {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
           </ScrollView>
 
           <View style={styles.footer}>
@@ -553,12 +554,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: colors.textSecondary,
-  },
-  error: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    color: colors.danger,
-    marginTop: spacing.sm,
   },
   requiredHint: {
     fontFamily: fontFamily.regular,

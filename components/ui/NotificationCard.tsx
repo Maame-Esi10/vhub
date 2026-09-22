@@ -67,6 +67,17 @@ export interface NotificationCardProps {
  * Unread is said three ways, one of them a word: a "New" badge, a faint ground
  * and full-strength title text. The word is the cue that survives a
  * red/green deficiency and bright sunlight.
+ *
+ * DENSITY (owner, 2026-09-22: the rows "take up too much screen space... they
+ * should not occupy almost half the screen for only a few lines of
+ * information"). The anatomy above was right and did not change; what changed
+ * is that it was drawn at essay spacing. A row is now about a third shorter,
+ * taken from the four places that were paying for it -- the vertical padding,
+ * the gap between the caption and the title, the two line heights, and the
+ * icon tile and New badge, which were both sized for a card rather than for a
+ * list row. Nothing is truncated: every notification still shows its whole
+ * message, because two of the nine kinds (a suspension, a test push)
+ * deliberately go nowhere, so a row is the only place their text is ever read.
  */
 export function NotificationCard({ notification, onPress, navigable = true }: NotificationCardProps) {
   const unread = !notification.read_at;
@@ -147,7 +158,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: spacing.base,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.base,
     marginBottom: spacing.sm,
   },
@@ -159,8 +170,8 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   iconTile: {
-    width: 36,
-    height: 36,
+    width: 30,
+    height: 30,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -178,24 +189,24 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignContent: 'center',
     rowGap: spacing.xs,
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   category: {
     flexShrink: 1,
     fontFamily: fontFamily.semiBold,
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   newBadge: {
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 1,
   },
   newBadgeText: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 10,
+    fontSize: 9,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     color: colors.white,
@@ -210,8 +221,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 18,
     color: colors.textPrimary,
   },
   titleRead: {
@@ -220,13 +231,13 @@ const styles = StyleSheet.create({
   },
   body: {
     fontFamily: fontFamily.regular,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 12.5,
+    lineHeight: 17,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 1,
   },
   chevron: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
   chevronSpacer: {
     width: 20,

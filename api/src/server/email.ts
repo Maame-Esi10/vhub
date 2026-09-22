@@ -1,7 +1,8 @@
 import { sendMail, sendMailBatch, type MailMessage } from "./mailer";
 
 /**
- * The transactional emails VHub sends about an application.
+ * The transactional emails VHub sends about an application, and about the two
+ * account decisions a person waits on a human for.
  *
  * WAS server/resend.ts UNTIL 2026-09-01. The wording of every message below is
  * unchanged; only the transport underneath it moved, from Resend's API to the
@@ -135,6 +136,169 @@ export async function sendApplicationStatusEmails(
   } catch (err) {
     console.error(
       "[email] failed to send batched application-status emails:",
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+/* =====================================================================
+   ACCOUNT DECISIONS: organisation verification, and a volunteer credential
+   =====================================================================
+
+   ADDED 2026-09-22, owner-reported: "the org didn't get a mail that they've
+   been approved".
+
+   Neither decision had ever sent an email. Both wrote an in-app notification
+   and a push, which is the right pair for something that happens WHILE
+   somebody is using the app -- an application decision, a match, a reminder.
+   It is the wrong pair for these two, and the difference is worth stating
+   because it decides whether any future decision endpoint needs mail:
+
+     - The wait is long and open-ended. An application is decided by an
+       organisation that is already looking at its applicants; these are
+       decided by one of us, whenever we next open the queue. The person on
+       the other end has closed the app.
+     - A push is not durable. It is a notification a phone may never show (no
+       token, notifications refused, a reinstall), and it is gone once swiped.
+     - The decision is about the ACCOUNT, not about one event. An organisation
+       that cannot publish, or a volunteer locked out of clinical roles, is
+       blocked until they read this. Everything else can wait for the app to
+       be opened; this is the thing that makes them open it.
+
+   Best-effort in exactly the same way as the application emails: the database
+   write is the source of truth, and a mail outage must never turn a recorded
+   decision into a failed request.
+
+   THE REJECTION REASON TRAVELS; THE APPROVAL REASON DOES NOT. A reason is
+   required for both outcomes, but they are written for different readers. A
+   rejection's is written TO the organisation and is the only thing that says
+   what to fix, so it is quoted verbatim. An approval's is a note for the next
+   admin explaining why thin evidence was accepted -- "registration number
+   checks out, letterhead is poor" is a fair thing to write in a file and an
+   unkind thing to post to the person it is about.
+*/
+
+export interface VerificationDecisionEmailParams {
+  to: string;
+  /** The organisation's name, or the volunteer's, for the greeting. */
+  name: string;
+  approved: boolean;
+  /** The admin's written reason. Sent verbatim ONLY on a rejection. */
+  reason: string;
+}
+
+function organisationVerificationBody(params: VerificationDecisionEmailParams): string {
+  if (params.approved) {
+    return (
+      `Hi ${params.name},
+
+` +
+      `Your organisation has been VERIFIED on VHub.
+
+` +
+      `You can now publish outreaches, and volunteers will see the verified mark on your profile. ` +
+      `Anything you saved as a draft while you were waiting is still there and can be published now.
+
+` +
+      `-- The VHub Team`
+    );
+  }
+  return (
+    `Hi ${params.name},
+
+` +
+    `We have reviewed your organisation's details and cannot verify the account as it stands.
+
+` +
+    `Here is what the reviewer said:
+
+` +
+    `${params.reason}
+
+` +
+    `You can update your details and documents in VHub under Settings, then submit again. ` +
+    `Resubmitting replaces what you sent before, so send the full set rather than only the part that changed.
+
+` +
+    `-- The VHub Team`
+  );
+}
+
+function credentialDecisionBody(params: VerificationDecisionEmailParams): string {
+  if (params.approved) {
+    return (
+      `Hi ${params.name},
+
+` +
+      `Your credential document has been reviewed and accepted. Your VHub profile is now VERIFIED.
+
+` +
+      `You can apply to clinical roles from now on. Everything you could already do is unchanged.
+
+` +
+      `-- The VHub Team`
+    );
+  }
+  return (
+    `Hi ${params.name},
+
+` +
+    `We have looked at the credential document you sent and cannot accept it as it stands.
+
+` +
+    `Here is what the reviewer said:
+
+` +
+    `${params.reason}
+
+` +
+    `Your document is still on your profile so you can see which one this was about. ` +
+    `Open Identity Verification in VHub to replace it, and it goes straight back into the queue.
+
+` +
+    `Nothing else about your account has changed. You can still browse every outreach and join ` +
+    `support-role ones, which is most of them.
+
+` +
+    `-- The VHub Team`
+  );
+}
+
+/** The organisation-verification decision, by email. Never throws. */
+export async function sendOrganisationVerificationEmail(
+  params: VerificationDecisionEmailParams
+): Promise<void> {
+  try {
+    await sendMail({
+      to: params.to,
+      subject: params.approved
+        ? "Your organisation is verified - VHub"
+        : "About your organisation verification - VHub",
+      text: organisationVerificationBody(params),
+    });
+  } catch (err) {
+    console.error(
+      "[email] failed to send organisation-verification email:",
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+/** The volunteer credential (Gate 1) decision, by email. Never throws. */
+export async function sendCredentialDecisionEmail(
+  params: VerificationDecisionEmailParams
+): Promise<void> {
+  try {
+    await sendMail({
+      to: params.to,
+      subject: params.approved
+        ? "Your VHub profile is verified - VHub"
+        : "About the document you sent - VHub",
+      text: credentialDecisionBody(params),
+    });
+  } catch (err) {
+    console.error(
+      "[email] failed to send credential-decision email:",
       err instanceof Error ? err.message : err
     );
   }

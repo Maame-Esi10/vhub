@@ -21,6 +21,7 @@ import {
   MultiSelectField,
   ScreenHeader,
   SelectField,
+  ErrorAlert,
 } from '@/components/ui';
 import { EXPERIENCE_LEVELS, VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { GHANA_REGION_NAMES, getDistrictsForRegion } from '@/constants/ghana-locations';
@@ -33,7 +34,7 @@ import { useUpdateVolunteerProfile } from '@/hooks/useProfileEditor';
 import { useAvatarUpload, useRemoveAvatar } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import type { ExperienceLevel, VolunteerCategory } from '@/types/database';
-import { humanError, humanErrorOrNull } from '@/lib/errorMessage';
+import { humanErrorOrNull } from '@/lib/errorMessage';
 import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 
@@ -341,11 +342,8 @@ export default function EditVolunteerProfile() {
             <AvailabilityGrid value={availability} onChange={setAvailability} />
           </EditSectionCard>
 
-          {error ? (
-            <Text style={styles.error}>
-              {humanError(error, 'Could not save. Please try again.')}
-            </Text>
-          ) : null}
+          {/* A failed save is a popup, never a line above the Save button. */}
+          <ErrorAlert error={error} fallback="Could not save. Please try again." />
 
           <Button
             title={isPending ? 'Saving…' : 'Save Professional Profile'}
@@ -477,13 +475,6 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: colors.textSecondary,
     marginTop: spacing.md,
-  },
-  error: {
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-    color: colors.danger,
-    textAlign: 'center',
-    marginBottom: spacing.md,
   },
   saveButton: {
     marginTop: spacing.sm,

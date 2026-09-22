@@ -74,6 +74,13 @@ export default function AdminSettings() {
           run against the database and nowhere else.
         */}
         <SettingsRow icon="shield-key-outline" label="Role" value="Granted in the database" />
+        <View style={styles.note}>
+          <Text style={styles.noteText}>
+            Nobody can be made an administrator from inside VHub. There is no invite, no promotion
+            screen and no admin option at sign-up, which is what stops anyone granting it to
+            themselves.
+          </Text>
+        </View>
 
         <SettingsGroupLabel>DIAGNOSTICS</SettingsGroupLabel>
         <SettingsRow
@@ -93,21 +100,13 @@ export default function AdminSettings() {
         <View style={styles.note}>
           <Text style={styles.noteText}>
             {mailHealth.isSuccess
-              ? 'The Gmail app password is valid and VHub can authenticate to send mail. If Supabase still cannot send a confirmation email, the fault is in its own SMTP settings rather than the password.'
+              ? 'VHub can sign in to the mail account, so the credential it sends with is good. If an email still has not arrived, the problem is in the mail settings held outside the app rather than in VHub.'
               : mailHealth.isError
                 ? humanError(
                     mailHealth.error,
                     'The check could not be completed. Try again in a moment.'
                   )
-                : 'Signs in to the mail account without sending anything, so it costs no quota and reaches no inbox. Use it when a confirmation or decision email has not arrived: it separates a revoked app password from a Supabase SMTP setting, which the errors themselves cannot.'}
-          </Text>
-        </View>
-
-        <View style={styles.note}>
-          <Text style={styles.noteText}>
-            Admin access is not something the app can give or take away. There is no invite, no promotion
-            screen and no admin option at sign-up. The role is set directly on the database, which is what
-            stops anyone granting it to themselves.
+                : 'Signs in to the mail account without sending anything, so it uses no allowance and reaches nobody. Use it when an email has not arrived, to tell a broken mail credential apart from a delivery problem elsewhere.'}
           </Text>
         </View>
 
@@ -116,13 +115,13 @@ export default function AdminSettings() {
           icon="shield-lock-outline"
           label="Privacy Policy"
           value="What VHub knows, and what it never keeps"
-          onPress={() => router.push('/policy')}
+          onPress={() => router.push('/policy?from=/(admin)/settings')}
         />
         <SettingsRow
           icon="file-document-outline"
           label="Terms of Use"
           value="What you and organisations each promise"
-          onPress={() => router.push('/policy?tab=terms')}
+          onPress={() => router.push('/policy?tab=terms&from=/(admin)/settings')}
         />
 
         <View style={styles.signOutBlock}>

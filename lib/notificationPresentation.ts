@@ -192,11 +192,23 @@ export function notificationDestination(
       // history, so without it the hardware back button lands on Home.
       return `/(organisation)/applicants?outreachId=${notification.outreach_id}&from=/(organisation)/notifications`;
     }
+    /*
+      `from` ON EVERY ORGANISATION DESTINATION, not just the applicants one
+      (owner-reported, 2026-09-22: opening the verification decision from the
+      inbox and pressing back landed on SETTINGS).
+
+      A tab group keeps no history of its own, so ScreenHeader navigates with
+      `replace` to `from` if it has one and to the screen's own `fallback`
+      otherwise. Verification's fallback is Settings, which is the correct
+      answer for the way it is normally reached and the wrong one for every
+      other way -- and the inbox is now one of those ways. The rule is simply
+      that anything routing INTO one of these screens has to say where from.
+    */
     if (kind === 'organisation_verification') {
-      return '/(organisation)/verification';
+      return '/(organisation)/verification?from=/(organisation)/notifications';
     }
     if (notification.outreach_id) {
-      return `/(organisation)/outreach/${notification.outreach_id}`;
+      return `/(organisation)/outreach/${notification.outreach_id}?from=/(organisation)/notifications`;
     }
     return null;
   }

@@ -15,6 +15,7 @@ import {
   Avatar,
   Badge,
   Button,
+  ErrorAlert,
   ErrorState,
   FlyerBackground,
   ListSkeleton,
@@ -671,12 +672,22 @@ export default function OutreachDetail() {
           </View>
         ) : null}
 
-        {createApplication.isError && !fullFormVisible ? (
-          <Text style={styles.error}>
-            {humanError(createApplication.error, 'Could not submit your application.')}
-          </Text>
-        ) : null}
       </ScrollView>
+
+      {/*
+        A REFUSED APPLICATION IS A POPUP (owner, 2026-09-22). This used to be a
+        line of red text at the very bottom of the scroller, below the
+        verification gate and beneath the fold. The refusal a suspended
+        volunteer gets back from the database -- "this account is suspended and
+        cannot apply to outreaches" -- was therefore written somewhere nobody
+        was looking, and Quick Join read as a button that did nothing at all.
+      */}
+      {!fullFormVisible ? (
+        <ErrorAlert
+          error={createApplication.error}
+          fallback="Could not submit your application."
+        />
+      ) : null}
 
       {/* Sibling of the scroller: it needs its own offset, or the pill covers Apply. */}
       <View style={[styles.footer, tabBarFooter]}>
@@ -1199,12 +1210,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semiBold,
     fontSize: 13,
     color: colors.primary,
-  },
-  error: {
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-    color: colors.danger,
-    marginTop: spacing.base,
   },
   footer: {
     paddingHorizontal: spacing.xl,

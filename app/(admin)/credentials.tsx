@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
   Pressable,
   RefreshControl,
   StyleSheet,
   View,
 } from 'react-native';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +17,7 @@ import {
   Button,
   DocumentViewer,
   EmptyState,
+  ErrorAlert,
   ErrorState,
   Input,
   ListSkeleton,
@@ -126,117 +129,133 @@ export default function AdminCredentials() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <FlatList
-        data={rows}
-        keyExtractor={(row) => row.id}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: tabBarClearance(insets.bottom) },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={queue.isRefetching} onRefresh={() => queue.refetch()} />
-        }
-        ListHeaderComponent={<Header count={rows.length} />}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
-          <EmptyState
-            icon="card-account-details-outline"
-            title="Nothing waiting"
-            message="No volunteer has a credential document waiting for review. When one uploads, they appear here oldest first."
-          />
-        }
-        renderItem={({ item }) => {
-          const open = openId === item.id;
-          return (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <MaterialCommunityIcons name="account-outline" size={20} color={colors.primary} />
-                <Text style={styles.name} numberOfLines={1}>
-                  {item.full_name}
-                </Text>
-                <Badge label={item.category ? categoryLabel(item.category) : 'No category'} />
-              </View>
+      {/*
+        THE REASON FIELD WAS BEHIND THE KEYBOARD (owner-reported, 2026-09-22:
+        "the reason has the bug where the keyboard covers the field so you
+        can[not] see what you're typing").
 
-              <Text style={styles.meta}>
-                {[item.district, item.region].filter(Boolean).join(', ') || 'Location not given'}
-                {item.experience_level ? ` · ${item.experience_level}` : ''}
-              </Text>
-              <Text style={styles.waiting}>{waitingFor(item.verification_submitted_at)}</Text>
-
-              {item.has_document ? (
-                <Pressable
-                  onPress={() => void openDocument(item)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${item.full_name}'s document`}
-                  style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}
-                >
-                  <MaterialCommunityIcons name="file-lock-outline" size={20} color={colors.primary} />
-                  <Text style={styles.documentText}>Open the document</Text>
-                  <MaterialCommunityIcons
-                    name="magnify-plus-outline"
-                    size={18}
-                    color={colors.textSecondary}
-                  />
-                </Pressable>
-              ) : (
-                <Text style={styles.noDocument}>
-                  No document is attached, so there is nothing to judge. Reject with a reason asking
-                  them to upload one.
-                </Text>
-              )}
-
-              {open ? (
-                <View style={styles.decisionBlock}>
-                  <Text style={styles.decisionHint}>
-                    Check it is real, legible, unexpired and plausibly matches{' '}
-                    {item.category ? categoryLabel(item.category) : 'the category they claim'}. This is
-                    not a judgement about how good a clinician they are.
+        The app is edge-to-edge, so the window no longer resizes when the
+        keyboard opens -- the keyboard is an inset drawn over the top of it.
+        Nothing shrinks and nothing scrolls by itself, so a field near the
+        bottom of the page is simply covered. Every form in the app that was
+        BUILT with one of these was fine; these screens were built without.
+        See constants/keyboard.ts for why the behaviour is 'padding' on both
+        platforms rather than the iOS-only ternary.
+      */}
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_AVOID_BEHAVIOR}>
+        <FlatList
+          data={rows}
+          keyExtractor={(row) => row.id}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: tabBarClearance(insets.bottom) },
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={queue.isRefetching} onRefresh={() => queue.refetch()} />
+          }
+          ListHeaderComponent={<Header count={rows.length} />}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            <EmptyState
+              icon="card-account-details-outline"
+              title="Nothing waiting"
+              message="No volunteer has a credential document waiting for review. When one uploads, they appear here oldest first."
+            />
+          }
+          renderItem={({ item }) => {
+            const open = openId === item.id;
+            return (
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <MaterialCommunityIcons name="account-outline" size={20} color={colors.primary} />
+                  <Text style={styles.name} numberOfLines={1}>
+                    {item.full_name}
                   </Text>
-                  <Input
-                    label="Reason"
-                    required
-                    value={reason}
-                    onChangeText={setReason}
-                    placeholder="What you saw, and what it means"
-                    multiline
-                    error={
-                      attempted && reason.trim().length < 3 ? 'Write a reason before deciding.' : undefined
-                    }
-                  />
-                  {decide.error ? <Text style={styles.errorText}>{humanError(decide.error)}</Text> : null}
-                  <View style={styles.actions}>
-                    <Button
-                      title={decide.isPending ? 'Saving…' : 'Approve'}
-                      onPress={() => submitDecision(item, 'approve')}
-                      disabled={decide.isPending}
-                      style={styles.actionButton}
-                    />
-                    <Button
-                      title="Reject"
-                      variant="outline"
-                      onPress={() => submitDecision(item, 'reject')}
-                      disabled={decide.isPending}
-                      style={styles.actionButton}
-                    />
-                  </View>
+                  <Badge label={item.category ? categoryLabel(item.category) : 'No category'} />
                 </View>
-              ) : (
-                <Button
-                  title="Decide"
-                  variant="outline"
-                  onPress={() => {
-                    setOpenId(item.id);
-                    setReason('');
-                    setAttempted(false);
-                  }}
-                  style={styles.decideButton}
-                />
-              )}
-            </View>
-          );
-        }}
-      />
+
+                <Text style={styles.meta}>
+                  {[item.district, item.region].filter(Boolean).join(', ') || 'Location not given'}
+                  {item.experience_level ? ` · ${item.experience_level}` : ''}
+                </Text>
+                <Text style={styles.waiting}>{waitingFor(item.verification_submitted_at)}</Text>
+
+                {item.has_document ? (
+                  <Pressable
+                    onPress={() => void openDocument(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${item.full_name}'s document`}
+                    style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}
+                  >
+                    <MaterialCommunityIcons name="file-lock-outline" size={20} color={colors.primary} />
+                    <Text style={styles.documentText}>Open the document</Text>
+                    <MaterialCommunityIcons
+                      name="magnify-plus-outline"
+                      size={18}
+                      color={colors.textSecondary}
+                    />
+                  </Pressable>
+                ) : (
+                  <Text style={styles.noDocument}>
+                    No document is attached, so there is nothing to judge. Reject with a reason asking
+                    them to upload one.
+                  </Text>
+                )}
+
+                {open ? (
+                  <View style={styles.decisionBlock}>
+                    <Text style={styles.decisionHint}>
+                      Check it is real, legible, unexpired and plausibly matches{' '}
+                      {item.category ? categoryLabel(item.category) : 'the category they claim'}. This is
+                      not a judgement about how good a clinician they are.
+                    </Text>
+                    <Input
+                      label="Reason"
+                      required
+                      value={reason}
+                      onChangeText={setReason}
+                      placeholder="What you saw, and what it means"
+                      multiline
+                      error={
+                        attempted && reason.trim().length < 3 ? 'Write a reason before deciding.' : undefined
+                      }
+                    />
+                    {/* A refused decision is a popup, never a line under the form: see ErrorAlert. */}
+                    <ErrorAlert error={decide.error} fallback="Could not save your decision." />
+                    <View style={styles.actions}>
+                      <Button
+                        title={decide.isPending ? 'Saving…' : 'Approve'}
+                        onPress={() => submitDecision(item, 'approve')}
+                        disabled={decide.isPending}
+                        style={styles.actionButton}
+                      />
+                      <Button
+                        title="Reject"
+                        variant="outline"
+                        onPress={() => submitDecision(item, 'reject')}
+                        disabled={decide.isPending}
+                        style={styles.actionButton}
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  <Button
+                    title="Decide"
+                    variant="outline"
+                    onPress={() => {
+                      setOpenId(item.id);
+                      setReason('');
+                      setAttempted(false);
+                    }}
+                    style={styles.decideButton}
+                  />
+                )}
+              </View>
+            );
+          }}
+        />
+      </KeyboardAvoidingView>
 
       <DocumentViewer
         visible={!!viewing}
@@ -286,6 +305,8 @@ function waitingFor(submittedAt: string | null): string {
 }
 
 const styles = StyleSheet.create({
+  /** Lets the KeyboardAvoidingView fill the screen under the header. */
+  flex: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.lg, paddingTop: spacing.base, paddingBottom: spacing.xxl },
   stateWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },

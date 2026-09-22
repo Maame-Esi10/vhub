@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { formatEventTimeRange } from '@/components/ui';
+import { SheetError, formatEventTimeRange } from '@/components/ui';
 import {
   canReleaseDay,
   dayEndTime,
@@ -114,6 +114,9 @@ export function DayReleaseSheet({
             against, so releasing one is not a mark against you.
           </Text>
 
+          {/* At the TOP of the sheet, outside the scroller: see SheetError. */}
+          <SheetError error={errorMessage} fallback="Could not change that day." />
+
           <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
             {days.map((day, index) => {
               const start = dayStartTime(day, outreach);
@@ -210,8 +213,6 @@ export function DayReleaseSheet({
               );
             })}
           </ScrollView>
-
-          {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
 
           <Pressable
             onPress={onClose}
@@ -390,12 +391,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: colors.textSecondary,
-  },
-  error: {
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-    color: colors.danger,
-    marginTop: spacing.md,
   },
   done: {
     minHeight: 48,

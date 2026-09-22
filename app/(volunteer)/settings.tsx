@@ -57,7 +57,12 @@ export default function VolunteerSettings() {
       <ScreenHeader title="Settings" fallback="/(volunteer)/profile" />
       <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <View style={styles.identity}>
-          <Avatar name={profile?.full_name ?? 'Volunteer'} uri={profile?.avatar_url} size={88} />
+          <Avatar
+            name={profile?.full_name ?? 'Volunteer'}
+            uri={profile?.avatar_url}
+            size={88}
+            verified={volunteerProfile?.verification_status === 'verified'}
+          />
           <Text style={styles.name}>{profile?.full_name ?? 'Volunteer'}</Text>
           <Text style={styles.meta}>
             {profile?.email ?? 'No email on file'}
@@ -149,13 +154,13 @@ export default function VolunteerSettings() {
           icon="shield-lock-outline"
           label="Privacy Policy"
           value="What VHub knows, and what it never keeps"
-          onPress={() => router.push('/policy')}
+          onPress={() => router.push('/policy?from=/(volunteer)/settings')}
         />
         <SettingsRow
           icon="file-document-outline"
           label="Terms of Use"
           value="What you and organisations each promise"
-          onPress={() => router.push('/policy?tab=terms')}
+          onPress={() => router.push('/policy?tab=terms&from=/(volunteer)/settings')}
         />
 
         <View style={styles.signOutBlock}>

@@ -25,6 +25,20 @@ import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
  * visit. The others stay on the page because categories can be changed, and
  * because somebody deciding what to claim needs to see what each one costs.
  *
+ * AND THE OTHERS ARE NOW FADED (owner's suggestion, 2026-09-22: "blur the
+ * other or make them faint since yours has been selected"). Ordering alone
+ * turned out not to be a strong enough signal -- the six cards underneath are
+ * drawn identically to the one that matters, so the page still reads as seven
+ * equal things with an arbitrary one on top. Faded, the answer is visible
+ * without reading anything.
+ *
+ * FAINT, NOT BLURRED, and not hidden. A real blur needs expo-blur, which is a
+ * gated dependency for a decorative effect; opacity does the same job with
+ * nothing added. Hiding them behind a "show the others" tap would be worse
+ * still: the reason they are on the page is that somebody choosing what to
+ * claim has to be able to compare, and that is exactly the reader who would
+ * never find a collapsed section.
+ *
  * NO REAL OR SAMPLE CREDENTIAL IMAGES. The brief says so and it is right: a
  * sample licence is either somebody's real one, or a forgery template with our
  * name on it. The illustrations here are generic icons.
@@ -93,7 +107,13 @@ export default function CredentialGuidelines() {
           const mine = entry.value === myCategory;
 
           return (
-            <View key={entry.value} style={[styles.categoryCard, mine && styles.categoryCardMine]}>
+            <View
+              key={entry.value}
+              style={[
+                styles.categoryCard,
+                mine ? styles.categoryCardMine : styles.categoryCardOther,
+              ]}
+            >
               <View style={styles.categoryHeader}>
                 <View style={[styles.iconCircle, mine && styles.iconCircleMine]}>
                   <MaterialCommunityIcons
@@ -173,6 +193,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   categoryCardMine: { borderColor: colors.primary, backgroundColor: colors.surfaceSubtle },
+  /*
+    0.55, chosen rather than something fainter, because these are still meant to
+    be READ by anyone who wants them -- a volunteer comparing categories, or one
+    about to change theirs. Below about 0.4 the body text stops meeting contrast
+    guidance against the page, which would make the fade an accessibility
+    problem instead of a hint.
+  */
+  categoryCardOther: { opacity: 0.55 },
   categoryHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   iconCircle: {
     width: 38,

@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -13,6 +15,7 @@ import {
   Button,
   ConfirmDialog,
   EmptyState,
+  ErrorAlert,
   ErrorState,
   Input,
   ListSkeleton,
@@ -90,140 +93,151 @@ export default function AdminSources() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Vetted sources" fallback="/(admin)/overview" />
 
-      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
-        <View style={styles.explainCard}>
-          <MaterialCommunityIcons name="information-outline" size={20} color={colors.primary} />
-          <Text style={styles.explainText}>
-            This is a record, not a feed. Nothing on this list is read by VHub, no listing is fetched
-            from any of these sources, and no outreach is created from one. It exists so that the
-            sources you would be willing to trust, and the reason each was accepted, are written
-            down while you still remember them.
-          </Text>
-        </View>
+      {/*
+        THE REASON FIELD WAS BEHIND THE KEYBOARD (owner-reported, 2026-09-22).
+        The app is edge-to-edge, so the window no longer resizes when the
+        keyboard opens: it is an inset drawn over the top. Nothing shrinks and
+        nothing scrolls by itself, so a field low on the page is simply covered.
+        See constants/keyboard.ts for why the behaviour is 'padding' on both
+        platforms rather than the iOS-only ternary.
+      */}
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_AVOID_BEHAVIOR}>
+        <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
+          <View style={styles.explainCard}>
+            <MaterialCommunityIcons name="information-outline" size={20} color={colors.primary} />
+            <Text style={styles.explainText}>
+              This is a record, not a feed. Nothing on this list is read by VHub, no listing is fetched
+              from any of these sources, and no outreach is created from one. It exists so that the
+              sources you would be willing to trust, and the reason each was accepted, are written
+              down while you still remember them.
+            </Text>
+          </View>
 
-        {sources.isLoading ? (
-          <ListSkeleton rows={2} rowHeight={110} />
-        ) : sources.isError ? (
-          <ErrorState
-            message={
-              humanError(sources.error, 'Could not load the sources.')
-            }
-            onRetry={() => sources.refetch()}
-          />
-        ) : (sources.data ?? []).length === 0 ? (
-          <EmptyState
-            icon="link-variant"
-            title="No sources yet"
-            message="Add the bodies whose public outreach listings you would be willing to trust: a ministry, a teaching hospital, an NGO umbrella, a professional council."
-          />
-        ) : (
-          <View style={styles.list}>
-            {(sources.data ?? []).map((source) => (
-              <View key={source.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <MaterialCommunityIcons name="link-variant" size={18} color={colors.primary} />
-                  <Text style={styles.name} numberOfLines={1}>
-                    {source.name}
-                  </Text>
-                  {source.source_type ? (
-                    <Text style={styles.typeTag}>{source.source_type}</Text>
-                  ) : null}
+          {sources.isLoading ? (
+            <ListSkeleton rows={2} rowHeight={110} />
+          ) : sources.isError ? (
+            <ErrorState
+              message={
+                humanError(sources.error, 'Could not load the sources.')
+              }
+              onRetry={() => sources.refetch()}
+            />
+          ) : (sources.data ?? []).length === 0 ? (
+            <EmptyState
+              icon="link-variant"
+              title="No sources yet"
+              message="Add the bodies whose public outreach listings you would be willing to trust: a ministry, a teaching hospital, an NGO umbrella, a professional council."
+            />
+          ) : (
+            <View style={styles.list}>
+              {(sources.data ?? []).map((source) => (
+                <View key={source.id} style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <MaterialCommunityIcons name="link-variant" size={18} color={colors.primary} />
+                    <Text style={styles.name} numberOfLines={1}>
+                      {source.name}
+                    </Text>
+                    {source.source_type ? (
+                      <Text style={styles.typeTag}>{source.source_type}</Text>
+                    ) : null}
+                  </View>
+
+                  <Pressable
+                    onPress={() => {
+                      // Bare domains are common here and Linking rejects a URL
+                      // with no scheme, so one is added rather than the tap doing
+                      // nothing at all.
+                      const href = /^https?:\/\//i.test(source.url) ? source.url : `https://${source.url}`;
+                      void Linking.openURL(href).catch(() => {});
+                    }}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Open ${source.url}`}
+                  >
+                    <Text style={styles.url} numberOfLines={1}>
+                      {source.url}
+                    </Text>
+                  </Pressable>
+
+                  <Text style={styles.rationale}>{source.rationale}</Text>
+
+                  <Button
+                    title="Remove"
+                    variant="outline"
+                    onPress={() => {
+                      setRemoving(source);
+                      setRemoveReason('');
+                    }}
+                    style={styles.removeButton}
+                  />
                 </View>
+              ))}
+            </View>
+          )}
 
-                <Pressable
-                  onPress={() => {
-                    // Bare domains are common here and Linking rejects a URL
-                    // with no scheme, so one is added rather than the tap doing
-                    // nothing at all.
-                    const href = /^https?:\/\//i.test(source.url) ? source.url : `https://${source.url}`;
-                    void Linking.openURL(href).catch(() => {});
-                  }}
-                  accessibilityRole="link"
-                  accessibilityLabel={`Open ${source.url}`}
-                >
-                  <Text style={styles.url} numberOfLines={1}>
-                    {source.url}
-                  </Text>
-                </Pressable>
-
-                <Text style={styles.rationale}>{source.rationale}</Text>
-
+          {showForm ? (
+            <View style={styles.form}>
+              <Text style={styles.formHeading}>Add a source</Text>
+              <Input
+                label="Name"
+                required
+                value={name}
+                onChangeText={setName}
+                placeholder="Ghana Health Service"
+                error={attempted && !name.trim() ? 'Give it a name.' : undefined}
+              />
+              <Input
+                label="Website or domain"
+                required
+                value={url}
+                onChangeText={setUrl}
+                placeholder="ghs.gov.gh"
+                autoCapitalize="none"
+                error={attempted && !url.trim() ? 'Give a website or a domain.' : undefined}
+              />
+              <Input
+                label="Kind of body"
+                value={sourceType}
+                onChangeText={setSourceType}
+                placeholder="Ministry, teaching hospital, NGO umbrella…"
+              />
+              <Input
+                label="Why it is trusted"
+                required
+                value={rationale}
+                onChangeText={setRationale}
+                placeholder="What makes their listings reliable"
+                multiline
+                error={
+                  attempted && rationale.trim().length < 3
+                    ? 'A whitelist without reasons is a list somebody has to take on trust.'
+                    : undefined
+                }
+              />
+              {/* A refused add is a popup, never a line under the form: see ErrorAlert. */}
+              <ErrorAlert error={add.error} fallback="Could not add that source." />
+              <View style={styles.formActions}>
                 <Button
-                  title="Remove"
+                  title={add.isPending ? 'Saving…' : 'Add it'}
+                  onPress={submit}
+                  disabled={add.isPending}
+                  style={styles.formButton}
+                />
+                <Button
+                  title="Cancel"
                   variant="outline"
                   onPress={() => {
-                    setRemoving(source);
-                    setRemoveReason('');
+                    setShowForm(false);
+                    setAttempted(false);
                   }}
-                  style={styles.removeButton}
+                  style={styles.formButton}
                 />
               </View>
-            ))}
-          </View>
-        )}
-
-        {showForm ? (
-          <View style={styles.form}>
-            <Text style={styles.formHeading}>Add a source</Text>
-            <Input
-              label="Name"
-              required
-              value={name}
-              onChangeText={setName}
-              placeholder="Ghana Health Service"
-              error={attempted && !name.trim() ? 'Give it a name.' : undefined}
-            />
-            <Input
-              label="Website or domain"
-              required
-              value={url}
-              onChangeText={setUrl}
-              placeholder="ghs.gov.gh"
-              autoCapitalize="none"
-              error={attempted && !url.trim() ? 'Give a website or a domain.' : undefined}
-            />
-            <Input
-              label="Kind of body"
-              value={sourceType}
-              onChangeText={setSourceType}
-              placeholder="Ministry, teaching hospital, NGO umbrella…"
-            />
-            <Input
-              label="Why it is trusted"
-              required
-              value={rationale}
-              onChangeText={setRationale}
-              placeholder="What makes their listings reliable"
-              multiline
-              error={
-                attempted && rationale.trim().length < 3
-                  ? 'A whitelist without reasons is a list somebody has to take on trust.'
-                  : undefined
-              }
-            />
-            {add.error ? <Text style={styles.errorText}>{humanError(add.error)}</Text> : null}
-            <View style={styles.formActions}>
-              <Button
-                title={add.isPending ? 'Saving…' : 'Add it'}
-                onPress={submit}
-                disabled={add.isPending}
-                style={styles.formButton}
-              />
-              <Button
-                title="Cancel"
-                variant="outline"
-                onPress={() => {
-                  setShowForm(false);
-                  setAttempted(false);
-                }}
-                style={styles.formButton}
-              />
             </View>
-          </View>
-        ) : (
-          <Button title="Add a source" onPress={() => setShowForm(true)} style={styles.addButton} />
-        )}
-      </ScrollView>
+          ) : (
+            <Button title="Add a source" onPress={() => setShowForm(true)} style={styles.addButton} />
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <ConfirmDialog
         visible={!!removing}
@@ -269,6 +283,8 @@ export default function AdminSources() {
 }
 
 const styles = StyleSheet.create({
+  /** Lets the KeyboardAvoidingView fill the screen under the header. */
+  flex: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
   explainCard: {

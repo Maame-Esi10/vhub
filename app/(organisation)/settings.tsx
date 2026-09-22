@@ -49,7 +49,12 @@ export default function OrganisationSettings() {
       <ScreenHeader title="Settings" fallback="/(organisation)/profile" />
       <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
         <View style={styles.identity}>
-          <Avatar name={org?.org_name ?? 'Organisation'} uri={profile?.avatar_url} size={88} />
+          <Avatar
+            name={org?.org_name ?? 'Organisation'}
+            uri={profile?.avatar_url}
+            size={88}
+            verified={org?.verified === true}
+          />
           <Text style={styles.name}>{org?.org_name ?? profile?.full_name ?? 'Organisation'}</Text>
           <Text style={styles.meta}>
             {profile?.email ?? 'No email on file'}
@@ -136,13 +141,13 @@ export default function OrganisationSettings() {
           icon="shield-lock-outline"
           label="Privacy Policy"
           value="What VHub knows, and what it never keeps"
-          onPress={() => router.push('/policy')}
+          onPress={() => router.push('/policy?from=/(organisation)/settings')}
         />
         <SettingsRow
           icon="file-document-outline"
           label="Terms of Use"
           value="What you and organisations each promise"
-          onPress={() => router.push('/policy?tab=terms')}
+          onPress={() => router.push('/policy?tab=terms&from=/(organisation)/settings')}
         />
 
         <View style={styles.signOutBlock}>

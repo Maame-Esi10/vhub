@@ -5,6 +5,7 @@ import { enforceIpRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { assertAdmin, recordAdminAction } from "../../../server/adminAudit";
 import { notifyUsers } from "../../../server/notify";
+import { sendCredentialDecisionEmail } from "../../../server/email";
 
 export const runtime = "nodejs";
 
@@ -125,6 +126,28 @@ export async function POST(req: Request): Promise<Response> {
         tokens: (tokens ?? []).map((t) => t.expo_push_token as string),
       },
     ]);
+
+    /*
+      AND BY EMAIL, for the same reason the organisation decision now is: this
+      is an account decision made by a person at an unpredictable time, and the
+      volunteer waiting on it has closed the app. See the note above
+      sendCredentialDecisionEmail in server/email.ts.
+    */
+    const { data: volunteerProfile } = await admin
+      .from("profiles")
+      .select("email, full_name")
+      .eq("id", body.volunteerId)
+      .maybeSingle();
+
+    if (volunteerProfile?.email) {
+      await sendCredentialDecisionEmail({
+        to: volunteerProfile.email as string,
+        // First name only: this is a message to a person, not a record about one.
+        name: ((volunteerProfile.full_name as string) ?? "").trim().split(/\s+/)[0] || "there",
+        approved: body.decision === "approve",
+        reason: body.reason,
+      });
+    }
 
     return Response.json({ verificationStatus: nextStatus });
   } catch (err) {

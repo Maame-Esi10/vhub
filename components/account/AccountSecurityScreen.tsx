@@ -20,6 +20,8 @@ import {
   Input,
   ScreenHeader,
   SettingsGroupLabel,
+  AlertDialog,
+  ErrorAlert,
 } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
@@ -305,16 +307,9 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
               We ask for your password because changing this address changes how you sign in.
             </Text>
 
-            {changeEmail.error ? (
-              <Text style={styles.error}>
-                {humanError(changeEmail.error, 'Could not start the email change.')}
-              </Text>
-            ) : null}
-            {cancelChange.error ? (
-              <Text style={styles.error}>
-                {humanError(cancelChange.error, 'Could not cancel the email change.')}
-              </Text>
-            ) : null}
+            {/* Failures are popups, never lines above the button. See ErrorAlert. */}
+            <ErrorAlert error={changeEmail.error} fallback="Could not start the email change." />
+            <ErrorAlert error={cancelChange.error} fallback="Could not cancel the email change." />
 
             <Button
               title={changeEmail.isPending ? 'Sending…' : 'Send Confirmation Link'}
@@ -380,14 +375,19 @@ export function AccountSecurityScreen({ fallback }: AccountSecurityScreenProps) 
               error={passwordErrors.confirm}
             />
 
-            {passwordDone ? (
-              <Text style={styles.success}>Your password has been updated.</Text>
-            ) : null}
-            {changePassword.error ? (
-              <Text style={styles.error}>
-                {humanError(changePassword.error, 'Could not update your password.')}
-              </Text>
-            ) : null}
+            {/*
+              The outcome of a password change is a popup at both ends. It used
+              to be a line of text above the button, which is the one place a
+              person who has just pressed that button is no longer looking.
+            */}
+            <AlertDialog
+              visible={passwordDone}
+              tone="success"
+              title="Password updated"
+              message="Your password has been changed. Use the new one next time you sign in."
+              onDismiss={() => setPasswordDone(false)}
+            />
+            <ErrorAlert error={changePassword.error} fallback="Could not update your password." />
 
             <Button
               title={changePassword.isPending ? 'Updating…' : 'Update Password'}

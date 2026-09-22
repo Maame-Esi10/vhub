@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Button,
   EmptyState,
+  ErrorAlert,
   ErrorState,
   ListSkeleton,
   ScreenHeader,
@@ -290,7 +291,8 @@ export default function OrganisationAttendance() {
         </View>
       ) : null}
 
-      {resolve.isError ? <Text style={styles.errorText}>{humanError(resolve.error)}</Text> : null}
+      {/* A failed attendance write is a popup, never a line above the roster. */}
+      <ErrorAlert error={resolve.error} fallback="Could not save that attendance record." />
 
       <FlatList
         data={rows}

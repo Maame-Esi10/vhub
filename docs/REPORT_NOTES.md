@@ -5888,3 +5888,92 @@ whole of the original objection, and it is gone rather than traded away.
 fault in isolation. Neither asked what the LAST screen of the flow would be
 afterwards. A fix that relocates a step changes the ending of the journey, and
 the ending is the part a person remembers.
+
+---
+
+## The bottom of the screen is not a place to put an answer (2026-09-22)
+
+The owner had asked three times for this, escalating each time, and the third
+time was the one that made the pattern visible rather than the instance: "never
+should a notification/btn/alert of anything that shows after something is
+submitted show at the bottom". The specific report was a suspended volunteer
+tapping Quick Join and seeing nothing happen.
+
+**Nothing had failed silently. The app had explained itself, in the wrong
+place.** The database trigger that stops a suspended account applying returns a
+plain sentence, `humanError` passed it through intact, and the screen rendered
+it at the very foot of a long scroller, below the verification gate, under the
+floating tab pill. Every ingredient worked and the message landed somewhere
+nobody was looking.
+
+**Why it kept recurring.** Each previous instance was fixed as a layout
+question about one screen, and one of those fixes made it worse in an
+instructive way: the Edit Outreach save failure was moved from the bottom of the
+form INTO the pinned footer, on the reasoning that pinning it to the button that
+caused it stops it scrolling away. The pinning was right. The footer is still
+the bottom of the screen.
+
+**So the fix is a component rather than a set of screens.** `ErrorAlert` renders
+a mutation's error as a centred dialog over a dimmed scrim, the same mechanism
+as the Sign Out confirmation, and it is a one-line replacement for the inline
+red text at every site. Eighteen of those were converted. Three things decided
+the shape:
+
+- **Dismissal is derived, not an effect.** The dismissed error is remembered by
+  identity, so a genuinely new failure reopens the dialog while the one just
+  acknowledged stays shut. An effect would have meant another
+  `set-state-in-effect` suppression for nothing.
+- **A success receipt is a different thing from a refusal**, so `Toast` was kept
+  and moved to the TOP rather than folded into the dialog. A toast is for
+  something that plainly worked and whose result is already on screen; it
+  requires nothing and takes itself away. A refusal has to be read.
+- **A bottom sheet gets a banner, not a dialog.** A sheet is already a `Modal`
+  and stacking a second on it is the arrangement that misbehaves on Android, so
+  `SheetError` sits at the top of the sheet and outside its scroller.
+
+**Field validation deliberately did not move.** "Write a reason before deciding"
+under the reason box is attached to the control it is about, and the person is
+looking at that control. Converting those would have been reading the rule as a
+ban on inline text rather than as a rule about where an ANSWER goes.
+
+## Two account decisions were never emailed (2026-09-22)
+
+The organisation-verification decision and the volunteer credential decision
+each wrote an in-app notification and sent a push, and no email. That is the
+correct pair for almost everything the app sends, which is why the gap survived:
+a match, a reminder and an application decision all happen while somebody is
+using the app or about to.
+
+These two are different, and the difference is the rule for anything added
+later. The wait is long and open-ended, because the decision is made by one of
+us whenever the queue is next opened, so the person has closed the app. A push
+is not durable: no token, notifications refused, a reinstall, or one swipe, and
+it is gone. And the decision blocks the whole ACCOUNT rather than one event, so
+until it is read an organisation cannot publish anything at all.
+
+**The rejection reason travels and the approval reason does not.** A reason is
+required for both outcomes, but they are written for different readers: a
+rejection's is addressed to the organisation and is the only thing telling it
+what to fix, while an approval's is a note for the next admin explaining why
+thin evidence was accepted. Publishing the second kind would change what an
+admin can honestly write in it. What the organisation was actually missing was
+not the note but any acknowledgement that a person had looked, and when, so the
+verification screen now states the decision date for both outcomes.
+
+## A rejected credential document was invisible (2026-09-22)
+
+`app/(volunteer)/verify-identity.tsx` chose between the upload state and the
+document state by asking `status === 'unverified'`. That reads as "do they have
+a document?" and is the same question only until the first rejection.
+
+A rejection sets the status back to `unverified` and deliberately KEEPS the
+file: destroying it would leave the volunteer unable to see what they had sent,
+and would erase the evidence behind a decision the audit trail had just
+recorded. So a rejected volunteer was shown the empty upload state, with "No
+document uploaded yet" printed directly underneath a card explaining why the
+document they could not see had been turned down.
+
+The branch is now on `hasDocument`, which is what it always meant. The "What
+should I send?" link moved out of the upload branch at the same time, because
+the person whose document has just been sent back is precisely the reader it
+exists for, and it was rendered only when there was no document at all.

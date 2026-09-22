@@ -12,7 +12,7 @@ import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button } from '@/components/ui';
+import { Button, SheetError } from '@/components/ui';
 import { MatchScoreBadge } from '@/components/volunteer/MatchScoreBadge';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
@@ -82,6 +82,9 @@ export function FullApplicationSheet({
               </View>
               <View style={styles.headerSpacer} />
             </View>
+
+            {/* At the TOP of the sheet, outside the scroller: see SheetError. */}
+            <SheetError error={errorMessage} fallback="Could not submit your application." />
 
             <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
               <Text style={styles.sectionLabel}>CANDIDATE ANALYSIS</Text>
@@ -162,8 +165,6 @@ export function FullApplicationSheet({
                   that I am fit to perform this clinical role.
                 </Text>
               </Pressable>
-
-              {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
             </ScrollView>
 
             <View style={styles.footer}>
@@ -392,12 +393,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     color: colors.textPrimary,
-  },
-  error: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    color: colors.danger,
-    marginTop: spacing.base,
   },
   footer: {
     paddingHorizontal: spacing.xl,

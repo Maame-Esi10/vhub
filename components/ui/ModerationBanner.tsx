@@ -18,6 +18,14 @@ import { useAuthStore } from '@/stores/authStore';
  *
  * Renders NOTHING for an active account, which is nearly everybody nearly all
  * of the time — no placeholder, no empty shell, no layout shift.
+ *
+ * SIZE (owner, 2026-09-22: "reduce the acc suspend box size at the top a bit
+ * too"). It sits above the whole home screen, so at 20px padding and 21px line
+ * height it was pushing the outreaches the screen exists for below the fold.
+ * Every one of the three lines is still here and none of them is truncated --
+ * the banner is the only place a suspended person reads the admin's reason,
+ * and shortening the reason would be shortening the one thing they need. What
+ * came out is the spacing around the words, not the words.
  */
 export function ModerationBanner() {
   const profile = useAuthStore((state) => state.profile);
@@ -31,7 +39,7 @@ export function ModerationBanner() {
     <View style={styles.banner}>
       <MaterialCommunityIcons
         name={banned ? 'block-helper' : 'pause-octagon-outline'}
-        size={20}
+        size={18}
         color={colors.danger}
       />
       <View style={styles.text}>
@@ -56,21 +64,27 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radius.lg,
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.md,
     backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: colors.danger,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.base,
   },
-  text: { flex: 1, gap: spacing.xs },
-  title: { fontFamily: fontFamily.semiBold, fontSize: 15, color: colors.danger },
+  text: { flex: 1, gap: 2 },
+  title: { fontFamily: fontFamily.semiBold, fontSize: 14, color: colors.danger },
   body: {
     fontFamily: fontFamily.regular,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textPrimary,
   },
-  footnote: { fontFamily: fontFamily.regular, fontSize: 12, color: colors.textSecondary },
+  footnote: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: colors.textSecondary,
+  },
 });

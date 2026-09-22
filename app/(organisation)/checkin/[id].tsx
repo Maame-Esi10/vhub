@@ -17,6 +17,7 @@ import QRCode from 'react-native-qrcode-svg';
 import {
   Button,
   ConfirmDialog,
+  ErrorAlert,
   ErrorState,
   ScreenHeader,
   formatEventDate,
@@ -192,7 +193,8 @@ export default function OrganisationCheckinQr() {
           </View>
         </View>
 
-        {anchorError ? <Text style={styles.errorText}>{anchorError}</Text> : null}
+        {/* A failed anchor is a popup, never a line under the card. */}
+        <ErrorAlert error={anchorError} fallback="Could not save the venue location." />
 
         {/*
           An explicit outcome after the tap, and this is not decoration.

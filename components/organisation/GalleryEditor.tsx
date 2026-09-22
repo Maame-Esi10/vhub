@@ -6,6 +6,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
+import { ErrorAlert } from '@/components/ui/ErrorAlert';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
@@ -150,7 +151,8 @@ export function GalleryEditor({
         </Pressable>
       )}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {/* A failed image upload is a popup, never a line under the grid. */}
+      <ErrorAlert error={error} fallback="That image could not be added." />
     </View>
   );
 }

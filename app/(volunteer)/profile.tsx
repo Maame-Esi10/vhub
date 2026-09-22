@@ -78,7 +78,16 @@ export default function VolunteerProfile() {
           service -- see components/ui/Avatar.
         */}
         <View style={styles.identity}>
-          <Avatar name={profile?.full_name ?? 'Volunteer'} uri={profile?.avatar_url} size={64} />
+          {/*
+            The verified tick, drawn only for 'verified' -- never for
+            'documents_pending', which is a wait rather than a decision.
+          */}
+          <Avatar
+            name={profile?.full_name ?? 'Volunteer'}
+            uri={profile?.avatar_url}
+            size={64}
+            verified={volunteerProfile?.verification_status === 'verified'}
+          />
           <View style={styles.identityText}>
             <Text style={styles.name}>{profile?.full_name ?? 'Volunteer'}</Text>
             {profile?.email ? (

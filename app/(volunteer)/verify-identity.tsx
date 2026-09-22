@@ -14,7 +14,7 @@ import {
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, ConfirmDialog, ScreenHeader } from '@/components/ui';
+import { Button, ConfirmDialog, ErrorAlert, ScreenHeader } from '@/components/ui';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CREDENTIAL_CONSENT_POINTS } from '@/constants/credential-guidelines';
 import { useDocumentUrl } from '@/hooks/useDocumentUrl';
@@ -25,7 +25,6 @@ import { useSignDeclaration } from '@/hooks/useSignDeclaration';
 import { useCredentialUpload, useDeleteCredential } from '@/hooks/useMediaUpload';
 import { useAuthStore } from '@/stores/authStore';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { humanError } from '@/lib/errorMessage';
 import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 // Collapsing a section without this is an instant jump on Android rather than
@@ -119,6 +118,24 @@ export default function VolunteerVerifyIdentity() {
   */
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromOnboarding = from === 'onboarding';
+  /*
+    WHERE THE POLICY LINK COMES BACK TO (owner-reported, 2026-09-22: "if I click
+    read the full privacy in identity verification and I click back it should
+    take me back to identity verification not home or settings").
+
+    app/policy.tsx sits OUTSIDE every role group and its ScreenHeader falls back
+    to '/', which the auth guard then resolves to whichever home the role has.
+    That is the right answer only for somebody who arrived at the policy from
+    nowhere in particular. Every caller now says where it is sending the reader
+    from, and this one carries its OWN origin along inside that value, so a
+    volunteer who came here from the inbox still lands back in the inbox two
+    presses later rather than being dropped a level each time.
+  */
+  const policyHref =
+    '/policy?from=' +
+    encodeURIComponent(
+      '/(volunteer)/verify-identity' + (from && from !== 'onboarding' ? `?from=${from}` : '')
+    );
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
@@ -241,9 +258,8 @@ export default function VolunteerVerifyIdentity() {
               </Text>
             </Pressable>
 
-            {signDeclaration.error ? (
-              <Text style={styles.errorText}>{humanError(signDeclaration.error)}</Text>
-            ) : null}
+            {/* A failed signature is a popup, never a line under the button. */}
+            <ErrorAlert error={signDeclaration.error} fallback="Could not save your declaration." />
 
             <Button
               title={signDeclaration.isPending ? 'Saving...' : 'Sign declaration'}
@@ -256,7 +272,48 @@ export default function VolunteerVerifyIdentity() {
         )}
 
         <Text style={styles.sectionHeading}>Credential document</Text>
-        {status === 'unverified' ? (
+
+        {/*
+          OUT OF THE UPLOAD BRANCH. Somebody whose document has just been sent
+          back is exactly the person who most needs to read what counts, and
+          the link used to be rendered only when there was no document on file
+          at all -- so it disappeared at the moment it became most useful. It
+          goes away only once verification is settled.
+        */}
+        {status !== 'verified' ? (
+          <Pressable
+            onPress={() => router.push('/(volunteer)/credential-guidelines')}
+            accessibilityRole="button"
+            accessibilityLabel="Read what to send"
+            style={({ pressed }) => [styles.guidelinesRow, pressed && styles.documentPressed]}
+          >
+            <MaterialCommunityIcons name="help-circle-outline" size={20} color={colors.primary} />
+            <View style={styles.documentFileText}>
+              <Text style={styles.documentFileTitle}>What should I send?</Text>
+              <Text style={styles.documentFileHint}>
+                What counts for your profession, and the four things that get a document sent back.
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textSecondary} />
+          </Pressable>
+        ) : null}
+
+        {/*
+          THE BRANCH IS ON THE DOCUMENT, NOT ON THE STATUS (owner-reported,
+          2026-09-22: after a rejection, "reason but no docx, the docx is not
+          showing though").
+
+          A rejection sets verification_status back to 'unverified' and
+          deliberately KEEPS the file -- destroying it would leave the volunteer
+          unable to see what they had sent and would erase the evidence behind a
+          decision the audit trail had just recorded. But this branch asked
+          "are you unverified?" and treated the answer as "do you have a
+          document?", which are the same question only until the first
+          rejection. So a rejected volunteer was shown the empty upload state,
+          with "No document uploaded yet" sitting directly underneath a card
+          explaining why the document they could not see had been turned down.
+        */}
+        {!hasDocument ? (
           <>
             <Text style={styles.body}>
               Upload your licence, degree certificate or council registration as a PDF or photo.
@@ -268,21 +325,6 @@ export default function VolunteerVerifyIdentity() {
               <Text style={styles.gateNote}>Sign the declaration above first.</Text>
             ) : null}
 
-            <Pressable
-              onPress={() => router.push('/(volunteer)/credential-guidelines')}
-              accessibilityRole="button"
-              accessibilityLabel="Read what to send"
-              style={({ pressed }) => [styles.guidelinesRow, pressed && styles.documentPressed]}
-            >
-              <MaterialCommunityIcons name="help-circle-outline" size={20} color={colors.primary} />
-              <View style={styles.documentFileText}>
-                <Text style={styles.documentFileTitle}>What should I send?</Text>
-                <Text style={styles.documentFileHint}>
-                  What counts for your profession, and the four things that get a document sent back.
-                </Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textSecondary} />
-            </Pressable>
 
             {/*
               CONSENT AT THE POINT OF UPLOAD, not buried in terms. Somebody
@@ -367,7 +409,7 @@ export default function VolunteerVerifyIdentity() {
                 </Pressable>
 
                 <Pressable
-                  onPress={() => router.push('/policy')}
+                  onPress={() => router.push(policyHref as Parameters<typeof router.push>[0])}
                   accessibilityRole="button"
                   accessibilityLabel="Read the privacy policy"
                   hitSlop={8}
@@ -392,27 +434,18 @@ export default function VolunteerVerifyIdentity() {
 
               So this is an indication, deliberately, and not a gate.
             */}
-            {!hasDocument ? (
-              <View style={styles.outstandingCard}>
-                <MaterialCommunityIcons
-                  name="file-alert-outline"
-                  size={20}
-                  color={colors.warning}
-                />
-                <View style={styles.outstandingText}>
-                  <Text style={styles.outstandingTitle}>No document uploaded yet</Text>
-                  <Text style={styles.outstandingBody}>
-                    You can browse every outreach and join support-role ones without this. It is
-                    needed only for clinical roles, and you can come back to it at any time from
-                    Settings.
-                  </Text>
-                </View>
+            {/* Unconditional: this whole branch is the no-document case. */}
+            <View style={styles.outstandingCard}>
+              <MaterialCommunityIcons name="file-alert-outline" size={20} color={colors.warning} />
+              <View style={styles.outstandingText}>
+                <Text style={styles.outstandingTitle}>No document uploaded yet</Text>
+                <Text style={styles.outstandingBody}>
+                  You can browse every outreach and join support-role ones without this. It is
+                  needed only for clinical roles, and you can come back to it at any time from
+                  Settings.
+                </Text>
               </View>
-            ) : null}
-
-            {credentialUpload.error ? (
-              <Text style={styles.errorText}>{humanError(credentialUpload.error)}</Text>
-            ) : null}
+            </View>
 
             <Button
               title={credentialUpload.isPending ? 'Uploading...' : 'Choose a document'}
@@ -430,14 +463,34 @@ export default function VolunteerVerifyIdentity() {
           <>
             <View style={styles.signedRow}>
               <MaterialCommunityIcons
-                name={status === 'verified' ? 'check-circle' : 'file-check-outline'}
+                name={
+                  status === 'verified'
+                    ? 'check-circle'
+                    : status === 'documents_pending'
+                      ? 'file-check-outline'
+                      : 'file-alert-outline'
+                }
                 size={18}
-                color={status === 'verified' ? colors.success : colors.warning}
+                color={
+                  status === 'verified'
+                    ? colors.success
+                    : status === 'documents_pending'
+                      ? colors.warning
+                      : colors.danger
+                }
               />
+              {/*
+                Three states, not two. The third is a volunteer whose document
+                was declined and is still on file: they need to be told that
+                what they are looking at is the one that was turned down, or the
+                screen reads as though the decision applied to something else.
+              */}
               <Text style={styles.signedText}>
                 {status === 'verified'
                   ? 'Your credential has been reviewed and accepted.'
-                  : 'Your document has been received and is waiting on review.'}
+                  : status === 'documents_pending'
+                    ? 'Your document has been received and is waiting on review.'
+                    : 'This is the document that was reviewed. Replace it with a different one and it goes back into the queue.'}
               </Text>
             </View>
 
@@ -448,8 +501,7 @@ export default function VolunteerVerifyIdentity() {
               one matters most — this is an identity document, and being unable
               to withdraw your own is the wrong default.
             */}
-            {hasDocument ? (
-              <DocumentPreview
+            <DocumentPreview
                 url={document.data?.url ?? null}
                 isImage={document.data?.isImage ?? false}
                 isLoadingUrl={document.isLoading}
@@ -462,16 +514,8 @@ export default function VolunteerVerifyIdentity() {
                 isReplacing={credentialUpload.isPending}
                 isDeleting={deleteCredential.isPending}
                 onReplace={() => user && credentialUpload.mutate({ userId: user.id })}
-                onDelete={() => setConfirmingDelete(true)}
-              />
-            ) : null}
-
-            {credentialUpload.error ? (
-              <Text style={styles.errorText}>{humanError(credentialUpload.error)}</Text>
-            ) : null}
-            {deleteCredential.error ? (
-              <Text style={styles.errorText}>{humanError(deleteCredential.error)}</Text>
-            ) : null}
+              onDelete={() => setConfirmingDelete(true)}
+            />
           </>
         )}
 
@@ -532,6 +576,16 @@ export default function VolunteerVerifyIdentity() {
         }}
         onCancel={() => setConfirmingDelete(false)}
       />
+
+      {/*
+        ONE popup each, at the screen root, rather than a line of red text
+        beside whichever button was pressed. The upload error had two render
+        sites -- the first-upload branch and the replace branch -- which is
+        exactly the sort of duplication a popup removes: the failure is the
+        same failure whichever branch produced it.
+      */}
+      <ErrorAlert error={credentialUpload.error} fallback="That document could not be uploaded." />
+      <ErrorAlert error={deleteCredential.error} fallback="That document could not be removed." />
     </SafeAreaView>
   );
 }
@@ -798,6 +852,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     backgroundColor: '#FEF2F2',
     gap: spacing.xs,
+    // The status card sits directly above and the two were touching, which
+    // read as one two-tone box rather than as a state and the reason for it
+    // (owner, 2026-09-22: "space btw the not verified box and your docx was
+    // not approved").
+    marginTop: spacing.base,
     marginBottom: spacing.lg,
   },
   reasonHeading: { fontFamily: fontFamily.semiBold, fontSize: 14, color: colors.danger },
@@ -943,12 +1002,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: colors.textSecondary,
-  },
-  errorText: {
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-    color: colors.danger,
-    marginTop: spacing.sm,
   },
   signButton: {
     width: '100%',

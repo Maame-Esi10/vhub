@@ -9,7 +9,7 @@ import {
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, isLateCancellationWindow } from '@/components/ui';
+import { Button, SheetError, isLateCancellationWindow } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 
 /** Reason options from design-refs/Withdraw Application Screen.png. */
@@ -90,6 +90,9 @@ export function WithdrawSheet({
             </View>
           </View>
 
+          {/* At the TOP of the sheet, outside the scroller: see SheetError. */}
+          <SheetError error={errorMessage} fallback="Could not withdraw your application." />
+
           <ScrollView contentContainerStyle={styles.content}>
             <Text style={styles.eventTitle} numberOfLines={2}>
               {outreachTitle}
@@ -119,8 +122,6 @@ export function WithdrawSheet({
                 </Pressable>
               );
             })}
-
-            {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
           </ScrollView>
 
           <View style={styles.footer}>
@@ -272,12 +273,6 @@ const styles = StyleSheet.create({
   },
   reasonTextSelected: {
     color: colors.primary,
-  },
-  error: {
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    color: colors.danger,
-    marginTop: spacing.sm,
   },
   footer: {
     paddingHorizontal: spacing.xl,

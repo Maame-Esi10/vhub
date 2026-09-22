@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +16,7 @@ import {
   Badge,
   Button,
   DocumentViewer,
+  ErrorAlert,
   ErrorState,
   Input,
   ListSkeleton,
@@ -135,131 +138,142 @@ export default function AdminOrganisationDetail() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Organisation" fallback="/(admin)/organisations" />
 
-      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
-        <View style={styles.identity}>
-          <Text style={styles.orgName}>{profile.org_name}</Text>
-          <View style={styles.badgeRow}>
-            <Badge
-              label={STATE_LABELS[profile.verification_state]}
-              tone={profile.verification_state === 'verified' ? 'success' : 'neutral'}
-            />
-            {profile.org_type ? <Badge label={profile.org_type} /> : null}
-          </View>
-        </View>
-
-        <Section title="Contact">
-          <Fact label="Contact person" value={profile.contact_person} />
-          <Fact label="Official email" value={profile.official_email} />
-          <Fact label="Physical address" value={profile.physical_address} />
-          <Fact label="Website" value={profile.website} />
-          <Fact label="Public enquiries" value={profile.contact_email} />
-        </Section>
-
-        <Section title="Registration">
-          {registrations.length === 0 ? (
-            <Text style={styles.emptyLine}>No registration numbers were submitted.</Text>
-          ) : (
-            registrations.map((row) => <Fact key={row.id} label={row.label} value={row.number} />)
-          )}
-        </Section>
-
-        <Section title={`Documents (${documents.length})`}>
-          {documents.length === 0 ? (
-            <Text style={styles.emptyLine}>No documents were submitted.</Text>
-          ) : (
-            documents.map((document) => (
-              <Pressable
-                key={document.id}
-                onPress={() => void openDocument(document)}
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${document.label ?? 'document'}`}
-                style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}
-              >
-                <MaterialCommunityIcons name="file-lock-outline" size={20} color={colors.primary} />
-                <Text style={styles.documentName} numberOfLines={1}>
-                  {document.label ?? 'Document'}
-                </Text>
-                <MaterialCommunityIcons name="magnify-plus-outline" size={18} color={colors.textSecondary} />
-              </Pressable>
-            ))
-          )}
-        </Section>
-
-        {decidable ? (
-          <View style={styles.decisionBlock}>
-            <Text style={styles.sectionTitle}>Your decision</Text>
-            <Text style={styles.decisionHint}>
-              The reason is required either way. If you reject, this exact text is sent to the
-              organisation so it knows what to fix. Write it to be read by them, not by us.
-            </Text>
-            <Input
-              label="Reason"
-              required
-              value={reason}
-              onChangeText={setReason}
-              placeholder="What you saw, and what it means"
-              multiline
-              error={
-                attempted && reason.trim().length < 3
-                  ? 'Write a reason before deciding.'
-                  : undefined
-              }
-            />
-
-            {decide.error ? <Text style={styles.errorText}>{humanError(decide.error)}</Text> : null}
-
-            <View style={styles.actions}>
-              <Button
-                title={decide.isPending ? 'Saving…' : 'Approve'}
-                onPress={() => submitDecision('approve')}
-                disabled={decide.isPending}
-                style={styles.actionButton}
+      {/*
+        THE REASON FIELD WAS BEHIND THE KEYBOARD (owner-reported, 2026-09-22).
+        The app is edge-to-edge, so the window no longer resizes when the
+        keyboard opens: it is an inset drawn over the top. Nothing shrinks and
+        nothing scrolls by itself, so a field low on the page is simply covered.
+        See constants/keyboard.ts for why the behaviour is 'padding' on both
+        platforms rather than the iOS-only ternary.
+      */}
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_AVOID_BEHAVIOR}>
+        <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
+          <View style={styles.identity}>
+            <Text style={styles.orgName}>{profile.org_name}</Text>
+            <View style={styles.badgeRow}>
+              <Badge
+                label={STATE_LABELS[profile.verification_state]}
+                tone={profile.verification_state === 'verified' ? 'success' : 'neutral'}
               />
-              <Button
-                title="Reject"
-                variant="outline"
-                onPress={() => submitDecision('reject')}
-                disabled={decide.isPending}
-                style={styles.actionButton}
-              />
+              {profile.org_type ? <Badge label={profile.org_type} /> : null}
             </View>
           </View>
-        ) : (
-          <View style={styles.decidedCard}>
-            <Text style={styles.decidedHeading}>
-              {profile.verification_state === 'verified'
-                ? 'Already verified'
-                : `Currently ${STATE_LABELS[profile.verification_state].toLowerCase()}`}
-            </Text>
-            <Text style={styles.decidedBody}>
-              {profile.verification_reason
-                ? `Last reason given: “${profile.verification_reason}”`
-                : 'There is no submission open for this organisation, so there is nothing to decide.'}
-            </Text>
-          </View>
-        )}
 
-        <Section title="History">
-          {(history.data ?? []).length === 0 ? (
-            <Text style={styles.emptyLine}>No admin decision has been recorded for this organisation.</Text>
-          ) : (
-            (history.data ?? []).map((entry) => (
-              <View key={entry.id} style={styles.historyRow}>
-                <Text style={styles.historyAction}>{entry.action}</Text>
-                {entry.reason ? <Text style={styles.historyReason}>“{entry.reason}”</Text> : null}
-                <Text style={styles.historyMeta}>
-                  {entry.actor_email ?? 'Account since removed'} ·{' '}
-                  {new Date(entry.created_at).toLocaleDateString(undefined, {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </Text>
+          <Section title="Contact">
+            <Fact label="Contact person" value={profile.contact_person} />
+            <Fact label="Official email" value={profile.official_email} />
+            <Fact label="Physical address" value={profile.physical_address} />
+            <Fact label="Website" value={profile.website} />
+            <Fact label="Public enquiries" value={profile.contact_email} />
+          </Section>
+
+          <Section title="Registration">
+            {registrations.length === 0 ? (
+              <Text style={styles.emptyLine}>No registration numbers were submitted.</Text>
+            ) : (
+              registrations.map((row) => <Fact key={row.id} label={row.label} value={row.number} />)
+            )}
+          </Section>
+
+          <Section title={`Documents (${documents.length})`}>
+            {documents.length === 0 ? (
+              <Text style={styles.emptyLine}>No documents were submitted.</Text>
+            ) : (
+              documents.map((document) => (
+                <Pressable
+                  key={document.id}
+                  onPress={() => void openDocument(document)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${document.label ?? 'document'}`}
+                  style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}
+                >
+                  <MaterialCommunityIcons name="file-lock-outline" size={20} color={colors.primary} />
+                  <Text style={styles.documentName} numberOfLines={1}>
+                    {document.label ?? 'Document'}
+                  </Text>
+                  <MaterialCommunityIcons name="magnify-plus-outline" size={18} color={colors.textSecondary} />
+                </Pressable>
+              ))
+            )}
+          </Section>
+
+          {decidable ? (
+            <View style={styles.decisionBlock}>
+              <Text style={styles.sectionTitle}>Your decision</Text>
+              <Text style={styles.decisionHint}>
+                The reason is required either way. If you reject, this exact text is sent to the
+                organisation so it knows what to fix. Write it to be read by them, not by us.
+              </Text>
+              <Input
+                label="Reason"
+                required
+                value={reason}
+                onChangeText={setReason}
+                placeholder="What you saw, and what it means"
+                multiline
+                error={
+                  attempted && reason.trim().length < 3
+                    ? 'Write a reason before deciding.'
+                    : undefined
+                }
+              />
+
+              {/* A refused decision is a popup, never a line under the form: see ErrorAlert. */}
+              <ErrorAlert error={decide.error} fallback="Could not save your decision." />
+
+              <View style={styles.actions}>
+                <Button
+                  title={decide.isPending ? 'Saving…' : 'Approve'}
+                  onPress={() => submitDecision('approve')}
+                  disabled={decide.isPending}
+                  style={styles.actionButton}
+                />
+                <Button
+                  title="Reject"
+                  variant="outline"
+                  onPress={() => submitDecision('reject')}
+                  disabled={decide.isPending}
+                  style={styles.actionButton}
+                />
               </View>
-            ))
+            </View>
+          ) : (
+            <View style={styles.decidedCard}>
+              <Text style={styles.decidedHeading}>
+                {profile.verification_state === 'verified'
+                  ? 'Already verified'
+                  : `Currently ${STATE_LABELS[profile.verification_state].toLowerCase()}`}
+              </Text>
+              <Text style={styles.decidedBody}>
+                {profile.verification_reason
+                  ? `Last reason given: “${profile.verification_reason}”`
+                  : 'There is no submission open for this organisation, so there is nothing to decide.'}
+              </Text>
+            </View>
           )}
-        </Section>
-      </ScrollView>
+
+          <Section title="History">
+            {(history.data ?? []).length === 0 ? (
+              <Text style={styles.emptyLine}>No admin decision has been recorded for this organisation.</Text>
+            ) : (
+              (history.data ?? []).map((entry) => (
+                <View key={entry.id} style={styles.historyRow}>
+                  <Text style={styles.historyAction}>{entry.action}</Text>
+                  {entry.reason ? <Text style={styles.historyReason}>“{entry.reason}”</Text> : null}
+                  <Text style={styles.historyMeta}>
+                    {entry.actor_email ?? 'Account since removed'} ·{' '}
+                    {new Date(entry.created_at).toLocaleDateString(undefined, {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </Text>
+                </View>
+              ))
+            )}
+          </Section>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <DocumentViewer
         visible={!!viewing}
@@ -310,6 +324,8 @@ function Fact({ label, value }: { label: string; value: string | null }) {
 }
 
 const styles = StyleSheet.create({
+  /** Lets the KeyboardAvoidingView fill the screen under the header. */
+  flex: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.xl },
   stateWrap: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },

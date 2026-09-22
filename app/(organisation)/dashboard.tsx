@@ -11,19 +11,25 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar,
+import {
+  AlertDialog,
+  Avatar,
   Button,
   EmptyState,
+  ErrorAlert,
   ErrorState,
   FilterChips,
+  HintRail,
   ListSkeleton,
   MetricCard,
-  ModerationBanner, HintRail } from '@/components/ui';
+  ModerationBanner,
+} from '@/components/ui';
 import type { FilterChipOption } from '@/components/ui';
 import { OutreachCard } from '@/components/organisation';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import {
   useDayCoverageForMany,
+  useMyOrganisationProfile,
   useOrganisationOutreaches,
   useOutreachDaysForMany,
   useUpdateOutreachStatus,
@@ -53,7 +59,15 @@ export default function Dashboard() {
   const organisationId = user?.id;
 
   const outreachesQuery = useOrganisationOutreaches(organisationId);
+  /*
+    Fetched for the verified tick on the header avatar. `verified` is a stored
+    generated column on `organisation_profiles` derived from
+    `verification_state`, so it can never disagree with the admin's decision.
+  */
+  const myOrg = useMyOrganisationProfile(organisationId).data;
   const updateStatus = useUpdateOutreachStatus();
+  /** Which status change just succeeded, so the popup can name it. Null hides it. */
+  const [statusDone, setStatusDone] = useState<OutreachStatus | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const unread = unreadCount(useNotifications().data ?? []);
@@ -130,10 +144,26 @@ export default function Dashboard() {
     router.push(`/(organisation)/outreach/${outreachId}`);
   }
 
+  /*
+    PUBLISHING FROM THE CARD NOW SAYS SOMETHING (owner, 2026-09-22: "didn't get
+    a pop up saying published if I click publish on homescreen").
+
+    The mutation had no outcome at either end. On success the only signal was
+    the card's own status chip changing from Draft to Open, which is a small
+    change halfway down a list and is easy to miss entirely -- and on failure
+    there was nothing at all, which is the worse half: publishing is refused
+    outright by trg_outreaches_require_verified_org while an organisation is
+    still awaiting review, so an unverified organisation pressed Publish and
+    the app went completely silent about a refusal it had been given a reason
+    for.
+  */
   function handleQuickAction(outreach: OutreachWithCounts) {
     if (!organisationId) return;
     const nextStatus: OutreachStatus = outreach.status === 'draft' ? 'open' : 'closed';
-    updateStatus.mutate({ outreachId: outreach.id, organisationId, status: nextStatus });
+    updateStatus.mutate(
+      { outreachId: outreach.id, organisationId, status: nextStatus },
+      { onSuccess: () => setStatusDone(nextStatus) },
+    );
   }
 
   function quickActionFor(outreach: OutreachWithCounts) {
@@ -163,6 +193,7 @@ export default function Dashboard() {
           name={profile?.full_name ?? 'Organisation'}
           uri={profile?.avatar_url}
           size={44}
+          verified={myOrg?.verified === true}
         />
         <View style={styles.headerText}>
           <Text style={styles.eyebrow}>Command Center</Text>
@@ -322,6 +353,23 @@ export default function Dashboard() {
             />
           )
         }
+      />
+
+      <AlertDialog
+        visible={statusDone !== null}
+        tone="success"
+        icon={statusDone === 'open' ? 'rocket-launch-outline' : 'lock-outline'}
+        title={statusDone === 'open' ? 'Your outreach is live' : 'Applications closed'}
+        message={
+          statusDone === 'open'
+            ? 'Volunteers can see it in their feed and apply from now on. You can close it at any time from this card.'
+            : 'No new applications will come in. Everyone already accepted keeps their place, and you can still manage them from the event.'
+        }
+        onDismiss={() => setStatusDone(null)}
+      />
+      <ErrorAlert
+        error={updateStatus.error}
+        fallback="Could not change the status of that outreach."
       />
     </SafeAreaView>
   );

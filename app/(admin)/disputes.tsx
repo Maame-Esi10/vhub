@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
   RefreshControl,
   StyleSheet,
   View,
 } from 'react-native';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Badge, Button, EmptyState, ErrorState, Input, ListSkeleton, Toast } from '@/components/ui';
+import { Badge, Button, EmptyState, ErrorAlert, ErrorState, Input, ListSkeleton, Toast } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
   useDisputeEvidence,
@@ -96,114 +98,125 @@ export default function AdminDisputes() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <FlatList
-        data={rows}
-        keyExtractor={(row) => row.id}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: tabBarClearance(insets.bottom) },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={queue.isRefetching} onRefresh={() => queue.refetch()} />
-        }
-        ListHeaderComponent={<Header count={rows.length} />}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
-          <EmptyState
-            icon="scale-balance"
-            title="Nothing disputed"
-            message="No volunteer has challenged an attendance record or a review. When one does, it appears here oldest first."
-          />
-        }
-        renderItem={({ item }) => {
-          const open = openId === item.id;
-          return (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <MaterialCommunityIcons
-                  name={item.type === 'attendance' ? 'calendar-remove-outline' : 'star-outline'}
-                  size={20}
-                  color={colors.primary}
-                />
-                <Text style={styles.name} numberOfLines={1}>
-                  {item.volunteer?.full_name ?? 'Volunteer'}
-                </Text>
-                <Badge label={item.type === 'attendance' ? 'Attendance' : 'Review'} />
-              </View>
-
-              <Text style={styles.meta} numberOfLines={1}>
-                {item.outreach?.title ?? 'Outreach'} · {item.outreach?.date ?? ''}
-              </Text>
-
-              <View style={styles.statementBlock}>
-                <Text style={styles.statementLabel}>What they say</Text>
-                <Text style={styles.statementText}>{item.statement}</Text>
-              </View>
-
-              {open ? (
-                <>
-                  <View style={styles.evidenceBlock}>
-                    <Text style={styles.statementLabel}>What the record says</Text>
-                    {evidence.isLoading ? (
-                      <Text style={styles.evidenceLine}>Loading the record…</Text>
-                    ) : (
-                      <EvidenceBody dispute={item} evidence={evidence.data} />
-                    )}
-                  </View>
-
-                  <Text style={styles.limitNote}>
-                    Upholding records the correction and tells both parties. It does not recalculate the
-                    volunteer’s V-Score. That change is separate and is not switched on.
-                  </Text>
-
-                  <Input
-                    label="Your decision, in words both will read"
-                    required
-                    value={resolution}
-                    onChangeText={setResolution}
-                    placeholder="What you found, and what it means"
-                    multiline
-                    error={
-                      attempted && resolution.trim().length < 3
-                        ? 'Write your reasoning before deciding.'
-                        : undefined
-                    }
+      {/*
+        THE REASON FIELD WAS BEHIND THE KEYBOARD (owner-reported, 2026-09-22).
+        The app is edge-to-edge, so the window no longer resizes when the
+        keyboard opens: it is an inset drawn over the top. Nothing shrinks and
+        nothing scrolls by itself, so a field low on the page is simply covered.
+        See constants/keyboard.ts for why the behaviour is 'padding' on both
+        platforms rather than the iOS-only ternary.
+      */}
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_AVOID_BEHAVIOR}>
+        <FlatList
+          data={rows}
+          keyExtractor={(row) => row.id}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: tabBarClearance(insets.bottom) },
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={queue.isRefetching} onRefresh={() => queue.refetch()} />
+          }
+          ListHeaderComponent={<Header count={rows.length} />}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            <EmptyState
+              icon="scale-balance"
+              title="Nothing disputed"
+              message="No volunteer has challenged an attendance record or a review. When one does, it appears here oldest first."
+            />
+          }
+          renderItem={({ item }) => {
+            const open = openId === item.id;
+            return (
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <MaterialCommunityIcons
+                    name={item.type === 'attendance' ? 'calendar-remove-outline' : 'star-outline'}
+                    size={20}
+                    color={colors.primary}
                   />
-                  {resolve.error ? <Text style={styles.errorText}>{humanError(resolve.error)}</Text> : null}
+                  <Text style={styles.name} numberOfLines={1}>
+                    {item.volunteer?.full_name ?? 'Volunteer'}
+                  </Text>
+                  <Badge label={item.type === 'attendance' ? 'Attendance' : 'Review'} />
+                </View>
 
-                  <View style={styles.actions}>
-                    <Button
-                      title={resolve.isPending ? 'Saving…' : 'Uphold'}
-                      onPress={() => submit('uphold')}
-                      disabled={resolve.isPending}
-                      style={styles.actionButton}
+                <Text style={styles.meta} numberOfLines={1}>
+                  {item.outreach?.title ?? 'Outreach'} · {item.outreach?.date ?? ''}
+                </Text>
+
+                <View style={styles.statementBlock}>
+                  <Text style={styles.statementLabel}>What they say</Text>
+                  <Text style={styles.statementText}>{item.statement}</Text>
+                </View>
+
+                {open ? (
+                  <>
+                    <View style={styles.evidenceBlock}>
+                      <Text style={styles.statementLabel}>What the record says</Text>
+                      {evidence.isLoading ? (
+                        <Text style={styles.evidenceLine}>Loading the record…</Text>
+                      ) : (
+                        <EvidenceBody dispute={item} evidence={evidence.data} />
+                      )}
+                    </View>
+
+                    <Text style={styles.limitNote}>
+                      Upholding records the correction and tells both parties. It does not recalculate the
+                      volunteer’s V-Score. That change is separate and is not switched on.
+                    </Text>
+
+                    <Input
+                      label="Your decision, in words both will read"
+                      required
+                      value={resolution}
+                      onChangeText={setResolution}
+                      placeholder="What you found, and what it means"
+                      multiline
+                      error={
+                        attempted && resolution.trim().length < 3
+                          ? 'Write your reasoning before deciding.'
+                          : undefined
+                      }
                     />
-                    <Button
-                      title="Not upheld"
-                      variant="outline"
-                      onPress={() => submit('reject')}
-                      disabled={resolve.isPending}
-                      style={styles.actionButton}
-                    />
-                  </View>
-                </>
-              ) : (
-                <Button
-                  title="Look at the record"
-                  variant="outline"
-                  onPress={() => {
-                    setOpenId(item.id);
-                    setResolution('');
-                    setAttempted(false);
-                  }}
-                  style={styles.openButton}
-                />
-              )}
-            </View>
-          );
-        }}
-      />
+                    {/* A refused decision is a popup, never a line under the form: see ErrorAlert. */}
+                    <ErrorAlert error={resolve.error} fallback="Could not save your decision." />
+
+                    <View style={styles.actions}>
+                      <Button
+                        title={resolve.isPending ? 'Saving…' : 'Uphold'}
+                        onPress={() => submit('uphold')}
+                        disabled={resolve.isPending}
+                        style={styles.actionButton}
+                      />
+                      <Button
+                        title="Not upheld"
+                        variant="outline"
+                        onPress={() => submit('reject')}
+                        disabled={resolve.isPending}
+                        style={styles.actionButton}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <Button
+                    title="Look at the record"
+                    variant="outline"
+                    onPress={() => {
+                      setOpenId(item.id);
+                      setResolution('');
+                      setAttempted(false);
+                    }}
+                    style={styles.openButton}
+                  />
+                )}
+              </View>
+            );
+          }}
+        />
+      </KeyboardAvoidingView>
 
       <Toast message={toast} onDismiss={() => setToast(null)} durationMs={5000} />
     </SafeAreaView>
@@ -302,6 +315,8 @@ function Header({ count }: { count: number | null }) {
 }
 
 const styles = StyleSheet.create({
+  /** Lets the KeyboardAvoidingView fill the screen under the header. */
+  flex: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.lg, paddingTop: spacing.base, paddingBottom: spacing.xxl },
   stateWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },

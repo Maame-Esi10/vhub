@@ -18,6 +18,7 @@ import {
   Button,
   ConfirmDialog,
   EditSectionCard,
+  ErrorAlert,
   ErrorState,
   Input,
   ScreenHeader,
@@ -421,11 +422,8 @@ export default function EditOrganisationProfile() {
               </Text>
             </View>
 
-            {error ? (
-              <Text style={styles.error}>
-                {humanError(error, 'Could not save. Please try again.')}
-              </Text>
-            ) : null}
+            {/* A failed save is a popup, never a line above the Save button. */}
+            <ErrorAlert error={error} fallback="Could not save. Please try again." />
 
             <Button
               title={isPending ? 'Saving…' : 'Save Organisation Profile'}

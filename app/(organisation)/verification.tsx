@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, ErrorState, Input, ListSkeleton, ScreenHeader, Toast } from '@/components/ui';
+import {
+  Button,
+  ErrorAlert,
+  ErrorState,
+  Input,
+  ListSkeleton,
+  ScreenHeader,
+  Toast,
+} from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { ORGANISATION_CONSENT_POINTS } from '@/constants/credential-guidelines';
 import { useMyVerificationSubmission, useSubmitVerification } from '@/hooks';
@@ -106,6 +116,15 @@ export default function OrganisationVerification() {
   const submission = submissionQuery.data;
   const state: OrgVerificationState = submission?.profile.verification_state ?? 'unverified';
   const presentation = STATE_PRESENTATION[state];
+  const decidedAt = submission?.profile.verification_decided_at ?? null;
+  const decidedOn =
+    decidedAt && (state === 'verified' || state === 'rejected')
+      ? new Date(decidedAt).toLocaleDateString(undefined, {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        })
+      : null;
 
   // Prefilled from whatever was submitted before, so a rejected organisation
   // fixes one field rather than retyping everything it already told us.
@@ -223,225 +242,253 @@ export default function OrganisationVerification() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Organisation Verification" fallback="/(organisation)/settings" />
 
-      <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
-        <View style={[styles.statusCard, { borderColor: presentation.tint }]}>
-          <MaterialCommunityIcons name={presentation.icon} size={28} color={presentation.tint} />
-          <View style={styles.statusText}>
-            <Text style={styles.statusLabel}>{presentation.label}</Text>
-            <Text style={styles.statusDetail}>{presentation.detail}</Text>
-          </View>
-        </View>
+      {/*
+        THE REASON FIELD WAS BEHIND THE KEYBOARD (owner-reported, 2026-09-22).
+        The app is edge-to-edge, so the window no longer resizes when the
+        keyboard opens: it is an inset drawn over the top. Nothing shrinks and
+        nothing scrolls by itself, so a field low on the page is simply covered.
+        See constants/keyboard.ts for why the behaviour is 'padding' on both
+        platforms rather than the iOS-only ternary.
+      */}
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_AVOID_BEHAVIOR}>
+        <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
+          <View style={[styles.statusCard, { borderColor: presentation.tint }]}>
+            <MaterialCommunityIcons name={presentation.icon} size={28} color={presentation.tint} />
+            <View style={styles.statusText}>
+              <Text style={styles.statusLabel}>{presentation.label}</Text>
+              <Text style={styles.statusDetail}>{presentation.detail}</Text>
+              {/*
+                WHEN THE DECISION WAS MADE (owner, 2026-09-22: "where does the
+                org see the reason from the admin, or it only sees the
+                reject?").
 
-        {state === 'rejected' && submission?.profile.verification_reason ? (
-          <View style={styles.reasonCard}>
-            <Text style={styles.reasonHeading}>Why it was not approved</Text>
-            <Text style={styles.reasonBody}>{submission.profile.verification_reason}</Text>
-          </View>
-        ) : null}
+                An approval's written reason is deliberately NOT shown here.
+                The reason is required for both outcomes but they are written
+                for different readers: a rejection's is addressed TO the
+                organisation and is the only thing telling it what to fix,
+                while an approval's is a note for the next admin explaining why
+                thin evidence was accepted. Publishing that second kind would
+                change what an admin can honestly write in it.
 
-        <View style={styles.explainCard}>
-          <Text style={styles.explainText}>
-            VHub verifies organisations so volunteers know an outreach is real before they give up a
-            Saturday for it. Until yours is verified you can write and keep drafts, but you cannot
-            publish. Everything you send here is read by a VHub administrator and by nobody else.
-          </Text>
-        </View>
-
-        {canEdit ? (
-          <>
-            <Text style={styles.sectionHeading}>Who we should contact</Text>
-            <Input
-              label="Contact person"
-              required
-              value={contactPerson}
-              onChangeText={setContactPerson}
-              placeholder="Full name of the person responsible"
-              error={attempted ? (errors.contactPerson ?? undefined) : undefined}
-            />
-            <Input
-              label="Official email"
-              required
-              value={officialEmail}
-              onChangeText={setOfficialEmail}
-              placeholder="name@yourorganisation.org"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              error={attempted ? (errors.officialEmail ?? undefined) : undefined}
-            />
-            <Text style={styles.fieldHint}>
-              An address on your own domain if you have one. This is not shown to volunteers. Your
-              public enquiries address stays on your profile.
-            </Text>
-            <Input
-              label="Physical address"
-              required
-              value={physicalAddress}
-              onChangeText={setPhysicalAddress}
-              placeholder="Street, town, region"
-              multiline
-              error={attempted ? (errors.physicalAddress ?? undefined) : undefined}
-            />
-            <Input
-              label="Website or social page"
-              value={website}
-              onChangeText={setWebsite}
-              placeholder="https://"
-              autoCapitalize="none"
-            />
-
-            <Text style={styles.sectionHeading}>Registration</Text>
-            <Text style={styles.sectionHint}>
-              Whatever your organisation actually holds: Registrar-General, the NGO Board, a
-              teaching-hospital affiliation, a district health directorate letter. Name the scheme in
-              your own words; there is no fixed list.
-            </Text>
-
-            {registrations.map((row, index) => (
-              <View key={index} style={styles.registrationRow}>
-                <Input
-                  label={index === 0 ? 'Registered with' : undefined}
-                  value={row.label}
-                  onChangeText={(value) => updateRegistration(index, { label: value })}
-                  placeholder="e.g. Registrar-General"
-                />
-                <Input
-                  label={index === 0 ? 'Number' : undefined}
-                  value={row.number}
-                  onChangeText={(value) => updateRegistration(index, { number: value })}
-                  placeholder="e.g. CG123456789"
-                />
-                {registrations.length > 1 ? (
-                  <Pressable
-                    onPress={() => setRegistrations((rows) => rows.filter((_, i) => i !== index))}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove registration ${index + 1}`}
-                    style={styles.removeRow}
-                  >
-                    <MaterialCommunityIcons name="close" size={16} color={colors.danger} />
-                    <Text style={styles.removeText}>Remove</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            ))}
-
-            {attempted && errors.registrations ? (
-              <Text style={styles.errorText}>{errors.registrations}</Text>
-            ) : null}
-
-            <Button
-              title="Add another registration"
-              variant="outline"
-              onPress={() => setRegistrations((rows) => [...rows, { label: '', number: '' }])}
-              style={styles.addButton}
-            />
-
-            <Text style={styles.sectionHeading}>Documents</Text>
-            <Text style={styles.sectionHint}>
-              A photo or PDF of each registration certificate or letter. Make sure the text is legible
-              and the whole page is in frame. These are stored privately. Only a VHub administrator
-              can open them, and only through a link that expires.
-            </Text>
-
-            {documents.map((doc) => (
-              <View key={doc.publicId} style={styles.documentRow}>
-                <MaterialCommunityIcons name="file-lock-outline" size={20} color={colors.primary} />
-                <Text style={styles.documentName} numberOfLines={1}>
-                  {doc.name}
-                </Text>
-                <Pressable
-                  onPress={() =>
-                    setDocuments((current) => current.filter((d) => d.publicId !== doc.publicId))
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${doc.name}`}
-                  hitSlop={8}
-                >
-                  <MaterialCommunityIcons name="close" size={18} color={colors.textSecondary} />
-                </Pressable>
-              </View>
-            ))}
-
-            {attempted && errors.documents ? (
-              <Text style={styles.errorText}>{errors.documents}</Text>
-            ) : null}
-
-            <Button
-              title={uploadDocument.isPending ? 'Uploading…' : 'Attach a document'}
-              variant="outline"
-              disabled={uploadDocument.isPending}
-              onPress={() => void handleAttach()}
-              style={styles.addButton}
-            />
-            {uploadDocument.error ? (
-              <Text style={styles.errorText}>{humanError(uploadDocument.error)}</Text>
-            ) : null}
-
-            {/*
-              CONSENT AT THE POINT OF UPLOAD, not buried in terms — and not a
-              decorative checkbox either: the API refuses the submission without
-              it and remembers the answer, so this block is what unblocks the
-              server. It disappears once recorded; asking again on every
-              resubmission would train people to tap past it.
-            */}
-            {!consentRecorded ? (
-              <View style={styles.consentCard}>
-                <Text style={styles.consentHeading}>Before you submit</Text>
-                {ORGANISATION_CONSENT_POINTS.map((point) => (
-                  <View key={point} style={styles.consentRow}>
-                    <MaterialCommunityIcons name="circle-small" size={20} color={colors.textSecondary} />
-                    <Text style={styles.consentText}>{point}</Text>
-                  </View>
-                ))}
-                <Pressable
-                  onPress={() => setConsented((prev) => !prev)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: consented }}
-                  style={styles.confirmRow}
-                >
-                  <View style={[styles.checkbox, consented && styles.checkboxChecked]}>
-                    {consented ? (
-                      <MaterialCommunityIcons name="check" size={14} color={colors.white} />
-                    ) : null}
-                  </View>
-                  <Text style={styles.consentAgree}>
-                    I understand this, and I agree to VHub storing these documents for verification.
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            {submit.error ? <Text style={styles.errorText}>{humanError(submit.error)}</Text> : null}
-            {attempted && firstError ? (
-              <Text style={styles.errorText}>Fix the marked fields above, then submit again.</Text>
-            ) : null}
-
-            <View style={styles.submitBlock}>
-              <Button
-                title={submit.isPending ? 'Submitting…' : 'Submit for verification'}
-                onPress={handleSubmit}
-                disabled={submit.isPending || (!consentRecorded && !consented)}
-              />
+                What the organisation was missing is not the note; it is any
+                acknowledgement that a person looked and when. That is this
+                line, and it appears for an approval and a rejection alike.
+              */}
+              {decidedOn ? <Text style={styles.statusDecided}>Decided {decidedOn}</Text> : null}
             </View>
-          </>
-        ) : (
-          <View style={styles.submittedCard}>
-            <Text style={styles.submittedHeading}>What you sent</Text>
-            <Text style={styles.submittedLine}>
-              {submission?.profile.contact_person ?? profile?.full_name ?? 'Contact not recorded'}
-              {submission?.profile.official_email ? ` · ${submission.profile.official_email}` : ''}
-            </Text>
-            {submission?.registrations.map((row) => (
-              <Text key={row.id} style={styles.submittedLine}>
-                {row.label}: {row.number}
-              </Text>
-            ))}
-            <Text style={styles.submittedLine}>
-              {submission?.documents.length ?? 0} document
-              {(submission?.documents.length ?? 0) === 1 ? '' : 's'} attached
+          </View>
+
+          {state === 'rejected' && submission?.profile.verification_reason ? (
+            <View style={styles.reasonCard}>
+              <Text style={styles.reasonHeading}>Why it was not approved</Text>
+              <Text style={styles.reasonBody}>{submission.profile.verification_reason}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.explainCard}>
+            <Text style={styles.explainText}>
+              VHub verifies organisations so volunteers know an outreach is real before they give up a
+              Saturday for it. Until yours is verified you can write and keep drafts, but you cannot
+              publish. Everything you send here is read by a VHub administrator and by nobody else.
             </Text>
           </View>
-        )}
-      </ScrollView>
+
+          {canEdit ? (
+            <>
+              <Text style={styles.sectionHeading}>Who we should contact</Text>
+              <Input
+                label="Contact person"
+                required
+                value={contactPerson}
+                onChangeText={setContactPerson}
+                placeholder="Full name of the person responsible"
+                error={attempted ? (errors.contactPerson ?? undefined) : undefined}
+              />
+              <Input
+                label="Official email"
+                required
+                value={officialEmail}
+                onChangeText={setOfficialEmail}
+                placeholder="name@yourorganisation.org"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                error={attempted ? (errors.officialEmail ?? undefined) : undefined}
+              />
+              <Text style={styles.fieldHint}>
+                An address on your own domain if you have one. This is not shown to volunteers. Your
+                public enquiries address stays on your profile.
+              </Text>
+              <Input
+                label="Physical address"
+                required
+                value={physicalAddress}
+                onChangeText={setPhysicalAddress}
+                placeholder="Street, town, region"
+                multiline
+                error={attempted ? (errors.physicalAddress ?? undefined) : undefined}
+              />
+              <Input
+                label="Website or social page"
+                value={website}
+                onChangeText={setWebsite}
+                placeholder="https://"
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.sectionHeading}>Registration</Text>
+              <Text style={styles.sectionHint}>
+                Whatever your organisation actually holds: Registrar-General, the NGO Board, a
+                teaching-hospital affiliation, a district health directorate letter. Name the scheme in
+                your own words; there is no fixed list.
+              </Text>
+
+              {registrations.map((row, index) => (
+                <View key={index} style={styles.registrationRow}>
+                  <Input
+                    label={index === 0 ? 'Registered with' : undefined}
+                    value={row.label}
+                    onChangeText={(value) => updateRegistration(index, { label: value })}
+                    placeholder="e.g. Registrar-General"
+                  />
+                  <Input
+                    label={index === 0 ? 'Number' : undefined}
+                    value={row.number}
+                    onChangeText={(value) => updateRegistration(index, { number: value })}
+                    placeholder="e.g. CG123456789"
+                  />
+                  {registrations.length > 1 ? (
+                    <Pressable
+                      onPress={() => setRegistrations((rows) => rows.filter((_, i) => i !== index))}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove registration ${index + 1}`}
+                      style={styles.removeRow}
+                    >
+                      <MaterialCommunityIcons name="close" size={16} color={colors.danger} />
+                      <Text style={styles.removeText}>Remove</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))}
+
+              {attempted && errors.registrations ? (
+                <Text style={styles.errorText}>{errors.registrations}</Text>
+              ) : null}
+
+              <Button
+                title="Add another registration"
+                variant="outline"
+                onPress={() => setRegistrations((rows) => [...rows, { label: '', number: '' }])}
+                style={styles.addButton}
+              />
+
+              <Text style={styles.sectionHeading}>Documents</Text>
+              <Text style={styles.sectionHint}>
+                A photo or PDF of each registration certificate or letter. Make sure the text is legible
+                and the whole page is in frame. These are stored privately. Only a VHub administrator
+                can open them, and only through a link that expires.
+              </Text>
+
+              {documents.map((doc) => (
+                <View key={doc.publicId} style={styles.documentRow}>
+                  <MaterialCommunityIcons name="file-lock-outline" size={20} color={colors.primary} />
+                  <Text style={styles.documentName} numberOfLines={1}>
+                    {doc.name}
+                  </Text>
+                  <Pressable
+                    onPress={() =>
+                      setDocuments((current) => current.filter((d) => d.publicId !== doc.publicId))
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${doc.name}`}
+                    hitSlop={8}
+                  >
+                    <MaterialCommunityIcons name="close" size={18} color={colors.textSecondary} />
+                  </Pressable>
+                </View>
+              ))}
+
+              {attempted && errors.documents ? (
+                <Text style={styles.errorText}>{errors.documents}</Text>
+              ) : null}
+
+              <Button
+                title={uploadDocument.isPending ? 'Uploading…' : 'Attach a document'}
+                variant="outline"
+                disabled={uploadDocument.isPending}
+                onPress={() => void handleAttach()}
+                style={styles.addButton}
+              />
+              {/* A failed upload is a popup, never a line under the button. */}
+              <ErrorAlert error={uploadDocument.error} fallback="That document could not be uploaded." />
+
+              {/*
+                CONSENT AT THE POINT OF UPLOAD, not buried in terms — and not a
+                decorative checkbox either: the API refuses the submission without
+                it and remembers the answer, so this block is what unblocks the
+                server. It disappears once recorded; asking again on every
+                resubmission would train people to tap past it.
+              */}
+              {!consentRecorded ? (
+                <View style={styles.consentCard}>
+                  <Text style={styles.consentHeading}>Before you submit</Text>
+                  {ORGANISATION_CONSENT_POINTS.map((point) => (
+                    <View key={point} style={styles.consentRow}>
+                      <MaterialCommunityIcons name="circle-small" size={20} color={colors.textSecondary} />
+                      <Text style={styles.consentText}>{point}</Text>
+                    </View>
+                  ))}
+                  <Pressable
+                    onPress={() => setConsented((prev) => !prev)}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: consented }}
+                    style={styles.confirmRow}
+                  >
+                    <View style={[styles.checkbox, consented && styles.checkboxChecked]}>
+                      {consented ? (
+                        <MaterialCommunityIcons name="check" size={14} color={colors.white} />
+                      ) : null}
+                    </View>
+                    <Text style={styles.consentAgree}>
+                      I understand this, and I agree to VHub storing these documents for verification.
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {/* A refused submission is a popup, never a line under the button. */}
+              <ErrorAlert error={submit.error} fallback="Could not send your details for verification." />
+              {attempted && firstError ? (
+                <Text style={styles.errorText}>Fix the marked fields above, then submit again.</Text>
+              ) : null}
+
+              <View style={styles.submitBlock}>
+                <Button
+                  title={submit.isPending ? 'Submitting…' : 'Submit for verification'}
+                  onPress={handleSubmit}
+                  disabled={submit.isPending || (!consentRecorded && !consented)}
+                />
+              </View>
+            </>
+          ) : (
+            <View style={styles.submittedCard}>
+              <Text style={styles.submittedHeading}>What you sent</Text>
+              <Text style={styles.submittedLine}>
+                {submission?.profile.contact_person ?? profile?.full_name ?? 'Contact not recorded'}
+                {submission?.profile.official_email ? ` · ${submission.profile.official_email}` : ''}
+              </Text>
+              {submission?.registrations.map((row) => (
+                <Text key={row.id} style={styles.submittedLine}>
+                  {row.label}: {row.number}
+                </Text>
+              ))}
+              <Text style={styles.submittedLine}>
+                {submission?.documents.length ?? 0} document
+                {(submission?.documents.length ?? 0) === 1 ? '' : 's'} attached
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <Toast message={toast} onDismiss={() => setToast(null)} />
     </SafeAreaView>
@@ -449,6 +496,8 @@ export default function OrganisationVerification() {
 }
 
 const styles = StyleSheet.create({
+  /** Lets the KeyboardAvoidingView fill the screen under the header. */
+  flex: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.base },
   stateWrap: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
@@ -464,6 +513,12 @@ const styles = StyleSheet.create({
   },
   statusText: { flex: 1, gap: spacing.xs },
   statusLabel: { fontFamily: fontFamily.semiBold, fontSize: 16, color: colors.textPrimary },
+  statusDecided: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
   statusDetail: {
     fontFamily: fontFamily.regular,
     fontSize: 13,

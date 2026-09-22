@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { assertAdmin, recordAdminAction } from "../../../server/adminAudit";
 import { assetExists, uploadTargetFor } from "../../../server/cloudinary";
 import { notifyUsers } from "../../../server/notify";
+import { sendOrganisationVerificationEmail } from "../../../server/email";
 
 export const runtime = "nodejs";
 
@@ -247,6 +248,32 @@ export async function POST(req: Request): Promise<Response> {
         tokens: (tokens ?? []).map((t) => t.expo_push_token as string),
       },
     ]);
+
+    /*
+      AND BY EMAIL. A push is not durable and an in-app notification is only
+      read by somebody who opens the app, which is precisely what an
+      organisation waiting on a decision has stopped doing. See the note above
+      sendOrganisationVerificationEmail in server/email.ts for why these two
+      decisions get mail when the rest of the notifications do not.
+
+      Best-effort and last, like everything else in this block: the state
+      change and the audit row are already written and must not be undone by a
+      mail failure.
+    */
+    const { data: orgProfile } = await admin
+      .from("profiles")
+      .select("email, full_name")
+      .eq("id", body.organisationId)
+      .maybeSingle();
+
+    if (orgProfile?.email) {
+      await sendOrganisationVerificationEmail({
+        to: orgProfile.email as string,
+        name: (organisation.org_name as string) ?? (orgProfile.full_name as string) ?? "there",
+        approved: body.decision === "approve",
+        reason: body.reason,
+      });
+    }
 
     return Response.json({ verificationState: nextState });
   } catch (err) {

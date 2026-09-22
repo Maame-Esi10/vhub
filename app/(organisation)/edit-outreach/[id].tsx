@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
+  AlertDialog,
   Button,
   ConfirmDialog,
   ErrorState,
@@ -843,28 +844,21 @@ export default function EditOutreach() {
         </ScrollView>
 
         {/*
-          THE FAILURE SITS ON THE BUTTON THAT CAUSED IT.
+          THE FAILURE IS A POPUP (owner's standing rule, restated 2026-09-22:
+          "never should a notification/btn/alert of anything that shows after
+          something is submitted show at the bottom").
 
-          This was red text at the bottom of a long scrolling form, which is
-          the one place it could be missed — the organisation taps Save, the
-          message renders above the fold they are not looking at, and nothing
-          about the screen says the save did not happen. In the footer it is
-          pinned, it cannot scroll away, and it is impossible to reach for
-          Save again without reading it.
+          It was red text at the bottom of a long scrolling form; it was then
+          moved into the footer, on the argument that pinning it to the button
+          that caused it stopped it scrolling away. The pinning was right and
+          the place was still wrong -- the footer IS the bottom of the screen,
+          under the thumb and beside the floating tab pill. A popup keeps
+          everything the footer version was trying to buy (it cannot be
+          scrolled past, and Save cannot be reached again without dealing with
+          it) and puts the words where the eyes are.
         */}
         {/* Sibling of the scroller: it needs its own offset, or the pill covers Save. */}
         <View style={[styles.footer, tabBarFooter]}>
-          {blockingMessage ? (
-            <View style={styles.errorBanner}>
-              <MaterialCommunityIcons name="alert-circle" size={18} color={colors.danger} />
-              <View style={styles.errorTextBlock}>
-                <Text style={styles.errorTitle}>Not saved</Text>
-                <Text style={styles.errorBody}>{blockingMessage}</Text>
-                <Text style={styles.errorHint}>Your changes are still here. Fix this and save again.</Text>
-              </View>
-            </View>
-          ) : null}
-
           <Button
             title={saving ? 'Saving...' : 'Save changes'}
             onPress={attemptSave}
@@ -873,6 +867,27 @@ export default function EditOutreach() {
           />
         </View>
       </KeyboardAvoidingView>
+
+      <AlertDialog
+        visible={!!blockingMessage}
+        tone="error"
+        title="Not saved"
+        message={
+          blockingMessage
+            ? `${blockingMessage} Your changes are still here. Fix this and save again.`
+            : null
+        }
+        /*
+          BOTH have to be cleared. `blockingMessage` is whichever of the two
+          refusals happened -- the database's, or the slots floor checked before
+          the request is sent -- and clearing only one would leave the dialog
+          reopening on the next render with the other still set.
+        */
+        onDismiss={() => {
+          setSaveError(null);
+          setSlotsFloorError(null);
+        }}
+      />
 
       <ConfirmDialog
         visible={roleWarning}

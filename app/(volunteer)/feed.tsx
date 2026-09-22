@@ -138,7 +138,12 @@ export default function Feed() {
       */}
       <ModerationBanner />
       <View style={styles.headerRow}>
-        <Avatar name={profile?.full_name ?? 'Volunteer'} uri={profile?.avatar_url} size={44} />
+        <Avatar
+          name={profile?.full_name ?? 'Volunteer'}
+          uri={profile?.avatar_url}
+          size={44}
+          verified={volunteerProfile?.verification_status === 'verified'}
+        />
         <View style={styles.headerText}>
           <Text style={styles.greeting} numberOfLines={1}>
             Hello, {firstName}

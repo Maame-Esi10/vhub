@@ -11,12 +11,20 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar, SettingsRow } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
+import { useMyOrganisationProfile } from '@/hooks';
 import { tabBarClearance } from '@/components/ui/tabBarOptions';
 
 export default function OrganisationProfile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
+  /*
+    Read for the verified tick alone. The auth store holds the `profiles` row
+    for every role, but `verified` lives on `organisation_profiles`, which only
+    this hook fetches -- and it is a STORED GENERATED COLUMN derived from
+    `verification_state`, so it cannot disagree with the review that produced it.
+  */
+  const org = useMyOrganisationProfile(profile?.id).data;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -67,7 +75,12 @@ export default function OrganisationProfile() {
         their own line stops the name column being squeezed by them.
       */}
       <View style={styles.identity}>
-        <Avatar name={profile?.full_name ?? 'Organisation'} uri={profile?.avatar_url} size={64} />
+        <Avatar
+          name={profile?.full_name ?? 'Organisation'}
+          uri={profile?.avatar_url}
+          size={64}
+          verified={org?.verified === true}
+        />
         <View style={styles.identityText}>
           <Text style={styles.name} numberOfLines={2}>
             {profile?.full_name ?? 'Organisation'}
