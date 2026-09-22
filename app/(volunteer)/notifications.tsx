@@ -176,6 +176,8 @@ export default function Notifications() {
             <NotificationCard
               notification={item.notification}
               navigable={notificationDestination(item.notification, 'volunteer') !== null}
+              first={item.first}
+              last={item.last}
               onPress={() => handlePress(item.notification)}
             />
           )

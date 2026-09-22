@@ -65,6 +65,26 @@ export interface NotificationPresentation {
    * erases, so nothing from the icon library reaches this module's bundle.
    */
   icon: ComponentProps<typeof MaterialCommunityIcons>['name'];
+  /**
+   * The glyph the inbox actually draws (owner, 2026-09-22, with a reference
+   * design: "you can use emojis instead of the pictures").
+   *
+   * It replaces BOTH the icon tile and the uppercase caption on the card. An
+   * emoji carries more meaning at 20px than a line-art icon does, and far more
+   * than a caption reading "APPLICATION UPDATE" above a title that already says
+   * what happened -- which is how the row came to have three separate things
+   * all saying the same thing.
+   *
+   * `icon` is kept, and kept typed, because it is the fallback the rest of the
+   * app can use where an emoji would be wrong (anything monochrome, anything
+   * tinted by state). Only the inbox reads `emoji`.
+   *
+   * CHOSEN FROM THE OLDEST, MOST WIDELY SUPPORTED SET. Every one of these
+   * predates Emoji 5.0 and renders on any Android VHub can run on. A newer
+   * emoji (a 2021 identity card, say) would draw as an empty box on a phone
+   * that is otherwise fine, and nothing at runtime would report it.
+   */
+  emoji: string;
   tone: NotificationTone;
 }
 
@@ -75,17 +95,17 @@ export interface NotificationPresentation {
  */
 const BY_KIND: Record<string, NotificationPresentation> = {
   // api/src/app/api/application-received/route.ts
-  new_application: { category: 'New applicant', icon: 'account-plus-outline', tone: 'coral' },
+  new_application: { category: 'New applicant', icon: 'account-plus-outline', emoji: '🙋', tone: 'coral' },
   // api/src/app/api/credential-review/route.ts
-  credential_review: { category: 'Identity verification', icon: 'shield-check-outline', tone: 'green' },
+  credential_review: { category: 'Identity verification', icon: 'shield-check-outline', emoji: '🛡️', tone: 'green' },
   // api/src/app/api/organisation-verification/route.ts
-  organisation_verification: { category: 'Organisation verification', icon: 'shield-check-outline', tone: 'green' },
+  organisation_verification: { category: 'Organisation verification', icon: 'shield-check-outline', emoji: '🏢', tone: 'green' },
   // api/src/app/api/dispute-resolution/route.ts
-  dispute: { category: 'Dispute outcome', icon: 'scale-balance', tone: 'navy' },
+  dispute: { category: 'Dispute outcome', icon: 'scale-balance', emoji: '⚖️', tone: 'navy' },
   // api/src/app/api/moderation/route.ts
-  moderation: { category: 'Account notice', icon: 'alert-octagon-outline', tone: 'red' },
+  moderation: { category: 'Account notice', icon: 'alert-octagon-outline', emoji: '⚠️', tone: 'red' },
   // api/src/app/api/score-event/route.ts
-  score_event_voided: { category: 'V-Score update', icon: 'chart-line', tone: 'green' },
+  score_event_voided: { category: 'V-Score update', icon: 'chart-line', emoji: '📈', tone: 'green' },
 };
 
 /**
@@ -98,20 +118,20 @@ const BY_KIND: Record<string, NotificationPresentation> = {
  * warning, and the applications tracker already makes the same distinction.
  */
 const BY_STATUS: Record<string, NotificationPresentation> = {
-  accepted: { category: 'Application update', icon: 'clipboard-check-outline', tone: 'green' },
-  waitlisted: { category: 'Application update', icon: 'clipboard-text-clock-outline', tone: 'amber' },
-  rejected: { category: 'Application update', icon: 'clipboard-outline', tone: 'grey' },
-  not_selected: { category: 'Application update', icon: 'clipboard-outline', tone: 'grey' },
-  cancelled: { category: 'Outreach cancelled', icon: 'calendar-remove-outline', tone: 'red' },
-  pending: { category: 'Application update', icon: 'clipboard-outline', tone: 'blue' },
+  accepted: { category: 'Application update', icon: 'clipboard-check-outline', emoji: '🎉', tone: 'green' },
+  waitlisted: { category: 'Application update', icon: 'clipboard-text-clock-outline', emoji: '⏳', tone: 'amber' },
+  rejected: { category: 'Application update', icon: 'clipboard-outline', emoji: '📋', tone: 'grey' },
+  not_selected: { category: 'Application update', icon: 'clipboard-outline', emoji: '📋', tone: 'grey' },
+  cancelled: { category: 'Outreach cancelled', icon: 'calendar-remove-outline', emoji: '🚫', tone: 'red' },
+  pending: { category: 'Application update', icon: 'clipboard-outline', emoji: '📋', tone: 'blue' },
 };
 
 /** The last resort: the four values the `type` column can hold. */
 const BY_TYPE: Record<NotificationType, NotificationPresentation> = {
-  new_match: { category: 'New match', icon: 'heart', tone: 'coral' },
-  application_status: { category: 'Application update', icon: 'clipboard-check-outline', tone: 'blue' },
-  event_reminder: { category: 'Reminder', icon: 'clock-outline', tone: 'amber' },
-  test: { category: 'Test', icon: 'bell-outline', tone: 'grey' },
+  new_match: { category: 'New match', icon: 'heart', emoji: '❤️', tone: 'coral' },
+  application_status: { category: 'Application update', icon: 'clipboard-check-outline', emoji: '📋', tone: 'blue' },
+  event_reminder: { category: 'Reminder', icon: 'clock-outline', emoji: '⏰', tone: 'amber' },
+  test: { category: 'Test', icon: 'bell-outline', emoji: '🔔', tone: 'grey' },
 };
 
 const FALLBACK: NotificationPresentation = BY_TYPE.test;

@@ -6105,3 +6105,112 @@ the gate is part of the change. CLAUDE.md already carries this rule for the
 privacy policy, where a claim that stops describing the code IS the bug. It
 applies to every explanatory sentence in the app, and explanatory sentences
 attached to a decision are the ones where it costs most.
+
+## iOS is a future improvement, and the reason is credentials (decided 2026-09-22)
+
+**Decision: Android is the target platform for this project. iOS is recorded as
+a future improvement rather than an omission.**
+
+The codebase was read for platform-specific risk before this was decided, and
+nothing in it is Android-only. Every dependency is Expo-managed and ships iOS
+support; safe-area insets are handled through `react-native-safe-area-context`
+on every screen; the date and time pickers already branch to the iOS spinner;
+and keyboard avoidance uses `padding` on both platforms rather than the
+iOS-only ternary it started with. There is no reason to expect a build to fail.
+
+**What actually blocks it is not the absence of a Mac**, which is the assumption
+worth correcting. EAS builds iOS on Apple hardware in the cloud, so no Mac is
+required. What is required is a paid Apple Developer Program membership: a build
+cannot be signed without one, and an unsigned build cannot be installed on a
+physical iPhone. A simulator build needs no account, but a simulator only runs
+on macOS, so that route is closed for the same reason.
+
+**Two concrete gaps would have to be closed first**, and they are recorded here
+so the work is a known quantity rather than a discovery:
+
+- `ios.bundleIdentifier` is absent from `app.json`. Every iOS build needs one,
+  and like the Android `package` it is permanent once published.
+- There is no APNs key. `google-services.json` is the ANDROID push credential;
+  iOS push needs its own, uploaded to Expo. Without it, push would silently fail
+  on iOS while every other feature worked, which is the worst shape a gap can
+  take.
+
+**What would need testing rather than reasoning**, if it is ever built: the date
+and time pickers, the floating tab pill against the iPhone home indicator, the
+camera QR scan, and keyboard avoidance on the long forms. All four are coded for
+both platforms and verified on neither.
+
+## Search, confirmed against real data (2026-09-22)
+
+The owner ran it immediately after it shipped. Typing a place name ("Nima")
+returned the open event there; typing "eye" returned the one matching outreach.
+Both paths that were built are therefore exercised: the first is the plain
+`ilike` across the text columns, and the second is the vocabulary route, where
+the term is resolved to real skill names before the query runs so that an
+outreach requiring an eye-related skill is found whether or not its description
+uses the word.
+
+## The AI tooling was already excluded from the repository (2026-09-15, restated)
+
+`CLAUDE.md`, the whole `.claude/` directory including the six subagent
+definitions, and `docs/VSCODE_PROMPT_GUIDE.md` are listed in `.gitignore` under
+a comment recording the decision: this is a public repository and the tooling
+used to build the project is not part of the deliverable. They were untracked
+with `git rm --cached`, which leaves them on disk and working, because
+`CLAUDE.md` is read from the filesystem rather than from git.
+
+**Nothing further is needed before or after an EAS build**, and the reason is
+worth stating because it is not obvious: a build bundles only what Metro
+resolves starting from the app entry point. Markdown files in `docs/` and
+configuration in `.claude/` are not reachable from any `import`, so they have
+never been in the APK and could not be, whatever git does with them.
+
+## The notification row, third attempt, and the one that had a reference (2026-09-22)
+
+Two rebuilds of this row were done against a description of what was wrong with
+it. The third was done against a picture of what right looks like, and it took
+one pass.
+
+**The owner supplied a banking app's inbox** and asked for that anatomy with
+emojis in place of its photographic thumbnails. Holding it beside the VHub row
+made three faults obvious that no amount of adjusting the previous version would
+have found, because each was a thing being said twice.
+
+- **The uppercase caption was a third statement of the same fact.** A row read
+  "APPLICATION UPDATE", then "You're confirmed!", then "Ghana Health Drive: your
+  application is now accepted." Three lines, one event. The caption had been
+  added for a real reason -- nine kinds of news share four `type` values, and a
+  single blue clipboard icon could not tell a credential approval from a dispute
+  outcome -- but that was an argument about the ICON. An emoji answers it
+  better and takes no line of its own. The caption survives in the accessibility
+  label, where it costs nothing.
+- **The timestamp goes back under the message**, which reverses an earlier
+  decision made in this same file. It had been moved up to the caption line
+  because a time under a short message in a rounded box is the single strongest
+  signal of a chat bubble. **That diagnosis was right and the cure was aimed at
+  the wrong half.** It is the box that makes a bubble. With the per-row box
+  gone, a small grey time under a sentence is a dateline, which is what the
+  reference and every news list uses.
+- **The per-row box became one panel per day.** This is not the full-bleed list
+  with hairline dividers that was called outdated either. It is a grouped list:
+  the app's card language applied at the level of the GROUP instead of being
+  repeated eleven times down a screen. `first` and `last` are computed in
+  `toNotificationRows`, where the grouping already happens, and the corners live
+  on those two rows -- there is no wrapper View, because a FlatList renders rows
+  rather than sections and wrapping them would give up the recycling that makes
+  a long inbox scroll.
+
+**The emoji introduced a new silent-failure shape and it is guarded.** A
+misspelled MaterialCommunityIcons name renders as an empty square and nothing at
+runtime notices, which is why `icon` is typed against the glyph map. A string
+cannot be typed that way, so an absent or empty emoji would render as a blank
+tinted tile that looks deliberate. `notificationPresentation.test.ts` now walks
+every recognised kind, every application decision and every `type` and asserts
+each resolves to a real emoji. **The guard was verified by emptying one entry
+and watching it fail**, per the standing rule about guards that pass while the
+thing they guard is broken.
+
+**The emojis are chosen from the pre-Emoji-5.0 set.** A 2021 emoji renders as an
+empty box on an Android that is otherwise perfectly capable of running the app,
+and nothing reports it. That is the same class of invisible fault as the icon
+name, arriving by a different door.

@@ -153,6 +153,39 @@ describe('describeNotification', () => {
     );
     expect(shown.category).toBe('Reminder');
   });
+
+  /*
+    THE EMOJI IS THE WHOLE ICON NOW, so a missing one is not a cosmetic gap.
+    An empty string renders as an empty tinted square, which looks like a
+    deliberate blank rather than a fault, and nothing at runtime reports it --
+    the same shape of silent failure as a misspelled MaterialCommunityIcons
+    name, which is why `icon` is typed against the glyph map. A string cannot
+    be typed that way, so this stands in for the compiler.
+
+    It walks every recognised kind, every application decision and every
+    `type`, rather than the presentation tables directly: the tables are not
+    exported, and asserting against what the app ACTUALLY resolves is the point
+    -- a kind deleted from a table would still be covered here and would fail
+    on the fallback's emoji being wrong for it.
+  */
+  it('gives every kind, decision and type a real emoji', () => {
+    const subjects: AppNotification[] = [
+      ...RECOGNISED_NOTIFICATION_KINDS.map((kind) => notification({ data: { kind } })),
+      ...['accepted', 'waitlisted', 'rejected', 'not_selected', 'cancelled', 'pending'].map(
+        (status) => notification({ data: { status } })
+      ),
+      ...(['new_match', 'application_status', 'event_reminder', 'test'] as const).map((type) =>
+        notification({ type, data: {} })
+      ),
+    ];
+
+    for (const subject of subjects) {
+      const shown = describeNotification(subject);
+      expect(shown.emoji.length).toBeGreaterThan(0);
+      // Not a letter, a digit or punctuation somebody typed by mistake.
+      expect(shown.emoji).not.toMatch(/^[\w\s.,:;!?-]+$/);
+    }
+  });
 });
 
 describe('notificationDestination', () => {

@@ -16,16 +16,31 @@ Three things, in one repository:
 
 ## Status
 
-Every phase of the build order in [CLAUDE.md](CLAUDE.md) is complete, as is the admin phase that followed it.
+Every phase of the build order is complete, as is the admin phase that followed it.
 
 - **Phase 0, Scaffold.** Project structure, dependencies, Supabase project, schema, environment wiring.
 - **Phase 1, Auth and onboarding.** Email and password sign-in with a six-digit confirmation code, SecureStore session persistence, a role-based routing guard, the five-step volunteer onboarding wizard, organisation registration, password reset.
 - **Phase 2, Real data.** Outreach creation and editing (multi-day, multi-role, gallery, venue), the volunteer feed, Quick Join and Full Application, applicant review, rosters and waitlists.
 - **Phase 3, Intelligence.** The Layer 1 scorer and its unit tests, the serverless API, Gemini Layer 2 skill equivalence, Gemini skill suggestions, the ranked feed, the V-Score pipeline, the Info Hub.
-- **Phase 4, Polish.** Push notifications, cancellation and waitlist promotion, per-day release, offline handling, check-in by QR, rate limiting, error monitoring, notification retention.
+- **Phase 4, Polish.** Push notifications, cancellation and waitlist promotion, per-day release, offline handling, check-in by QR, keyword search, rate limiting, error monitoring, notification retention.
 - **Admin phase, packages A to J.** The admin role and audit trail, private documents, organisation verification, credential review, consent and guidelines, moderation, disputes, the privacy policy and terms, account closure, platform statistics, vetted sources.
 
-What is left is device testing and an EAS build, not features.
+What is left is an audit, an EAS build and device testing, not features.
+
+Two screens have Figma designs and no implementation, and both are deliberate rather than forgotten. **Map discovery** would need a map dependency, a native rebuild and either a geocoding step or a coordinates column, none of which the rest of the app needs; the region filter and keyword search already answer the question it would answer. **Rate Organization** would need a new table and a decision about whether a volunteer's rating of an organisation is public, which is a reputation system rather than a screen. Neither is a gap left by accident.
+
+## Platform support
+
+**Android is the target platform. iOS is a future improvement**, and the distinction is about credentials rather than code.
+
+Nothing in the codebase is Android-only. Every dependency is Expo-managed and ships iOS support, safe-area insets are handled throughout, the date and time pickers already branch to the iOS spinner, and keyboard avoidance uses `padding` on both platforms rather than the iOS-only ternary it started with. There is no reason to expect it not to build.
+
+It has never been built or run on iOS, and two things would have to be added before it could be:
+
+- **`ios.bundleIdentifier` in `app.json`.** Every iOS build needs one, and like the Android `package` it is permanent once published.
+- **An APNs key uploaded to Expo.** `google-services.json` is the Android push credential; iOS push needs its own, and without it push would silently not work on iOS while everything else did.
+
+Both of those, and installing on a physical iPhone at all, require a paid Apple Developer Program membership. EAS builds iOS on Apple hardware in the cloud, so a Mac is not needed; the developer account is. Until that exists, anything iOS-specific here is untested by definition, and this section is the honest statement of that rather than a claim of cross-platform support.
 
 ## Quick start
 
@@ -100,7 +115,7 @@ The score is **derived, not accumulated**. `volunteer_profiles.v_score` is a cac
 ## Testing
 
 ```bash
-npm test          # 645 unit tests across 25 suites
+npm test          # 691 unit tests across 27 suites
 npm run typecheck # tsc --noEmit, strict
 npx eslint app components hooks lib stores constants types
 npx eslint api/src
@@ -159,8 +174,9 @@ vhub/
 
 ## Documentation
 
-- **[CLAUDE.md](CLAUDE.md)** — the full specification: hard rules, data model, the matching engine, the V-Score, and the reasoning behind every decision that is not obvious from the code.
-- **[docs/REPORT_NOTES.md](docs/REPORT_NOTES.md)** — known gaps, accepted limitations, and the pre-submission checklist.
+- **[docs/REPORT_NOTES.md](docs/REPORT_NOTES.md)** — the decision record: why each non-obvious thing is the way it is, the known gaps, the accepted limitations, and the pre-submission checklist. It is the longest document here and the one to read first.
 - **[docs/ADMIN_PHASE_PLAN.md](docs/ADMIN_PHASE_PLAN.md)** — the plan of record for the admin packages.
 - **[docs/MULTI_ROLE_PLAN.md](docs/MULTI_ROLE_PLAN.md)** — how per-category role slots work.
 - **[docs/REBUILD_GUIDE.md](docs/REBUILD_GUIDE.md)** — setting the project up from nothing.
+
+The working specification lives in a `CLAUDE.md` at the repository root. It is deliberately **not published**: it is the author's own build notes and the tooling used to write the project, which is not part of the deliverable. Everything in it that a reader of this repository needs is either here or in `docs/REPORT_NOTES.md`.

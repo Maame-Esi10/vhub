@@ -71,10 +71,24 @@ export function filterNotifications(
   return notifications.filter((n) => n.type !== 'new_match');
 }
 
-/** A dated section heading, or one notification under it. */
+/**
+ * A dated section heading, or one notification under it.
+ *
+ * `first` and `last` say where the row sits inside its dated group, which is
+ * what lets the screen draw each group as ONE rounded panel with hairline
+ * separators rather than as a stack of separate boxes. A flat list cannot work
+ * that out per row without looking at its neighbours, so it is computed once
+ * here, where the grouping already happens.
+ */
 export type NotificationListRow =
   | { kind: 'header'; key: string; label: string }
-  | { kind: 'notification'; key: string; notification: AppNotification };
+  | {
+      kind: 'notification';
+      key: string;
+      notification: AppNotification;
+      first: boolean;
+      last: boolean;
+    };
 
 function startOfLocalDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -113,12 +127,34 @@ export function toNotificationRows(
 
   for (const notification of notifications) {
     const heading = notificationGroupHeading(notification.created_at);
-    if (heading !== lastHeading) {
+    const startsGroup = heading !== lastHeading;
+    if (startsGroup) {
       rows.push({ kind: 'header', key: `header-${heading}`, label: heading });
       lastHeading = heading;
     }
-    rows.push({ kind: 'notification', key: notification.id, notification });
+    rows.push({
+      kind: 'notification',
+      key: notification.id,
+      notification,
+      first: startsGroup,
+      // Provisional: corrected below once the next row is known. A row is the
+      // last of its group until something else joins the group after it.
+      last: true,
+    });
   }
+
+  // One backward pass to unset `last` on every row that turned out to have a
+  // sibling under it. Done here rather than by looking ahead in the loop
+  // because the heading of the NEXT notification is what decides it, and
+  // computing that twice is how the two answers drift apart.
+  for (let i = 0; i < rows.length - 1; i += 1) {
+    const row = rows[i];
+    const next = rows[i + 1];
+    if (row?.kind === 'notification' && next?.kind === 'notification') {
+      row.last = false;
+    }
+  }
+
   return rows;
 }
 
