@@ -150,11 +150,21 @@ export interface OutreachWithOrganisation extends Outreach {
 }
 
 /**
- * `organisation_profiles` is readable by every authenticated user
- * (organisation_profiles_select_authenticated, deliberately `using (true)` —
- * it holds no PII), so this embed is safe on volunteer-facing screens. The
- * org's `profiles` row is NOT joined here: that one is row-scoped and would
- * come back null for orgs the volunteer has never applied to.
+ * `organisation_profiles` ROWS are readable by every authenticated user
+ * (organisation_profiles_select_authenticated, still deliberately
+ * `using (true)`), so this embed is safe on volunteer-facing screens. The org's
+ * `profiles` row is NOT joined here: that one is row-scoped and would come back
+ * null for orgs the volunteer has never applied to.
+ *
+ * THESE FOUR COLUMNS ARE THE PUBLIC ONES AND THE LIST IS NOW LOAD-BEARING.
+ * The comment here used to say the table "holds no PII", which stopped being
+ * true when verification shipped and added the official email, physical
+ * address, contact person and the admin's verbatim rejection reason. Since
+ * 2026-09-23 `authenticated` holds SELECT on the public columns ONLY, so
+ * adding a column to this embed that is not in that grant list makes the whole
+ * query fail with `permission denied for table organisation_profiles`
+ * (SQLSTATE 42501) rather than quietly omitting it. The private columns come
+ * back through `organisation_private_profiles`.
  */
 const OUTREACH_WITH_ORGANISATION_SELECT = `
   *,

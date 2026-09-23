@@ -2,6 +2,21 @@
 -- Backend is Supabase ONLY (Postgres + Auth + RLS). Never Firebase.
 -- Safe to re-run: uses IF NOT EXISTS / CREATE OR REPLACE / DO blocks for enums.
 -- Paste directly into the Supabase SQL editor.
+--
+-- "SAFE TO RE-RUN" IS A CLAIM THIS FILE HAS TO KEEP EARNING, and on 2026-09-23
+-- an audit found it had stopped: six places had fallen behind
+-- supabase/migrations/ while the line above still promised a no-op. Re-running
+-- it would have silently REVERSED four fixes, the worst being both public views
+-- losing `and p.closed_at is null` -- the only thing hiding a closed account,
+-- because those views are `security_invoker = false` and bypass RLS -- which
+-- would have republished every closed volunteer's name, photo, bio and V-Score.
+-- All six are corrected and each carries a comment naming the migration it came
+-- from.
+--
+-- SO: WHEN YOU WRITE A MIGRATION, CHANGE THIS FILE IN THE SAME PASS. A snapshot
+-- nobody maintains is worse than no snapshot, because it looks authoritative.
+-- The live database is still this file THEN the migrations in date order; where
+-- the two disagree the migration wins, and the disagreement is the bug.
 
 -- ============================================================
 -- Extensions
@@ -70,16 +85,22 @@ do $$ begin
   create type outreach_role_type as enum ('clinical', 'support');
 exception when duplicate_object then null; end $$;
 
+-- 'cancelled' added by 20260815a_outreach_status_cancelled.sql. It was missing
+-- from this list until 2026-09-23, so a project provisioned from this file
+-- alone could not cancel an outreach -- and the `exception when
+-- duplicate_object` wrapper meant nothing said so.
 do $$ begin
-  create type outreach_status as enum ('draft', 'open', 'closed', 'completed');
+  create type outreach_status as enum ('draft', 'open', 'closed', 'completed', 'cancelled');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   create type application_type as enum ('quick_join', 'full');
 exception when duplicate_object then null; end $$;
 
+-- 'not_selected' added by 20260811_not_selected_status.sql; same omission and
+-- same silence as outreach_status above.
 do $$ begin
-  create type application_status as enum ('pending', 'accepted', 'rejected', 'waitlisted', 'cancelled');
+  create type application_status as enum ('pending', 'accepted', 'rejected', 'waitlisted', 'cancelled', 'not_selected');
 exception when duplicate_object then null; end $$;
 
 -- Ghana has no public licensing-registry API (Nursing & Midwifery Council,
@@ -458,11 +479,26 @@ create trigger trg_organisation_profiles_updated_at
 alter table organisation_profiles enable row level security;
 
 -- Deliberately broad (using (true)), unlike profiles_select_authenticated
--- above: organisation_profiles holds no PII (org_name, org_type,
--- description, website, verified -- phone/email live on profiles, which IS
--- locked down). Volunteers need to browse organisation info before applying
--- to their outreaches (Figma "Organization Public Profile" flow), so do not
--- tighten this to a row-scoped policy.
+-- above. Volunteers need to browse organisation info before applying to their
+-- outreaches (Figma "Organization Public Profile" flow), and both
+-- `useOutreaches` and `useApplications` EMBED this table into their outreach
+-- reads to name the organisation on a card -- so DO NOT tighten this to a
+-- row-scoped policy: it would return null for every outreach a volunteer does
+-- not own, which is all of them.
+--
+-- THE COMMENT HERE USED TO SAY THE TABLE "HOLDS NO PII" AND LISTED ITS COLUMNS
+-- AS org_name/org_type/description/website/verified. That stopped being true
+-- when verification shipped (20260827) and added official_email,
+-- physical_address, contact_person, verification_state, verification_reason and
+-- two timestamps, and nothing revisited this policy -- so until 2026-09-23 any
+-- volunteer or rival organisation could read an org's street address, its named
+-- contact, and the verbatim reason an admin gave for rejecting it.
+--
+-- RLS CANNOT SPLIT BY COLUMN, so the row policy stays broad and the split is
+-- made with column privileges at the bottom of this file: `authenticated` keeps
+-- SELECT on the public columns only, and the private ones come back through
+-- `organisation_private_profiles`, a definer-rights view carrying its own
+-- `id = auth.uid() or is_admin()` test.
 drop policy if exists "organisation_profiles_select_authenticated" on organisation_profiles;
 create policy "organisation_profiles_select_authenticated"
   on organisation_profiles for select
@@ -705,20 +741,30 @@ create policy "applications_update_own_cancel"
     volunteer_id = auth.uid()
     and (
       status = 'cancelled'
+      -- PER-ROLE, not per-outreach. Replaced by
+      -- 20260817_per_role_verification_gate.sql; this file still carried the
+      -- old `o.role_type is distinct from 'clinical'` test until 2026-09-23, so
+      -- re-running it reintroduced the exact bug that migration exists to fix:
+      -- an unverified volunteer who withdrew from the SUPPORT role of a mixed
+      -- clinical/support event could not re-apply, because the event as a whole
+      -- summarises to 'clinical'.
       or (
         status = 'pending'
         and exists (
           select 1 from outreaches o
           where o.id = applications.outreach_id
             and o.status = 'open'
-            and (
-              o.role_type is distinct from 'clinical'
-              or exists (
-                select 1 from volunteer_profiles vp
-                where vp.id = auth.uid()
-                  and vp.verification_status = 'verified'
-              )
-            )
+        )
+        and (
+          not application_role_is_clinical(
+            applications.outreach_id,
+            applications.outreach_role_id
+          )
+          or exists (
+            select 1 from volunteer_profiles vp
+            where vp.id = auth.uid()
+              and vp.verification_status = 'verified'
+          )
         )
       )
     )
@@ -933,6 +979,13 @@ create policy "event_reviews_select_org_or_volunteer"
     )
   );
 
+-- OWNING THE OUTREACH IS NOT ENOUGH (added 2026-09-23, see
+-- 20260923_audit_fixes.sql). Until then this checked only that the caller owned
+-- the outreach, and `public_volunteer_profiles` hands every signed-in user the
+-- id of every volunteer on the platform -- so an organisation could file
+-- `attended = false` against somebody who had never applied to it, and the
+-- V-Score replay would count it. One such review takes a new volunteer from 70
+-- to 49.
 drop policy if exists "event_reviews_insert_org" on event_reviews;
 create policy "event_reviews_insert_org"
   on event_reviews for insert
@@ -943,6 +996,12 @@ create policy "event_reviews_insert_org"
       select 1 from outreaches o
       where o.id = event_reviews.outreach_id
         and o.organisation_id = auth.uid()
+    )
+    and exists (
+      select 1 from applications a
+      where a.outreach_id = event_reviews.outreach_id
+        and a.volunteer_id = event_reviews.volunteer_id
+        and a.status = 'accepted'
     )
   );
 
@@ -1512,7 +1571,18 @@ declare
   v_state org_verification_state;
   v_moderation moderation_state;
 begin
-  -- Moderation first, and it allows no draft exception: an organisation
+  -- TAKING AN EVENT DOWN IS ALWAYS ALLOWED, and this exemption comes before
+  -- every other test (added 2026-09-23). Without it a suspended organisation's
+  -- outreaches could not be cancelled -- including by the service role, because
+  -- a trigger fires for every role -- so /api/moderation cancelled nothing while
+  -- still emailing everyone that their event was off.
+  if tg_op = 'UPDATE'
+     and new.status = 'cancelled'
+     and old.status is distinct from 'cancelled' then
+    return new;
+  end if;
+
+  -- Moderation next, and it allows no draft exception: an organisation
   -- awaiting verification is preparing to operate, while a suspended one has
   -- been told to stop.
   select moderation_state into v_moderation from profiles where id = new.organisation_id;
@@ -1718,7 +1788,15 @@ with (security_invoker = false) as
     vp.verification_status
   from profiles p
   join volunteer_profiles vp on vp.id = p.id
-  where p.role = 'volunteer';
+  -- `closed_at is null` added by 20260908_account_closure.sql and missing here
+  -- until 2026-09-23. THIS CLAUSE IS THE ONLY THING HIDING A CLOSED ACCOUNT:
+  -- the view is `security_invoker = false`, so it runs with its owner's rights
+  -- and bypasses RLS entirely. Re-running an older copy of this file would have
+  -- republished every closed volunteer's name, avatar, bio, skills and V-Score
+  -- to every signed-in user, contradicting the privacy policy that account
+  -- closure was written to make true.
+  where p.role = 'volunteer'
+    and p.closed_at is null;
 
 revoke all on public_volunteer_profiles from anon;
 grant select on public_volunteer_profiles to authenticated;
@@ -1747,10 +1825,31 @@ with (security_invoker = false) as
     op.show_gallery
   from profiles p
   join organisation_profiles op on op.id = p.id
-  where p.role = 'organisation';
+  -- Same clause, same reason, same omission as the volunteer view above.
+  where p.role = 'organisation'
+    and p.closed_at is null;
 
 revoke all on public_organisation_profiles from anon;
 grant select on public_organisation_profiles to authenticated;
+
+-- ============================================================
+-- organisation_private_profiles — the verification evidence, for the
+-- organisation itself and for admins. (supabase/migrations/20260923_audit_fixes.sql)
+--
+-- `security_invoker = false`, so it runs with its owner's rights and the column
+-- grants below do not apply to it; its WHERE clause is the whole access rule,
+-- the same arrangement public_volunteer_profiles uses.
+-- ============================================================
+drop view if exists organisation_private_profiles;
+create view organisation_private_profiles
+with (security_invoker = false) as
+  select op.*
+    from organisation_profiles op
+   where op.id = auth.uid()
+      or is_admin();
+
+revoke all on organisation_private_profiles from anon;
+grant select on organisation_private_profiles to authenticated;
 
 -- ============================================================
 -- volunteer_review_summary — what an ORGANISATION sees about a volunteer.
@@ -1943,7 +2042,10 @@ grant update (
   description,
   website,
   contact_email,
-  contact_phone
+  contact_phone,
+  -- Granted by 20260817_outreach_gallery.sql, missing here until 2026-09-23.
+  -- Written by hooks/useProfileEditor.ts; without it the gallery opt-out fails.
+  show_gallery
 ) on organisation_profiles to authenticated;
 
 revoke update on volunteer_profiles from authenticated;
@@ -2037,6 +2139,27 @@ grant insert (
   declaration_signed
 ) on volunteer_profiles to authenticated;
 
+-- SELECT is column-listed too, which no other table here needs. See the note
+-- on organisation_profiles_select_authenticated above: the ROWS are public and
+-- the verification evidence is not. `verified` is here and `verification_state`
+-- is not, deliberately -- the boolean is the badge every volunteer is meant to
+-- see, while the state distinguishes rejected / suspended / banned /
+-- documents_submitted, which is nobody's business but the org's and the admin's.
+revoke select on organisation_profiles from authenticated;
+grant select (
+  id,
+  org_name,
+  org_type,
+  description,
+  website,
+  contact_email,
+  contact_phone,
+  verified,
+  show_gallery,
+  created_at,
+  updated_at
+) on organisation_profiles to authenticated;
+
 revoke insert on organisation_profiles from authenticated;
 grant insert (
   id,
@@ -2045,7 +2168,8 @@ grant insert (
   description,
   website,
   contact_email,
-  contact_phone
+  contact_phone,
+  show_gallery
 ) on organisation_profiles to authenticated;
 
 revoke insert on outreaches from authenticated;
@@ -2079,7 +2203,12 @@ grant insert (
   outreach_id,
   volunteer_id,
   type,
-  motivation
+  motivation,
+  -- Granted by 20260811_multi_role_outreaches.sql and missing here until
+  -- 2026-09-23. `apply_to_outreach()` is SECURITY INVOKER and inserts this
+  -- column, so without it every application to a MULTI-ROLE outreach fails with
+  -- `permission denied for table applications` (SQLSTATE 42501).
+  outreach_role_id
 ) on applications to authenticated;
 
 -- attendance and outreach_checkin_codes: nothing is client-writable AT ALL, so

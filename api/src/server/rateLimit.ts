@@ -160,17 +160,41 @@ const windows = new Map<string, RateLimitWindow>();
  */
 const SWEEP_THRESHOLD = 5_000;
 
-function sweepIfLarge(now: number, rule: RateLimitRule): void {
+/**
+ * The longest window any rule uses.
+ *
+ * THE SWEEP MUST MEASURE AGAINST THIS, never against the rule of whichever
+ * call happened to trigger it. `windows` is ONE map shared by every rule, so
+ * deleting a key because it has expired under a 60-second rule would also
+ * delete, and therefore reset, a live counter belonging to a longer one. That
+ * is harmless today only because every rule is a minute; it becomes a real
+ * hole the moment one is not, and a daily cap -- already contemplated in the
+ * durable-store note above -- would be the first. The failure would be silent
+ * and would reset exactly the cap that mattered: a burst of short-window
+ * traffic past the threshold, and the long counter starts again from zero.
+ *
+ * Derived rather than written down, so a rule added with a longer window is
+ * covered without anybody remembering this comment exists.
+ */
+const LONGEST_WINDOW_MS = Math.max(
+  IP_RULE.windowMs,
+  AUTH_FAILURE_RULE.windowMs,
+  ...Object.values(USER_RULES).map((rule) => rule.windowMs)
+);
+
+function sweepIfLarge(now: number): void {
   if (windows.size < SWEEP_THRESHOLD) return;
   for (const [key, window] of windows) {
-    if (isWindowExpired(window, rule, now)) windows.delete(key);
+    if (isWindowExpired(window, { limit: 0, windowMs: LONGEST_WINDOW_MS }, now)) {
+      windows.delete(key);
+    }
   }
 }
 
 /** Counts one request against a key and returns the decision. */
 function hit(key: string, rule: RateLimitRule): { allowed: boolean; retryAfterSeconds: number } {
   const now = Date.now();
-  sweepIfLarge(now, rule);
+  sweepIfLarge(now);
   const decision = evaluateRateLimit(windows.get(key), rule, now);
   windows.set(key, decision.window);
   return { allowed: decision.allowed, retryAfterSeconds: decision.retryAfterSeconds };

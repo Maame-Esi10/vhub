@@ -343,14 +343,43 @@ function todayIsoDate(): string {
  * Available for ANYONE on the list, not only the unscanned: no automated
  * signal ever overrules a human who was physically at the event.
  *
- * Records the decision and nothing else -- no V-Score movement. See the note
- * at the top of this file: the -15 no-show penalty belongs to the post-event
- * review (/api/vscore, attended = false), so that exactly one path can change
- * a score.
+ * Records the decision and nothing else -- no V-Score movement. The cost of a
+ * no-show belongs to the post-event review (/api/vscore, attended = false),
+ * so that exactly one path can change a score. It is NOT a flat -15:
+ * `attended: false` floors that event's outcome to 0 and the blend then makes
+ * the new score 0.7x the old one, which is a bigger drop than 15 points for
+ * anyone above 50.
  */
 async function resolveAttendance(caller: AuthedCaller, body: z.infer<typeof ResolveBody>) {
   await assertOwnsOutreach(caller, body.outreachId);
   const admin = getSupabaseAdmin();
+
+  /*
+    THE VOLUNTEER MUST HAVE HELD A PLACE. Owning the outreach was the only
+    check, and it is not enough: every signed-in user can read every
+    volunteer's id from `public_volunteer_profiles`, so an organisation could
+    write an `absent` row against somebody who had never applied to it.
+
+    That does not move a V-Score by itself -- with no `application_days` rows
+    the day ratio is null, which correctly means "do not scale" -- but it puts
+    a false absence on a record the volunteer can see, which they then have to
+    raise a dispute to remove, and it feeds the no-show figure the admin stats
+    screen reports. The same check the review path now makes, for the same
+    reason.
+  */
+  const { data: place, error: placeError } = await admin
+    .from("applications")
+    .select("id")
+    .eq("outreach_id", body.outreachId)
+    .eq("volunteer_id", body.volunteerId)
+    .eq("status", "accepted")
+    .maybeSingle();
+  if (placeError) throw Errors.internal("Could not check this volunteer's place on the outreach.");
+  if (!place) {
+    throw Errors.forbidden(
+      "This volunteer did not hold a place on this outreach, so their attendance cannot be recorded."
+    );
+  }
 
   const outreachDayId = await resolveDayId(body.outreachId, body.outreachDayId);
 

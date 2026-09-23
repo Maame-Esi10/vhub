@@ -104,10 +104,15 @@ export async function POST(req: Request): Promise<Response> {
         .maybeSingle();
 
       if (rowError) throw Errors.internal("Could not load the document.");
-      if (!row) throw Errors.notFound("There is no document to view.");
 
-      const ownsIt = row.organisation_id === caller.userId;
-      if (!ownsIt && caller.role !== "admin") {
+      // ONE REFUSAL COVERING BOTH REASONS. A row that does not exist and a row
+      // that is not yours get the same 403 in the same words. Answering 404 for
+      // the first let any signed-in caller tell a real document row id from an
+      // invented one, which is precisely the distinction the header comment
+      // above rules out -- and the caller learning it need not be an
+      // organisation at all.
+      const ownsIt = row?.organisation_id === caller.userId;
+      if (!row || (!ownsIt && caller.role !== "admin")) {
         throw Errors.forbidden("You are not allowed to view this document.");
       }
 
@@ -141,8 +146,13 @@ export async function POST(req: Request): Promise<Response> {
 
     const publicId = volunteer?.credential_document_id as string | null | undefined;
     if (!publicId) {
-      // Same wording to an authorised viewer and to a stranger, for the reason
-      // in the header comment.
+      // A 404 is SAFE HERE, and only here, because this line sits AFTER the
+      // authorisation check above: the only callers who reach it are the
+      // volunteer themselves, an admin, or an organisation they have applied
+      // to, and all three are entitled to know whether a document exists. A
+      // stranger was already refused with a flat 403 and never gets this far.
+      // (This comment previously claimed the wording was identical for both,
+      // which was untrue and, worse, would have justified moving the check.)
       throw Errors.notFound("There is no document to view.");
     }
 

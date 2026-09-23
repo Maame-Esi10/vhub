@@ -121,6 +121,45 @@ export async function POST(req: Request): Promise<Response> {
   }
 }
 
+/**
+ * The volunteer must actually have held a place on this outreach.
+ *
+ * OWNING THE OUTREACH IS NOT ENOUGH, and that was the whole of the check until
+ * now. `public_volunteer_profiles` is granted to every signed-in user and
+ * carries `id`, so any organisation can read the id of every volunteer on the
+ * platform; with only outreach ownership tested, it could file a review with
+ * `attended: false` against a volunteer who had never heard of it. The replay
+ * counts every `event_reviews` row for a volunteer with no check that an
+ * application exists, and an unattended event floors that event's outcome to
+ * 0 -- one fabricated review takes a new volunteer from 70 to 49, and it is
+ * repeatable once per outreach, on as many outreaches as the organisation
+ * cares to create.
+ *
+ * `accepted` specifically, not merely "applied": that is exactly the set the
+ * organisation's own review screen offers (it filters applications to
+ * `accepted`), so this refuses nothing a legitimate reviewer can reach.
+ *
+ * THIS IS THE ENDPOINT HALF ONLY. The matching RLS policy on `event_reviews`
+ * carries the same gap and a client holding an organisation session can still
+ * reach PostgREST directly; closing that is a schema change and is gated.
+ */
+async function assertVolunteerHadAPlace(outreachId: string, volunteerId: string) {
+  const admin = getSupabaseAdmin();
+  const { data, error } = await admin
+    .from("applications")
+    .select("id")
+    .eq("outreach_id", outreachId)
+    .eq("volunteer_id", volunteerId)
+    .eq("status", "accepted")
+    .maybeSingle();
+  if (error) throw Errors.internal("Could not check this volunteer's place on the outreach.");
+  if (!data) {
+    throw Errors.forbidden(
+      "This volunteer did not hold a place on this outreach, so there is nothing to review."
+    );
+  }
+}
+
 async function assertOrgOwnsOutreach(callerId: string, outreachId: string) {
   const admin = getSupabaseAdmin();
   const { data: outreach, error } = await admin
@@ -147,6 +186,7 @@ async function handleReview(
     throw Errors.forbidden("Only the organisation running this outreach can file a review.");
   }
   await assertOrgOwnsOutreach(caller.userId, body.outreachId);
+  await assertVolunteerHadAPlace(body.outreachId, body.volunteerId);
 
   const admin = getSupabaseAdmin();
 

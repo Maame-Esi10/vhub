@@ -103,7 +103,10 @@ export function useMyOrganisationProfile(organisationId: string | undefined) {
     enabled: !!organisationId,
     queryFn: async (): Promise<OrganisationProfile> => {
       const { data, error } = await supabase
-        .from('organisation_profiles')
+        // `select('*')` now needs the definer view: `authenticated` lost SELECT
+        // on the verification-evidence columns on 2026-09-23, and a `*` that
+        // includes an ungranted column fails outright rather than omitting it.
+        .from('organisation_private_profiles')
         .select('*')
         .eq('id', organisationId!)
         .single();

@@ -35,7 +35,9 @@ async function fetchSubmission(organisationId: string): Promise<VerificationSubm
   // tables is `own row or admin` while the profile is broadly readable — an
   // embed would make one failing policy look like a missing organisation.
   const [profileResult, registrationsResult, documentsResult] = await Promise.all([
-    supabase.from('organisation_profiles').select('*').eq('id', organisationId).maybeSingle(),
+    // See the note on useVerificationQueue below: the evidence columns are
+    // only reachable through organisation_private_profiles now.
+    supabase.from('organisation_private_profiles').select('*').eq('id', organisationId).maybeSingle(),
     supabase
       .from('organisation_registrations')
       .select('*')
@@ -115,7 +117,13 @@ export function useVerificationQueue() {
     enabled: role === 'admin',
     queryFn: async (): Promise<VerificationQueueRow[]> => {
       const { data, error } = await supabase
-        .from('organisation_profiles')
+      // `organisation_private_profiles`, NOT the base table. `authenticated`
+      // no longer holds SELECT on the verification-evidence columns
+      // (official_email, physical_address, contact_person, verification_state,
+      // verification_reason and the two timestamps) -- they were readable by
+      // every signed-in user until 2026-09-23. The view is definer-rights and
+      // carries its own row test, `id = auth.uid() or is_admin()`.
+        .from('organisation_private_profiles')
         .select('id, org_name, org_type, official_email, contact_person, verification_submitted_at')
         .eq('verification_state', 'documents_submitted')
         .order('verification_submitted_at', { ascending: true, nullsFirst: true });

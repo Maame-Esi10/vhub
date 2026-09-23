@@ -91,7 +91,9 @@ export function usePlatformStats() {
           .select('id', { count: 'exact', head: true })
           .eq('verification_status', 'verified'),
         supabase
-          .from('organisation_profiles')
+          // Filtering on verification_state needs the definer view: it is no
+          // longer SELECTable on the base table by `authenticated`.
+          .from('organisation_private_profiles')
           .select('id', { count: 'exact', head: true })
           .eq('verification_state', 'verified'),
         supabase
@@ -99,7 +101,7 @@ export function usePlatformStats() {
           .select('id', { count: 'exact', head: true })
           .eq('verification_status', 'documents_pending'),
         supabase
-          .from('organisation_profiles')
+          .from('organisation_private_profiles')
           .select('id', { count: 'exact', head: true })
           .eq('verification_state', 'documents_submitted'),
         supabase.from('disputes').select('id', { count: 'exact', head: true }).eq('status', 'open'),
