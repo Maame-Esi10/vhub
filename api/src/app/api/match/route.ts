@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {
-  computeLayer1MatchScore,
   type Layer1MatchResult,
   type Layer1OutreachInput,
   type Layer1VolunteerInput,
@@ -13,7 +12,11 @@ import { authenticate, assertOwnsOutreach, type AuthedCaller } from "../../../se
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { enforceIpRateLimit, enforceUserRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
-import { fetchDaysByOutreach, toOutreachInput } from "../../../server/outreachInput";
+import {
+  fetchDaysByOutreach,
+  fetchRolesByOutreach,
+  toOutreachInput,
+} from "../../../server/outreachInput";
 import { checkSkillEquivalences, type SkillPair } from "../../../server/gemini";
 import {
   dedupePairs,
@@ -180,52 +183,6 @@ const APPLICANT_SELECT = `
     profile:profiles ( region, district )
   )
 `;
-
-/**
- * The roles of many outreaches, keyed by outreach id.
- *
- * An outreach absent from the map (or mapping to an empty array) is in
- * SINGLE-ROLE mode, which `computeMultiRoleMatchScore` handles by delegating
- * straight back to the single-role scorer. One batched query rather than one
- * per outreach, so the ranked feed stays a fixed number of round trips.
- */
-async function fetchRolesByOutreach(
-  admin: ReturnType<typeof getSupabaseAdmin>,
-  outreachIds: readonly string[]
-): Promise<Map<string, RoleInput[]>> {
-  const byOutreach = new Map<string, RoleInput[]>();
-  if (outreachIds.length === 0) return byOutreach;
-
-  const { data, error } = await admin
-    .from("outreach_roles")
-    .select("id, outreach_id, category, role_type, min_experience_level, required_skills, slots_total, slots_filled")
-    .in("outreach_id", outreachIds as string[]);
-
-  // A failure here degrades to single-role scoring rather than failing the
-  // request: a ranked feed with slightly coarser category scores beats no feed.
-  if (error) {
-    console.error("[match] could not load outreach roles, scoring as single-role:", error.message);
-    return byOutreach;
-  }
-
-  for (const row of (data ?? []) as Record<string, unknown>[]) {
-    const outreachId = row.outreach_id as string;
-    byOutreach.set(outreachId, [
-      ...(byOutreach.get(outreachId) ?? []),
-      {
-        id: row.id as string,
-        category: (row.category as RoleInput["category"]) ?? null,
-        role_type: (row.role_type as RoleInput["role_type"]) ?? null,
-        min_experience_level: (row.min_experience_level as RoleInput["min_experience_level"]) ?? null,
-        required_skills: (row.required_skills as string[] | null) ?? null,
-        slots_total: (row.slots_total as number) ?? 0,
-        slots_filled: (row.slots_filled as number) ?? 0,
-      },
-    ]);
-  }
-
-  return byOutreach;
-}
 
 /**
  * The roles a given application should be scored against.
@@ -867,12 +824,21 @@ async function notifyCandidates(outreach: Record<string, unknown>) {
       profile:profiles!inner ( region, district, push_tokens ( expo_push_token ) )
     `
     )
-    .eq("verification_status", "verified")
       // A closed account is never a candidate. Its profile row survives so the
       // event history of everyone it worked with survives with it, but the
       // person is gone -- matching them, or pushing them a new outreach, would
       // be the app addressing somebody who asked to be removed.
     .is("profile.closed_at", null);
+
+  // UNVERIFIED VOLUNTEERS ARE NOTIFIED ABOUT SUPPORT-ROLE OUTREACHES, because
+  // they may Quick Join those -- the same condition the under-subscription
+  // ladder applies. This filter used to be unconditional, so publishing a
+  // support-role event told none of the students and first aiders it exists
+  // for, and the first they heard of it was the shortfall escalation a week
+  // later. Two pools answering one question differently is the bug.
+  if (outreach.role_type !== "support") {
+    candidateQuery = candidateQuery.eq("verification_status", "verified");
+  }
 
   if (outreach.region) {
     candidateQuery = candidateQuery.eq("profile.region", outreach.region as string);
@@ -886,6 +852,16 @@ async function notifyCandidates(outreach: Record<string, unknown>) {
   const candidates = (data ?? []) as unknown as CandidateRow[];
   const daysByOutreach = await fetchDaysByOutreach(admin, [outreachId]);
   const outreachInput = toOutreachInput(outreach, daysByOutreach.get(outreachId));
+  // ROLES TOO. Skipping Layer 2 here is a quota decision and a sound one, but
+  // it never extended to the multi-role scorer: that is pure code with no I/O
+  // and no quota cost, and this is one extra batched query for one outreach.
+  // Without it a multi-role outreach carries `required_category = null` (the
+  // roles hold the categories instead), so the 20-point category component was
+  // a guaranteed zero for every candidate and nothing could score above 80
+  // against a threshold of 75 -- an exactly-matching nurse one district away
+  // scored 70 and was never told the event existed.
+  const rolesByOutreach = await fetchRolesByOutreach(admin, [outreachId]);
+  const roles = rolesByOutreach.get(outreachId) ?? [];
   const threshold = env.notifyMatchThreshold;
 
   const pending: UserNotification[] = [];
@@ -915,7 +891,9 @@ async function notifyCandidates(outreach: Record<string, unknown>) {
     // Layer 1 only -- this is a broad scan over many candidates, not a
     // per-applicant decision, so Gemini is deliberately skipped here to
     // conserve the daily quota for the higher-value score_applicants path.
-    const { total } = computeLayer1MatchScore(volunteerInput, outreachInput);
+    // Multi-role aware, though: an empty `roles` delegates straight back to
+    // the single-role scorer, so a single-role outreach scores identically.
+    const { total } = computeMultiRoleMatchScore(volunteerInput, outreachInput, roles);
     if (total < threshold) continue;
 
     notifiedVolunteerIds.push(candidate.id);

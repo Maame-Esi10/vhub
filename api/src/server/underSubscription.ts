@@ -1,9 +1,10 @@
 import { Errors } from "./httpErrors";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 import { notifyUsers, type UserNotification } from "./notify";
-import { fetchDaysByOutreach, toOutreachInput } from "./outreachInput";
+import { fetchDaysByOutreach, fetchRolesByOutreach, toOutreachInput } from "./outreachInput";
 import { env } from "./env";
-import { computeLayer1MatchScore, type Layer1VolunteerInput } from "@/lib/matching/layer1";
+import { type Layer1VolunteerInput } from "@/lib/matching/layer1";
+import { computeMultiRoleMatchScore } from "@/lib/matching/multiRole";
 import { getReachableRegions } from "@/constants/ghana-locations";
 import {
   UNDER_SUBSCRIPTION_STAGES,
@@ -322,6 +323,15 @@ async function notifyNearbyVolunteers(
   // Saturday-only student invisible to a campaign with three Saturdays in it.
   const daysByOutreach = await fetchDaysByOutreach(admin, [outreach.id]);
   const outreachInput = toOutreachInput(outreach, daysByOutreach.get(outreach.id));
+  // The roles as well, for the same reason the days come: this pass exists
+  // because an event is short of people, so scoring it as something it is not
+  // is the worst place to do it. A multi-role outreach carries
+  // `required_category = null` -- the roles hold the categories -- so scoring
+  // it single-role zeroed the 20-point category component for everybody and
+  // capped the achievable score at 80 against a threshold of 75. The ladder
+  // was quietest about exactly the mixed events it was built to fill.
+  const rolesByOutreach = await fetchRolesByOutreach(admin, [outreach.id]);
+  const roles = rolesByOutreach.get(outreach.id) ?? [];
   const threshold = env.notifyMatchThreshold;
   const pending: UserNotification[] = [];
 
@@ -331,7 +341,9 @@ async function notifyNearbyVolunteers(
     // Layer 1 only. This is a broad scan across potentially several regions,
     // and the Gemini free-tier quota is reserved for the higher-value
     // per-applicant scoring path — the same trade-off notifyCandidates makes.
-    const { total } = computeLayer1MatchScore(
+    // Multi-role aware: an empty `roles` delegates straight back to the
+    // single-role scorer, so a single-role outreach scores identically.
+    const { total } = computeMultiRoleMatchScore(
       {
         category: candidate.category,
         skill_tags: candidate.skill_tags,
@@ -340,7 +352,8 @@ async function notifyNearbyVolunteers(
         region: candidate.profile?.region ?? null,
         district: candidate.profile?.district ?? null,
       },
-      outreachInput
+      outreachInput,
+      roles
     );
     if (total < threshold) continue;
 

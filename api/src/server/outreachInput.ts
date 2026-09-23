@@ -1,4 +1,5 @@
 import type { Layer1OutreachDay, Layer1OutreachInput } from "@/lib/matching/layer1";
+import type { RoleInput } from "@/lib/matching/multiRole";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 
 /**
@@ -90,6 +91,62 @@ export async function fetchDaysByOutreach(
         // the event's hours rather than to any of its own.
         start_time: (row.start_time as string | null) ?? null,
         end_time: (row.end_time as string | null) ?? null,
+      },
+    ]);
+  }
+
+  return byOutreach;
+}
+
+
+/**
+ * The `outreach_roles` rows for these outreaches, keyed by outreach id.
+ *
+ * MOVED HERE FROM `/api/match`'s route file on 2026-09-23, because it had two
+ * more callers than it had homes. It lives beside `fetchDaysByOutreach` for
+ * exactly the reason that loader gives: several call sites need it, and several
+ * copies of one query is several places for one of them to quietly fall behind.
+ * That is not hypothetical here -- the two broadcast notification passes never
+ * loaded roles at all, because the loader was private to a route they do not
+ * belong to, and both silently scored every multi-role outreach as single-role.
+ *
+ * An outreach absent from the map (or mapping to an empty array) is in
+ * SINGLE-ROLE mode, which `computeMultiRoleMatchScore` handles by delegating
+ * straight back to the single-role scorer. One batched query rather than one
+ * per outreach, so the ranked feed stays a fixed number of round trips.
+ *
+ * A FAILURE DEGRADES, IT DOES NOT THROW, the same call `fetchDaysByOutreach`
+ * makes: a ranked feed with slightly coarser category scores beats no feed.
+ */
+export async function fetchRolesByOutreach(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  outreachIds: readonly string[]
+): Promise<Map<string, RoleInput[]>> {
+  const byOutreach = new Map<string, RoleInput[]>();
+  if (outreachIds.length === 0) return byOutreach;
+
+  const { data, error } = await admin
+    .from("outreach_roles")
+    .select("id, outreach_id, category, role_type, min_experience_level, required_skills, slots_total, slots_filled")
+    .in("outreach_id", outreachIds as string[]);
+
+  if (error) {
+    console.error("[match] could not load outreach roles, scoring as single-role:", error.message);
+    return byOutreach;
+  }
+
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
+    const outreachId = row.outreach_id as string;
+    byOutreach.set(outreachId, [
+      ...(byOutreach.get(outreachId) ?? []),
+      {
+        id: row.id as string,
+        category: (row.category as RoleInput["category"]) ?? null,
+        role_type: (row.role_type as RoleInput["role_type"]) ?? null,
+        min_experience_level: (row.min_experience_level as RoleInput["min_experience_level"]) ?? null,
+        required_skills: (row.required_skills as string[] | null) ?? null,
+        slots_total: (row.slots_total as number) ?? 0,
+        slots_filled: (row.slots_filled as number) ?? 0,
       },
     ]);
   }
