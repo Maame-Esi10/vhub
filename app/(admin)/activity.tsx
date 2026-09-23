@@ -8,7 +8,7 @@ import { humanError } from '@/lib/errorMessage';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Badge, EmptyState, ErrorState, ListSkeleton } from '@/components/ui';
+import { Badge, EmptyState, ErrorState, ListSkeleton, ScreenHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAdminActions } from '@/hooks';
 import type { AdminAction, AdminActionTargetType } from '@/types/database';
@@ -35,7 +35,7 @@ export default function AdminActivity() {
   if (actionsQuery.isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <Text style={[styles.title, styles.standalone]}>Activity</Text>
+        <ScreenHeader title="Activity" fallback="/(admin)/overview" />
         <View style={styles.stateWrap}>
           <ListSkeleton rows={4} rowHeight={92} />
         </View>
@@ -46,7 +46,7 @@ export default function AdminActivity() {
   if (actionsQuery.isError) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <Text style={[styles.title, styles.standalone]}>Activity</Text>
+        <ScreenHeader title="Activity" fallback="/(admin)/overview" />
         <View style={styles.stateWrap}>
           <ErrorState
             message={
@@ -61,6 +61,15 @@ export default function AdminActivity() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/*
+        This screen is registered `href: null`, so it has NO tab button, and it
+        had no back control of any kind in any of its three branches. Android's
+        hardware key rescued it; on iOS there is no hardware key and no swipe
+        gesture inside a tab navigator, so the only way out was noticing you
+        could tap a different tab. Every other hidden admin screen already had
+        this header.
+      */}
+      <ScreenHeader title="Activity" fallback="/(admin)/overview" />
       <FlatList
         data={actions}
         keyExtractor={(action) => action.id}
@@ -71,7 +80,11 @@ export default function AdminActivity() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>Activity</Text>
+            {/* The title moved up into ScreenHeader, which every other hidden
+                admin screen uses; repeating it here would print "Activity"
+                twice. The standfirst stays, because it explains the log's
+                append-only rule and belongs with the list rather than in a
+                navigation bar. */}
             <Text style={styles.subtitle}>
               Every admin decision, in the order it happened. Entries cannot be edited or removed. A
               correction is recorded as a new entry.

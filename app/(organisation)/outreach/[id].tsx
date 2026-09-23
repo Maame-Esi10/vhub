@@ -13,6 +13,7 @@ import {
   Avatar,
   Badge,
   ConfirmDialog,
+  ErrorAlert,
   ErrorState,
   Toast,
   FlyerBackground,
@@ -73,10 +74,20 @@ export default function OrganisationOutreachDetail() {
   // element needs this or it sits under the pill and cannot be tapped.
   const tabBarPadding = useTabBarContentPadding();
   const router = useRouter();
-  const { id, saved, created } = useLocalSearchParams<{
+  const { id, saved, created, from } = useLocalSearchParams<{
     id: string;
     saved?: string;
     created?: string;
+    /**
+     * Where the back arrow goes. This screen sits in a tab group, which keeps
+     * no history, so `back()` would unwind onto the first tab rather than the
+     * screen the user came from. The notification inbox has always SENT this
+     * (lib/notificationPresentation.ts) and this screen simply never read it,
+     * so an organisation opening an outreach notification and pressing back
+     * was put on the Dashboard with its other unread notifications two taps
+     * away. The volunteer's copy of this screen has read it all along.
+     */
+    from?: string;
   }>();
   const organisationId = useAuthStore((s) => s.user)?.id;
 
@@ -302,9 +313,9 @@ export default function OrganisationOutreachDetail() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.replace('/(organisation)/dashboard')}
+          onPress={() => router.replace((from ?? '/(organisation)/dashboard') as never)}
           accessibilityRole="button"
-          accessibilityLabel="Back to dashboard"
+          accessibilityLabel="Go back"
           hitSlop={8}
         >
           <MaterialCommunityIcons name="arrow-left" size={22} color={colors.textPrimary} />
@@ -607,7 +618,15 @@ export default function OrganisationOutreachDetail() {
           </>
         ) : null}
 
-        {lifecycleError ? <Text style={styles.dangerError}>{lifecycleError}</Text> : null}
+        {/*
+          A POPUP, not a line at the foot of the page. This is the result of
+          confirming Delete, Cancel event or Mark completed: the dialog closes,
+          and the refusal used to be written as the LAST element of a very long
+          ScrollView, which the organisation is not looking at and may not even
+          have scrolled to. That is indistinguishable from the confirmation
+          having done nothing.
+        */}
+        <ErrorAlert error={lifecycleError} fallback="That action could not be completed." />
       </ScrollView>
 
       {/*

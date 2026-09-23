@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -59,7 +59,21 @@ export default function OnboardingComplete() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      {/*
+        A SCROLLER, because this column is centred and can outgrow the screen.
+        It was a plain flex View: a 72px badge, a 26/32 heading, a lead
+        paragraph, a three-row status card and up to two buttons. At the 1.3
+        font scale the app supports, on a 360x640 handset, that overflows at
+        BOTH ends because the column is centred, with nothing to scroll and no
+        way to reach "Add my document now". A drag to reach it is just a press
+        on whatever is under the thumb, which reads as the app going somewhere
+        random rather than as a layout fault. `flexGrow: 1` keeps the centring
+        at ordinary sizes, so nothing changes until it actually overflows.
+      */}
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.badge}>
           <MaterialCommunityIcons name="check" size={38} color={colors.white} />
         </View>
@@ -117,7 +131,7 @@ export default function OnboardingComplete() {
             }
           />
         ) : null}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -155,8 +169,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    flex: 1,
+    // `flexGrow`, not `flex`: this is a ScrollView contentContainer now, and
+    // `flex: 1` there caps the content at the viewport height, which is the
+    // one thing that would stop it scrolling.
+    flexGrow: 1,
     paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
     justifyContent: 'center',
   },
   badge: {

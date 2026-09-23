@@ -128,7 +128,17 @@ export function NotificationSettingsScreen({
             ? 'The push service will not deliver to this app. This is a setup problem in the build rather than anything on your phone, and no amount of changing settings here will fix it. Nothing else about VHub is affected.'
             : deadToken
               ? 'This phone is registered under an old install of VHub. Turn the switch off and on again to register it fresh, then send another test.'
-              : failure.message,
+              : // NOT `failure.message` raw. This is the push service's own
+                // wording for any code we do not recognise, and it can carry
+                // the ExponentPushToken value inside it. Every other branch of
+                // this ternary is written copy; this was the one path by which
+                // third-party machine output could reach a user, the same
+                // class as the {"status":500,...} shown on the registration
+                // screen on 2026-09-12.
+                humanError(
+                  new Error(failure.message),
+                  'The push service refused this notification and did not say why. Try again in a moment.'
+                ),
         });
         return;
       }

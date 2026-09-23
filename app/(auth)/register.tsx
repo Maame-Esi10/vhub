@@ -16,12 +16,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Input , PasswordRequirements } from '@/components/ui';
+import { Button, ErrorAlert, Input, PasswordRequirements } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { ORG_TYPES, OrgType } from '@/constants/org-types';
 import { useSignUp } from '@/hooks';
-import { humanErrorOrNull } from '@/lib/errorMessage';
 import { describePasswordProblem } from '@/lib/password';
 
 
@@ -152,7 +151,8 @@ export default function Register() {
   }, [validate, signUp, role, email, password, fullName, orgName, orgType, description, website, router]);
 
   const submitting = signUp.isPending;
-  const errorMessage = validationError ?? humanErrorOrNull(signUp.error) ?? null;
+  // Validation stays inline (rendered directly); a failed registration is a
+  // popup via ErrorAlert. There is no combined message any more.
 
   const headerTitle = role === 'volunteer' ? 'Volunteer Registration' : 'Organization Registration';
 
@@ -333,7 +333,13 @@ export default function Register() {
                       style={styles.submitButton}
                     />
                   )}
-                  {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+                  {validationError ? (
+                    <Text style={styles.errorText}>{validationError}</Text>
+                  ) : null}
+                  <ErrorAlert
+                    error={signUp.error}
+                    fallback="Could not create your account. Please try again."
+                  />
                 </View>
               </>
             ) : (
@@ -499,7 +505,13 @@ export default function Register() {
                       style={styles.submitButton}
                     />
                   )}
-                  {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+                  {validationError ? (
+                    <Text style={styles.errorText}>{validationError}</Text>
+                  ) : null}
+                  <ErrorAlert
+                    error={signUp.error}
+                    fallback="Could not create your account. Please try again."
+                  />
                 </View>
               </>
             )}

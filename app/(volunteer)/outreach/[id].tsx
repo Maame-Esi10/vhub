@@ -657,7 +657,13 @@ export default function OutreachDetail() {
                 on: it is where their document, and its status, actually live.
               */}
               <Pressable
-                onPress={() => router.push('/(volunteer)/verify-identity')}
+                onPress={() =>
+                  // `from`, so back returns to the outreach they were trying
+                  // to apply to. Without it the verification screen falls back
+                  // to the Feed or Profile by status, and the application they
+                  // came to make is gone from under them.
+                  router.push(`/(volunteer)/verify-identity?from=/(volunteer)/outreach/${id}`)
+                }
                 accessibilityRole="button"
                 accessibilityLabel={
                   awaitingReview ? 'See your verification status' : 'Start identity verification'

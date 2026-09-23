@@ -9,7 +9,7 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Avatar, Badge, ErrorState, ListSkeleton, VScoreBadge } from '@/components/ui';
+import { Avatar, Badge, ErrorAlert, ErrorState, ListSkeleton, VScoreBadge } from '@/components/ui';
 import type { BadgeTone } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { EXPERIENCE_LEVELS, VOLUNTEER_CATEGORIES } from '@/constants/categories';
@@ -227,11 +227,16 @@ export default function PublicVolunteerProfile() {
 
       {canDecide ? (
         <View style={styles.decisionBar}>
-          {updateStatus.isError ? (
-            <Text style={styles.decisionError}>
-              {humanError(updateStatus.error, 'Could not update this application.')}
-            </Text>
-          ) : null}
+          {/*
+            A POPUP, not a line inside this bar. `decisionBar` is FIXED TO THE
+            BOTTOM of the screen, so an Accept/Reject refusal was being written
+            directly into the thumb zone, under the fold, at the one moment the
+            organisation is looking at the two buttons rather than below them.
+          */}
+          <ErrorAlert
+            error={updateStatus.error}
+            fallback="Could not update this application."
+          />
           <View style={styles.decisionRow}>
             <Pressable
               onPress={() => decide('accepted')}

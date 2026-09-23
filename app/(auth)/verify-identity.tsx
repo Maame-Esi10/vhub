@@ -9,7 +9,7 @@ import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, OnboardingStepFooter, OnboardingStepHeader } from '@/components/ui';
+import { Button, ErrorAlert, OnboardingStepFooter, OnboardingStepHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
@@ -18,7 +18,6 @@ import { useCompleteOnboarding } from '@/hooks';
 // NATIVE module, and the barrel is imported by essentially every screen.
 import { useCredentialUpload } from '@/hooks/useMediaUpload';
 import { CREDENTIAL_CONSENT_POINTS } from '@/constants/credential-guidelines';
-import { humanErrorOrNull } from '@/lib/errorMessage';
 
 /**
  * Step 5/5 of volunteer onboarding (design-refs/ID Verification.png). Kept
@@ -77,11 +76,8 @@ export default function VerifyIdentity() {
   const consentReady = consented || consentRecorded;
 
   const submitting = completeOnboarding.isPending || credentialUpload.isPending;
-  const errorMessage =
-    validationError ??
-    humanErrorOrNull(completeOnboarding.error) ??
-    humanErrorOrNull(credentialUpload.error) ??
-    null;
+  // No combined message: validation renders inline, and the two call
+  // failures go to ErrorAlert. See the render below.
   const progress = useMemo(
     () => (confirmed && consentReady ? 1 : confirmed ? 0.65 : 0.3),
     [confirmed, consentReady]
@@ -313,7 +309,14 @@ export default function VerifyIdentity() {
           <Text style={styles.warningText}>CLINICAL ROLES LOCKED UNTIL VERIFIED</Text>
         </View>
 
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+        {validationError ? <Text style={styles.errorText}>{validationError}</Text> : null}
+        {/* The onboarding submit and the credential upload are two calls on
+            one press, so either can fail. Both are popups; the tick-the-boxes
+            validation above them stays inline. */}
+        <ErrorAlert
+          error={completeOnboarding.error ?? credentialUpload.error}
+          fallback="Could not finish setting up your profile. Please try again."
+        />
 
         <Button
           title={submitting ? 'Saving...' : 'Sign and choose my document'}

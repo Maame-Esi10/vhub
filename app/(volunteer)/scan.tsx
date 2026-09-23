@@ -5,7 +5,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 // Direct import, never the components/ui barrel — expo-camera is a NATIVE
@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 // components/ui/index.ts.
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Button, ScreenHeader, formatEventDate } from '@/components/ui';
+import { tabBarClearance } from '@/components/ui/tabBarOptions';
 import { useCheckIn } from '@/hooks/useCheckInScan';
 import { useOutreach } from '@/hooks/useOutreaches';
 import { decodeCheckinQr } from '@/lib/checkin-qr';
@@ -212,10 +213,23 @@ export default function VolunteerScanCheckin() {
 
 /** Shared frame, so every state above keeps the same header and padding. */
 function Shell({ children }: { children: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Scan to check in" fallback="/(volunteer)/schedule" />
-      <View style={styles.content}>{children}</View>
+      {/*
+        CLEARS THE TAB PILL even though this screen is on the full-bleed
+        exemption list. That exemption was written about the BUTTONS, which
+        really are vertically centred and never at the bottom. The privacy
+        footnote is not: it carries `marginTop: 'auto'`, which pins it to the
+        bottom of this column, and with only 32dp of padding its last line or
+        two were drawn under the floating pill. There is no scroller here
+        (correctly), so nothing could bring them back into view, and that
+        paragraph is the strongest privacy statement the app makes.
+      */}
+      <View style={[styles.content, { paddingBottom: tabBarClearance(insets.bottom) }]}>
+        {children}
+      </View>
     </SafeAreaView>
   );
 }

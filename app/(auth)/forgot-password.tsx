@@ -13,10 +13,9 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Input } from '@/components/ui';
+import { Button, ErrorAlert, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useRequestPasswordReset } from '@/hooks';
-import { humanErrorOrNull } from '@/lib/errorMessage';
 
 /**
  * "Reset Password" — design-refs/Forgot Password.png.
@@ -77,7 +76,6 @@ export default function ForgotPassword() {
   }, [router]);
 
   const submitting = requestReset.isPending;
-  const errorMessage = validationError ?? humanErrorOrNull(requestReset.error) ?? null;
 
   return (
     <View style={styles.container}>
@@ -155,7 +153,13 @@ export default function ForgotPassword() {
                 style={styles.actionButton}
               />
             )}
-            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+            {validationError ? (
+              <Text style={styles.errorText}>{validationError}</Text>
+            ) : null}
+            <ErrorAlert
+              error={requestReset.error}
+              fallback="Could not send the reset code. Please try again."
+            />
           </View>
 
           <View style={styles.backRow}>

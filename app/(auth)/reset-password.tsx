@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Input } from '@/components/ui';
+import { Button, ErrorAlert, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import {
   MIN_PASSWORD_LENGTH,
@@ -22,7 +22,6 @@ import {
   useCompletePasswordReset,
   useRequestPasswordReset,
 } from '@/hooks';
-import { humanError } from '@/lib/errorMessage';
 
 /** The recovery code Supabase puts in the email. */
 
@@ -278,9 +277,10 @@ export default function ResetPassword() {
                 style={styles.actionButton}
               />
             )}
-            {completeReset.error ? (
-              <Text style={styles.errorText}>{humanError(completeReset.error)}</Text>
-            ) : null}
+            <ErrorAlert
+              error={completeReset.error}
+              fallback="Could not set your new password. Please try again."
+            />
           </View>
 
           <View style={styles.resendBlock}>
@@ -297,7 +297,7 @@ export default function ResetPassword() {
               </Text>
             </Pressable>
             {resent ? <Text style={styles.resentNote}>A new code is on its way.</Text> : null}
-            {resend.error ? <Text style={styles.errorText}>{humanError(resend.error)}</Text> : null}
+            <ErrorAlert error={resend.error} fallback="Could not send a new code just now." />
           </View>
 
           <View style={styles.backRow}>

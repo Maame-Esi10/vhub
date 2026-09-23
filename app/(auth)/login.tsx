@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Input } from '@/components/ui';
+import { Button, ErrorAlert, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { APP_TAGLINE } from '@/constants/brand';
@@ -78,7 +78,19 @@ export default function Login() {
   const submitting = signIn.isPending;
   // Order is failure-order: what the form itself rejected, then what the
   // sign-in call rejected, then what failed after the sign-in succeeded.
-  const errorMessage = validationError ?? humanErrorOrNull(signIn.error) ?? authError ?? null;
+  /*
+    SPLIT IN TWO, because they are two different kinds of message and the
+    standing rule treats them differently. `validationError` is field
+    validation ("Enter your email") and stays inline, attached to the form the
+    person is already looking at. `actionError` is the RESULT OF PRESSING SIGN
+    IN, including the post-sign-in profile-load failure held in the auth store,
+    and that has to be read, so it becomes a popup.
+
+    `errorMessage` survives only to decide `needsConfirmation` below, which
+    tests the text for an unconfirmed-email message.
+  */
+  const actionError = humanErrorOrNull(signIn.error) ?? authError ?? null;
+  const errorMessage = validationError ?? actionError;
 
   /*
     "Confirm your email first" is the one sign-in failure with a next step, and
@@ -199,7 +211,10 @@ export default function Login() {
                 style={styles.loginButton}
               />
             )}
-            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+            {validationError ? (
+              <Text style={styles.errorText}>{validationError}</Text>
+            ) : null}
+            <ErrorAlert error={actionError} fallback="Could not sign you in. Please try again." />
             {needsConfirmation ? (
               <Pressable
                 onPress={() =>

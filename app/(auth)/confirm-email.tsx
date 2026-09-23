@@ -15,11 +15,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Input } from '@/components/ui';
+import { Button, ErrorAlert, Input } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { getLogoSize } from '@/constants/logoSizes';
 import { useConfirmSignUp, useResendConfirmation } from '@/hooks';
-import { humanError } from '@/lib/errorMessage';
 
 /** The confirmation code Supabase puts in the email. */
 
@@ -168,11 +167,12 @@ export default function ConfirmEmail() {
             style={styles.primaryButton}
           />
 
-          {confirmSignUp.isError ? (
-            <Text style={styles.errorText}>
-              {humanError(confirmSignUp.error, 'We could not confirm your account. Please try again.')}
-            </Text>
-          ) : null}
+          {/* A wrong or expired code has to be READ, so it stops the person
+              rather than being written under the button they just pressed. */}
+          <ErrorAlert
+            error={confirmSignUp.error}
+            fallback="We could not confirm your account. Please try again."
+          />
 
           {/*
             EVERY ACTION BELOW IS ITS OWN BLOCK WITH ITS OWN SPACING. The
@@ -191,11 +191,7 @@ export default function ConfirmEmail() {
               style={styles.secondaryButton}
             />
             {resent ? <Text style={styles.resentNote}>A new code is on its way.</Text> : null}
-            {resend.isError ? (
-              <Text style={styles.errorText}>
-                {humanError(resend.error, 'Could not send it just now.')}
-              </Text>
-            ) : null}
+            <ErrorAlert error={resend.error} fallback="Could not send it just now." />
           </View>
 
           <View style={styles.loginRow}>

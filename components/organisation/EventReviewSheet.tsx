@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   ScrollView,
@@ -9,6 +10,7 @@ import {
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, SheetError } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
@@ -134,6 +136,17 @@ export function EventReviewSheet({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
         <SafeAreaView style={styles.sheet} edges={['bottom']}>
+          {/*
+            The notes field is multiline and "Submit review" sits in a footer
+            that is a SIBLING of the scroller, so neither moves when the
+            keyboard opens. The app is edge-to-edge, so the Android window does
+            not resize either: the organiser writing review notes had both the
+            field and the submit button behind the keyboard, on the one screen
+            that is the sole source of every V-Score movement in the app.
+            FullApplicationSheet is the identical arrangement and has had this
+            all along, which made this an inconsistency rather than a choice.
+          */}
+          <KeyboardAvoidingView style={styles.avoider} behavior={KEYBOARD_AVOID_BEHAVIOR}>
           <View style={styles.header}>
             <Text style={styles.headerTitle} numberOfLines={1}>
               {existingReview ? 'Edit review' : 'Review volunteer'}
@@ -274,6 +287,7 @@ export function EventReviewSheet({
               accessibilityLabel="Submit review"
             />
           </View>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </View>
     </Modal>
@@ -381,6 +395,7 @@ function StarRow({ label, hint, value, onChange }: StarRowProps) {
 }
 
 const styles = StyleSheet.create({
+  avoider: { flex: 1 },
   backdrop: {
     flex: 1,
     backgroundColor: colors.overlay,

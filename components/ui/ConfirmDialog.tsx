@@ -1,5 +1,6 @@
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   StyleSheet,
@@ -9,6 +10,7 @@ import { Text } from '@/components/ui/Text';
 import type { ReactNode } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
@@ -85,6 +87,20 @@ export function ConfirmDialog({
       statusBarTranslucent
       onRequestClose={handleDismiss}
     >
+      {/*
+        THE KEYBOARD IS HANDLED HERE, ONCE, RATHER THAN AT FIVE CALL SITES.
+        `children` exists to hold a required reason field, and four of the five
+        callers make it required: the suspend/ban reason, the V-Score reversal
+        reason, the vetted-source removal reason and the dispute statement. The
+        Confirm button sits BELOW that field in the card.
+
+        The app is edge-to-edge, so the Android window does not resize when the
+        keyboard opens: a centred card whose lower half is a multiline field
+        plus a Confirm button simply had that half covered. The screens behind
+        this do have their own KeyboardAvoidingView, but a Modal is not inside
+        their view tree, so none of that protection ever reached the dialog.
+      */}
+      <KeyboardAvoidingView behavior={KEYBOARD_AVOID_BEHAVIOR} style={styles.avoider}>
       <Pressable style={styles.scrim} onPress={handleDismiss} accessibilityLabel="Dismiss dialog">
         {/*
           The card is a Pressable with a no-op onPress purely to swallow taps
@@ -133,6 +149,7 @@ export function ConfirmDialog({
           </Pressable>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -143,6 +160,7 @@ function tintOf(accent: string) {
 }
 
 const styles = StyleSheet.create({
+  avoider: { flex: 1 },
   extra: { width: '100%', marginBottom: spacing.base },
   scrim: {
     flex: 1,
