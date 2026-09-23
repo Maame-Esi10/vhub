@@ -6886,3 +6886,88 @@ Every one was a patch-level move inside SDK 57, so there is no migration to do
 and no breaking change to absorb. `npx expo-doctor` now reports 21 of 21 checks
 passing, where it previously failed that one. Tests, typecheck and lint were
 green before and after, which is the only evidence that matters here.
+
+## Push works, and the cause was one word: "assigned" (2026-09-23)
+
+Confirmed by the owner on a real device: the test notification arrived on the
+phone AND in the in-app inbox.
+
+**The cause was an FCM service-account key that existed but was attached to
+nothing.** Expo relays Android push through Firebase Cloud Messaging and
+authenticates to it with a Google service-account key held in EAS credentials.
+The key had been uploaded to the Expo account about a month earlier and was
+never ASSIGNED to `com.melissaotoo.vhub`. Selecting it in
+`eas credentials -p android` printed:
+
+```
+Google Service Account Key assigned to com.melissaotoo.vhub for FCM V1
+```
+
+and push worked on the build already installed. **No rebuild was involved**,
+which is itself the proof: the credential lives on Expo's servers, not in the
+APK, so nothing about the app was ever wrong.
+
+### Every earlier diagnosis was wrong, and they were wrong in an instructive way
+
+Four theories were advanced over two sessions and each was disproved by
+evidence rather than by trying a fix:
+
+1. **A package-name mismatch.** Checked: `com.melissaotoo.vhub` in both
+   `app.json` and `google-services.json`, project `vhub-ef816`, sender number
+   `462393574938`. All agreed.
+2. **No token registered.** Disproved by the endpoint itself, which throws
+   `badRequest` when there is none, and by the in-app row appearing.
+3. **A dev client older than `google-services.json`.** This was the leading
+   theory going into this session and it was WRONG.
+   `git log` puts `google-services.json` at 2026-08-01 (`a4febf4`);
+   `eas build:list` puts the last finished Android build at **2026-09-17**, six
+   weeks later. FCM was compiled into the build she was holding. **One command
+   against the build history would have retired this theory at any point in the
+   previous month, and nobody ran it.**
+4. **No FCM credential at all.** Also wrong, and this is the subtle one: the
+   key was there. It was listed, valid, for the right project. The question
+   nobody asked was not "does a credential exist" but "is it attached to
+   anything", and those look identical from every surface the app can see.
+
+### What actually made it findable
+
+The diagnostic shipped in `1ca1b4d` and the deploy of `4ec040c`. Before that,
+`dispatched` was `tokens.length` -- a count of rows in our own table, which the
+push service never sees and which therefore could not fail. The app said "sent"
+on the strength of a number that was always going to be positive. Once it
+returned what Expo actually said, the next test would have named
+`MismatchSenderId` or `InvalidCredentials` outright.
+
+As it happens the credential was fixed before that test was run, so the
+improved message never got to prove itself. That does not make it wasted: it is
+the reason the fault was narrowed to the credential layer at all, because it
+was the first reading anybody could trust.
+
+**The general rule this earns:** a diagnostic that cannot fail is worse than no
+diagnostic, because it actively argues against the truth. And when a fault has
+survived several confident diagnoses, the next question should be about
+CONFIGURATION STATE nobody has enumerated -- not another theory about code.
+
+### The test-push row is removed, as promised
+
+It was built on 2026-09-22 to tell four identical-looking faults apart and was
+recorded here so its removal would not be forgotten. Gone now:
+`sendTestPush`, `TestPushResponse` and `PushFailure` from `lib/api-client.ts`,
+the `test-dispatch` action and its handler from `/api/notifications`, and the
+row and its mutation from the notification settings screen.
+
+`notice`'s `tone` field went with it. It existed so a successful test was not
+dressed in red; every remaining notice on that screen is the toggle refusing to
+do what was just asked of it, and a field nothing sets is how a type starts
+lying.
+
+**`notifyUsers` still returns what the push service said**, and that is
+deliberate even though every caller now ignores it. It is what made the fault
+findable, and anything that needs to know why a push did not land reads it
+there rather than inferring from a row count.
+
+**The `test` notification type is deliberately NOT removed.** It is a value of
+a Postgres enum, and Postgres cannot drop one; rows written by the test push
+also still exist in the database and on the owner's phone. Its entry in
+`lib/notificationPresentation.ts` stays so those rows keep rendering as
+themselves instead of falling back to a generic card.

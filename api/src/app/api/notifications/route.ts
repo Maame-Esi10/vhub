@@ -3,7 +3,6 @@ import { authenticate } from "../../../server/auth";
 import { errorResponse, Errors } from "../../../server/httpErrors";
 import { enforceIpRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
-import { notifyUsers } from "../../../server/notify";
 import { assertCronSecret, sendEventReminders } from "../../../server/eventReminders";
 import { sendCheckinReminders } from "../../../server/checkinReminders";
 import { escalateUnderSubscribedOutreaches } from "../../../server/underSubscription";
@@ -13,14 +12,10 @@ import { sweepExpiredNotifications } from "../../../server/notificationRetention
 export const runtime = "nodejs";
 
 // ---------------------------------------------------------------------------
-// Request contract -- three actions:
+// Request contract -- two user actions plus the cron ones:
 //
 //   "register": the signed-in user (volunteer or organisation) registers an
 //   Expo push token for their own device. JWT-authed.
-//
-//   "test-dispatch": sends a push to the CALLER's own registered token(s),
-//   for manual QA (see the curl example in the final report). JWT-authed,
-//   and deliberately cannot target anyone else.
 //
 //   "send-event-reminders": the same 24-hour reminder scan as
 //   GET /api/cron/event-reminders (see that route for the real Vercel Cron
@@ -41,12 +36,6 @@ export const runtime = "nodejs";
 const RegisterAction = z.object({
   action: z.literal("register"),
   expoPushToken: z.string().min(10),
-});
-
-const TestDispatchAction = z.object({
-  action: z.literal("test-dispatch"),
-  title: z.string().min(1).max(120),
-  body: z.string().min(1).max(400),
 });
 
 const SendEventRemindersAction = z.object({
@@ -109,7 +98,6 @@ const SweepNotificationsAction = z.object({
 
 const NotificationsRequestBody = z.discriminatedUnion("action", [
   RegisterAction,
-  TestDispatchAction,
   SendEventRemindersAction,
   SendCheckinRemindersAction,
   EscalateUnderSubscribedAction,
@@ -158,13 +146,14 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    // "register" and "test-dispatch" are ordinary user actions.
+    // "register" is the only ordinary user action left. The test-dispatch
+    // action was removed on 2026-09-23, once push was confirmed working on a
+    // real device: it existed to tell four identical-looking faults apart,
+    // and the fault turned out to be an FCM service-account key that was
+    // uploaded to EAS but never ASSIGNED to the app.
     const caller = await authenticate(req);
 
-    if (body.action === "register") {
-      return Response.json(await registerToken(caller.userId, body.expoPushToken));
-    }
-    return Response.json(await testDispatch(caller.userId, body.title, body.body));
+    return Response.json(await registerToken(caller.userId, body.expoPushToken));
   } catch (err) {
     return errorResponse(err, req);
   }
@@ -183,47 +172,3 @@ async function registerToken(userId: string, expoPushToken: string) {
   return { registered: true };
 }
 
-// ---------------------------------------------------------------------------
-// action: test-dispatch
-// ---------------------------------------------------------------------------
-
-async function testDispatch(userId: string, title: string, message: string) {
-  const admin = getSupabaseAdmin();
-  const { data: tokens, error } = await admin.from("push_tokens").select("expo_push_token").eq("user_id", userId);
-  if (error) throw Errors.internal("Could not load your push tokens.");
-  if (!tokens?.length) {
-    throw Errors.badRequest("No push token registered for this account yet -- call action: 'register' first.");
-  }
-
-  // Keeps the "no token registered" guard above -- this action exists to prove
-  // the PUSH path works, so having nothing to push to is a real failure here,
-  // unlike the four production sites where the in-app row stands on its own.
-  const push = await notifyUsers([
-    {
-      userId,
-      type: "test",
-      title,
-      body: message,
-      tokens: tokens.map((t) => t.expo_push_token as string),
-    },
-  ]);
-
-  /*
-    `dispatched` USED TO BE `tokens.length`, which is a count of rows in a table
-    and says nothing whatsoever about whether a notification was sent. The app
-    reported "test sent to this device" on the strength of it while Expo was
-    rejecting the message, which is how "it says it sent and my phone never
-    buzzes" became unanswerable. It is now the number Expo ACCEPTED, and the
-    reason for anything it did not is passed straight through so the screen can
-    name it rather than guess.
-
-    Accepted is still not delivered -- Expo hands off to Google and the phone
-    may be asleep, in Doze, or have the channel switched off -- and the copy on
-    the screen says so.
-  */
-  return {
-    dispatched: push.accepted,
-    tokens: tokens.length,
-    failures: push.failures,
-  };
-}

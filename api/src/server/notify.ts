@@ -35,11 +35,17 @@ export interface UserNotification {
 /**
  * Records the in-app row for each notification, then pushes to every device.
  *
- * RETURNS WHAT THE PUSH SERVICE SAID, which callers are free to ignore and one
- * deliberately does not: the test-dispatch action exists to prove the push path
- * works, so for that one caller a silent failure is the entire bug. Everywhere
- * else this stays best-effort -- the row above is the source of truth and a
- * push is a courtesy on top of it.
+ * RETURNS WHAT THE PUSH SERVICE SAID, and every caller is now free to ignore
+ * it: this stays best-effort, because the in-app row written above is the
+ * source of truth and a push is a courtesy on top of it. The one caller that
+ * did NOT ignore it was the test-dispatch action, removed on 2026-09-23 once
+ * push was confirmed working on a real device.
+ *
+ * THE RESULT IS STILL RETURNED, and deliberately. It is what made the fault
+ * findable: Expo answers 200 for a request it ACCEPTED and reports per-message
+ * failures in the body, so a push that could never be delivered looked exactly
+ * like one that worked. Anything that needs to know why a push did not land
+ * reads it here rather than inferring from a row count.
  */
 export async function notifyUsers(
   notifications: readonly UserNotification[]
