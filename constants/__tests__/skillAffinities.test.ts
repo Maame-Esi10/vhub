@@ -1,4 +1,4 @@
-import { companionSkills, ALL_SKILLS } from '../skills';
+import { companionSkills, ALL_SKILLS, SKILL_AFFINITIES } from '../skills';
 
 /**
  * The affinity table names skills as string literals, so a typo produces an
@@ -6,12 +6,37 @@ import { companionSkills, ALL_SKILLS } from '../skills';
  * the live vocabulary, which is the right runtime behaviour and exactly what
  * would hide the mistake -- the first draft of this table had NINE invented
  * names in it and the code still "worked".
+ *
+ * WHICH IS WHY THE FIRST ASSERTION BELOW READS THE TABLE AND NOT THE FUNCTION.
+ * This test used to drive `companionSkills` with every real skill and check
+ * that everything it returned was in the vocabulary -- and that CANNOT FAIL,
+ * because the filter it was re-checking removes invalid names before they are
+ * returned. An invented entry would have sailed through. The guard now
+ * inspects `SKILL_AFFINITIES` itself, which is the authority, so a typo in any
+ * of its ~50 entries fails here rather than going quiet in production.
  */
 describe('skill affinities', () => {
+  it('names only skills that exist, in every group', () => {
+    const vocabulary = new Set(ALL_SKILLS);
+    const invented: string[] = [];
+    for (const group of SKILL_AFFINITIES) {
+      for (const skill of group) {
+        if (!vocabulary.has(skill)) invented.push(skill);
+      }
+    }
+    expect(invented).toEqual([]);
+  });
+
+  // Guard-the-guard: if the table were ever emptied or failed to import, the
+  // loop above would pass having inspected nothing at all.
+  it('is actually inspecting a populated table', () => {
+    expect(SKILL_AFFINITIES.length).toBeGreaterThanOrEqual(10);
+    expect(SKILL_AFFINITIES.every((group) => group.length >= 2)).toBe(true);
+  });
+
   it('only ever suggests skills that exist', () => {
     const vocabulary = new Set(ALL_SKILLS);
-    // Drive every group by seeding one real skill from each and checking the
-    // companions it pulls back.
+    // The runtime filter, checked separately from the data above.
     for (const seed of ALL_SKILLS) {
       for (const suggestion of companionSkills([seed], 20)) {
         expect(vocabulary.has(suggestion)).toBe(true);

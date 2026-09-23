@@ -1,9 +1,14 @@
 // Single source of truth for the type is types/database.ts (it mirrors the
 // volunteer_category Postgres enum). Re-exported here so existing importers of
 // '@/constants/categories' keep working, without a second definition to drift.
-import type { VolunteerCategory } from '@/types/database';
+import type {
+  ApplicationStatus,
+  ApplicationType,
+  OutreachStatus,
+  VolunteerCategory,
+} from '@/types/database';
 
-export type { VolunteerCategory };
+export type { VolunteerCategory, OutreachStatus, ApplicationType, ApplicationStatus };
 
 // Order: qualified professionals, then students, then support roles.
 export const VOLUNTEER_CATEGORIES: { value: VolunteerCategory; label: string }[] = [
@@ -71,18 +76,26 @@ export const ROLE_TYPES: { value: RoleType; label: string }[] = [
   { value: 'support', label: 'Support' },
 ];
 
-export type OutreachStatus = 'draft' | 'open' | 'closed' | 'completed';
+/*
+  THESE UNIONS ARE RE-EXPORTED FROM `types/database.ts`, NOT RESTATED HERE.
 
+  They used to be declared again in this file and both had fallen behind the
+  database: `OutreachStatus` was missing `cancelled` (migration 20260815a) and
+  `ApplicationStatus` was missing `not_selected` (migration 20260811). Nothing
+  broke only because every status consumer happened to import from
+  `types/database`; three screens build a `Record<OutreachStatus, BadgeTone>`
+  and got the right union purely by importing from the right file. A
+  `Record<...>` or an exhaustive `switch` written against the copy in here
+  would have compiled clean and silently dropped cancelled and not-selected
+  rows. `VolunteerCategory` was already re-exported for this reason.
+*/
 export const OUTREACH_STATUSES: { value: OutreachStatus; label: string }[] = [
   { value: 'draft', label: 'Draft' },
   { value: 'open', label: 'Open' },
   { value: 'closed', label: 'Closed' },
   { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
 ];
-
-export type ApplicationType = 'quick_join' | 'full';
-
-export type ApplicationStatus = 'pending' | 'accepted' | 'rejected' | 'waitlisted' | 'cancelled';
 
 export const APPLICATION_STATUSES: { value: ApplicationStatus; label: string }[] = [
   { value: 'pending', label: 'Pending' },
@@ -90,4 +103,5 @@ export const APPLICATION_STATUSES: { value: ApplicationStatus; label: string }[]
   { value: 'rejected', label: 'Rejected' },
   { value: 'waitlisted', label: 'Waitlisted' },
   { value: 'cancelled', label: 'Cancelled' },
+  { value: 'not_selected', label: 'Not selected' },
 ];

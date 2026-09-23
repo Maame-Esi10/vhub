@@ -16,7 +16,11 @@
  */
 
 import { parseCalendarDate } from '@/components/ui/dateUtils';
-import { dayCommitmentRatio, LATE_RELEASE_WINDOW_DAYS } from '@/lib/vscore';
+import {
+  dayCommitmentRatio,
+  LATE_RELEASE_FREE_ALLOWANCE,
+  LATE_RELEASE_WINDOW_DAYS,
+} from '@/lib/vscore';
 
 /**
  * A sanity bound on how many days one outreach may span, enforced by the form.
@@ -485,7 +489,20 @@ export function isLateReleaseWindow(
  * dependable since is dependable, and a lifetime counter can never be worked
  * off.
  */
-export const LATE_RELEASE_FREE_COUNT = 2;
+/**
+ * RE-EXPORTED, NEVER RESTATED. This was its own `= 2` sitting beside the one
+ * in `lib/vscore.ts` that actually decides the deduction, with nothing tying
+ * them together and no test that they agreed. Raise the allowance in vscore.ts
+ * and the warning copy below would have gone on telling a volunteer "one more
+ * and they start to affect your V-Score" while they still had two free -- the
+ * app stating the wrong threshold for a deduction against their own
+ * reputation. It is the same "two things that must agree will disagree" rule
+ * this project applies everywhere else, and `LATE_RELEASE_WINDOW_DAYS` on the
+ * next line had already been re-exported for exactly this reason.
+ */
+// An ALIAS of the one in vscore.ts, never a second literal. A re-export
+// alone would not do: `lateReleaseStanding` below reads it locally.
+export const LATE_RELEASE_FREE_COUNT = LATE_RELEASE_FREE_ALLOWANCE;
 export { LATE_RELEASE_WINDOW_DAYS } from '@/lib/vscore';
 
 export type LateReleaseStanding = 'first' | 'final_warning' | 'deducting';
@@ -505,9 +522,12 @@ export function lateReleaseStanding(recentLateReleases: number): LateReleaseStan
  * point of building this was that the app used to punish people for a thing it
  * gave them no way to avoid.
  *
- * NOTE: no score moves today. The deduction itself is a V-Score formula change
- * and is gated pending the owner's approval; `late_release` is recorded and
- * nothing reads it. The copy is written so it stays true either way.
+ * NOTE, CORRECTED 2026-09-23: this used to say "no score moves today" and that
+ * the deduction was gated pending approval. It was approved and went LIVE on
+ * 2026-08-31. A late release really is charged now, by /api/vscore's
+ * `late_release` action with a nightly backstop in `sweepUnchargedLateReleases`.
+ * The copy below was written to stay true either way, and does, but a reader
+ * trusting the old note would have taken this warning for decoration.
  */
 export function lateReleaseWarning(recentLateReleases: number): string {
   switch (lateReleaseStanding(recentLateReleases)) {

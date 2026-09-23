@@ -28,8 +28,8 @@ const GROUPS = ['(volunteer)', '(organisation)', '(admin)'] as const;
  * bottom of its content -- not merely that it looked fine once.
  */
 const EXEMPT: Record<string, string> = {
-  '(volunteer)/map': 'placeholder stub: a centred label, no controls',
-  '(volunteer)/scan': 'full-bleed camera; its buttons are vertically centred, never at the bottom',
+  '(volunteer)/scan':
+    'full-bleed camera, no scroller. Its CONTROLS are vertically centred; the bottom-pinned privacy footnote is padded past the pill explicitly in Shell.',
 };
 
 function screensOf(group: string): string[] {

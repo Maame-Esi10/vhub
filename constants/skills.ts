@@ -321,7 +321,13 @@ export function skillSectionsFor(selected: readonly string[]): SkillCategory[] {
  * stops being a prompt and becomes noise, and the volunteer goes back to
  * ticking three.
  */
-const SKILL_AFFINITIES: readonly (readonly string[])[] = [
+// EXPORTED FOR ITS TEST, deliberately. The guard has to read the DATA: it used
+// to drive `companionSkills`, which filters out anything not in the vocabulary
+// before returning it, so an invented skill name could never reach the
+// assertion and the test passed by construction whatever the table said. That
+// is the third time this project has written a guard that enumerates through
+// the complying code instead of from the authority.
+export const SKILL_AFFINITIES: readonly (readonly string[])[] = [
   // The screening table: you rarely take one of these without the others.
   ['Vital signs monitoring', 'Blood pressure measurement', 'Temperature measurement', 'Pulse oximetry'],
   // Anyone running a diabetes or NCD station.
@@ -332,7 +338,12 @@ const SKILL_AFFINITIES: readonly (readonly string[])[] = [
   // Whoever talks to the community tends to do all of it.
   ['Health education', 'Community mobilisation', 'Translation/interpretation'],
   // Needle work travels as a set.
-  ['Venipuncture', 'Injection administration', 'Infection control', 'Sterile technique'],
+  // 'Sterile technique' was here until 2026-09-23 and had been RETIRED on
+  // 2026-09-21 (see RETIRED_SKILLS above). It is not in ALL_SKILLS, so
+  // `companionSkills` silently dropped it and this group quietly suggested
+  // three companions instead of four. Nothing reported it because the guard
+  // test drove the filter rather than reading this table.
+  ['Venipuncture', 'Injection administration', 'Infection control'],
   // Anyone handling medicines.
   ['Medication dispensing', 'Patient counselling on medication', 'Prescription review', 'Dosage calculation'],
   // The examination pair, and the registration that always precedes it.

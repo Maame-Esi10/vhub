@@ -95,7 +95,6 @@ export default function VolunteerTabsLayout() {
         <Tabs.Screen name="edit-profile" options={{ href: null }} />
         <Tabs.Screen name="outreach/[id]" options={{ href: null }} />
         <Tabs.Screen name="info-hub" options={{ href: null }} />
-        <Tabs.Screen name="map" options={{ href: null }} />
         <Tabs.Screen name="notifications" options={{ href: null }} />
         <Tabs.Screen name="search" options={{ href: null }} />
         <Tabs.Screen name="scan" options={{ href: null }} />

@@ -9,8 +9,9 @@
  * write-only (see the column revoke in supabase/schema.sql) and is recomputed
  * exclusively by the serverless /api/vscore endpoint. This file only reads a
  * score the server already produced and says which band it falls in. The
- * recompute math (0.7×old + 0.3×event_outcome, plus the no-show / late- and
- * on-time-cancellation penalties) lands here alongside it in Phase 3.
+ * recompute math (0.7×old + 0.3×event_outcome, plus the cancellation and
+ * late-release penalties) LANDED here in Phase 3 and is below; this paragraph
+ * described it as future work until 2026-09-23.
  */
 
 export type VScoreBand = 'Elite' | 'Trusted' | 'Active' | 'Developing' | 'At Risk';
@@ -459,9 +460,13 @@ export function applyVScorePenalties(
 //      already moved -- and incremented events_attended again. Replaying from
 //      history fixes that without anyone having to notice it.
 //
-// WHAT COUNTS AS AN EVENT: one `event_reviews` row. That is, today, the only
-// thing that moves a score at all -- the flat penalties are built, tested and
-// called by nothing (owner's standing decision).
+// WHAT COUNTS AS AN EVENT: one `event_reviews` row, OR one `score_events` row.
+// The flat penalties went LIVE on 2026-08-31 (this comment said they were
+// "called by nothing" until 2026-09-23, which had stopped being true): a
+// cancellation is charged inside /api/application-status and a late per-day
+// release by /api/vscore's `late_release` action, both through
+// api/src/server/scorePenalties.ts, and both are replayed as part of the
+// merged stream below.
 //
 // IN WHAT ORDER: by `event_reviews.created_at`, tie-broken by id. NOT by the
 // outreach's date, and the difference matters. The blend is order-dependent,

@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { join } from 'path';
+import { tmpdir } from 'os';
+import { existsSync, rmSync, writeFileSync } from 'fs';
 
 /**
  * Keeps typographic dashes out of anything a user can read.
@@ -57,18 +59,55 @@ describe('user-facing text', () => {
     ).toBe('');
   });
 
-  it('is actually looking at something', () => {
-    // Guards the guard: a scanner that silently stops finding files would
-    // report zero offences forever and pass for the wrong reason.
-    const probe = scanAll(['constants'], REPO_ROOT);
-    expect(Array.isArray(probe)).toBe(true);
-    // constants/ holds the policy, the terms and the credential guidelines,
-    // which is the densest user copy in the repo. If the walker breaks, this
-    // still passes -- so assert on the file list instead.
+  /*
+    GUARDS THE GUARD, and its first version did not.
+
+    That version asserted `Array.isArray(probe)` (trivially true) and that
+    scanning a clean file returned no offences -- which passes both when the
+    file is clean AND when the scanner is broken. `walkFiles` swallows a
+    readdir failure with a bare catch, so a renamed root would have made the
+    whole suite pass having inspected nothing at all. Exactly the vacuous shape
+    this project has already been bitten by three times.
+
+    A guard for a detector needs a POSITIVE CONTROL: something that MUST be
+    reported. The fixture is written outside the repository so it can never be
+    picked up by the real scan.
+  */
+  it('reports a dash it is given (positive control)', () => {
     const { scanFile } = require(join(REPO_ROOT, 'scripts', 'findUserText.js')) as {
       scanFile: (file: string) => Offence[];
     };
-    const policy = scanFile(join(REPO_ROOT, 'constants', 'policy.ts'));
-    expect(policy).toEqual([]);
+    // The dash is built from its code point rather than typed, so this test
+    // file never contains one itself and the real scan cannot trip over it.
+    const emDash = String.fromCharCode(0x2014);
+    const lines = [
+      '// a comment with an em dash ' + emDash + ' which must be IGNORED',
+      'export const label = "one ' + emDash + ' two";',
+      '',
+    ];
+    const fixture = join(tmpdir(), 'vhub-dash-probe-' + process.pid + '.tsx');
+    writeFileSync(fixture, lines.join(String.fromCharCode(10)), 'utf8');
+    try {
+      const found = scanFile(fixture);
+      // Exactly one: the string literal. The comment must not be counted,
+      // which is the whole reason this walks the AST rather than grepping.
+      expect(found.length).toBe(1);
+      expect(found[0]!.text).toContain('one');
+    } finally {
+      rmSync(fixture, { force: true });
+    }
+  });
+
+  it('is actually scanning the repository, not an empty file list', () => {
+    // A floor on REACH. If a root were renamed or the walker regressed, the
+    // main assertion above would report zero offences and pass.
+    const { scanFile, ROOTS } = require(join(REPO_ROOT, 'scripts', 'findUserText.js')) as {
+      scanFile: (file: string) => Offence[];
+      ROOTS: string[];
+    };
+    expect(ROOTS.length).toBeGreaterThanOrEqual(8);
+    // constants/policy.ts is the densest user copy in the repo and must exist.
+    expect(existsSync(join(REPO_ROOT, 'constants', 'policy.ts'))).toBe(true);
+    expect(scanFile(join(REPO_ROOT, 'constants', 'policy.ts'))).toEqual([]);
   });
 });

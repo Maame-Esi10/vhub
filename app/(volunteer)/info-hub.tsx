@@ -14,7 +14,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { InfoSection, InfoTopics, RoleTypeExplainer, ScreenHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { LAYER1_WEIGHTS } from '@/lib/matching/layer1';
-import { NEW_VOLUNTEER_V_SCORE, V_SCORE_BANDS, V_SCORE_PENALTIES } from '@/lib/vscore';
+import {
+  LATE_RELEASE_MAX_PENALTY,
+  NEW_VOLUNTEER_V_SCORE,
+  V_SCORE_BANDS,
+  V_SCORE_PENALTIES,
+} from '@/lib/vscore';
 import { useAuthStore } from '@/stores/authStore';
 import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
@@ -172,10 +177,22 @@ export default function InfoHub() {
           ))}
 
           <Text style={styles.subheading}>What costs you points</Text>
+          {/*
+            NOT `V_SCORE_PENALTIES.no_show`, and this is a correction rather
+            than a style choice. That constant is -15 and NOTHING APPLIES IT:
+            `no_show` is deliberately not a `score_events` kind, because an
+            absence is already expressed by a review filed with
+            `attended: false`, which floors that event's outcome to 0. The
+            blend then makes the new score 0.7x the old one. So the real cost
+            is PROPORTIONAL, not flat, and it is LARGER than 15 points for
+            anyone above 50: a volunteer on 70 lands on 49. Printing "-15" here
+            understated the worst penalty in the app to exactly the people it
+            exists to deter.
+          */}
           <PenaltyRow
             label="Not showing up"
-            points={V_SCORE_PENALTIES.no_show}
-            detail="Accepting a place and then not arriving. This is the one that hurts. An organisation planned staffing around you."
+            points="-30%"
+            detail="Accepting a place and then not arriving. This is the one that hurts, and it is the biggest drop there is: the event counts as a total loss, which takes about a third off your score at once. An organisation planned staffing around you."
           />
           <PenaltyRow
             label="Withdrawing late"
@@ -186,6 +203,17 @@ export default function InfoHub() {
             label="Withdrawing in good time"
             points={V_SCORE_PENALTIES.on_time_cancellation}
             detail="Pulling out more than 24 hours ahead. Small, deliberately. Plans change, and telling someone early is the responsible thing to do."
+          />
+          {/*
+            Live since 2026-08-31 and missing from this list until 2026-09-23.
+            It can reach the same -8 a late withdrawal costs, so leaving it out
+            meant a volunteer could be charged for something this screen said
+            nothing about.
+          */}
+          <PenaltyRow
+            label="Dropping a day at the last minute"
+            points={LATE_RELEASE_MAX_PENALTY}
+            detail="Letting go of a day you had promised, within 24 hours of it starting. Your first two in any 90 days cost nothing, and after that it is at most 8 points, less if you are only dropping part of what you committed to."
           />
 
           <View style={styles.callout}>
@@ -250,7 +278,17 @@ function BandRow({ band, min }: { band: string; min: number }) {
   );
 }
 
-function PenaltyRow({ label, points, detail }: { label: string; points: number; detail: string }) {
+// `points` takes a string as well as a number because not every penalty IS a
+// number: a no-show is a proportion of the score, not a fixed subtraction.
+function PenaltyRow({
+  label,
+  points,
+  detail,
+}: {
+  label: string;
+  points: number | string;
+  detail: string;
+}) {
   return (
     <View style={styles.weightRow}>
       <View style={[styles.weightPill, styles.penaltyPill]}>
