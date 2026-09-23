@@ -6451,3 +6451,438 @@ and that bug is still open: the diagnostic reached the repository after the last
 deploy, so the reading she has seen is from the old code. It comes out as soon
 as push is confirmed working, and it is listed here so that removal is not
 forgotten once it is.
+
+## The notification icon that had never existed (2026-09-23)
+
+Owner, on a screenshot of the morning's test notification: "i not think the
+logo is quite small... You can use the silouette form as the notication icon
+that shows on the status bar... But the logo a little bigger in the whit".
+
+Two separate faults, in two different Android drawing slots, and it is worth
+keeping them apart because the fix for one does nothing for the other.
+
+### There was no status-bar icon at all
+
+`expo-notifications`' config plugin takes an `icon` option, documented as a
+"96x96 all-white png with transparency". VHub had never set it. Android does
+not fall back to nothing: it silhouettes the app's own launcher icon, keeps
+only that file's ALPHA and tints the shape with the accent colour. What
+appeared in the status bar was therefore whatever alpha the launcher icon
+happened to have, decided by accident rather than by anyone.
+
+`assets/notification-icon.png` is now a seventh output of
+`scripts/generate-icons.js`: the mark flattened to pure white, its alpha
+untouched, at 96x96. The transparent knockouts (the ECG line through the heart,
+the gap between the heart and the V) are what stop a flat silhouette reading as
+a blob, so they matter more here than anywhere else in the app, precisely
+because the colour is thrown away.
+
+### The mark was small in the white disc because the ratio was inherited, not derived
+
+The white circle in the notification shade is Android drawing the launcher
+icon, and the launcher icon on Android is the adaptive icon: a foreground mark
+composited over a solid white background and masked to a circle. Measured off
+the owner's screenshot, the mark occupied **0.317 of the disc**.
+
+The generator built that foreground at a fill of **0.42**, and the comment
+beside the number said plainly where it came from: "the ratios are the ones the
+previous artwork used, measured off the old files". It was inherited from a
+different mark and never checked against the new one.
+
+**Checking it needed one measurement of the master.** Its ink box is 1203x1122
+and the furthest ink pixel sits 607px from the centre, so the mark's longest
+side and the diameter of the circle enclosing it agree to within one per cent.
+A heart has no corners, so its bounding box is mostly empty and the mark is,
+for masking purposes, a circle. That single number answers every circular-mask
+question at once: a fill of `f` puts the whole mark inside a circle of diameter
+`1.009 * f`.
+
+Android guarantees that the centre `66/108` (0.611) of an adaptive icon
+survives every launcher mask, whether it crops to a circle, a squircle or a
+teardrop. So the largest fill that is still guaranteed whole is
+`0.611 / 1.009 = 0.606`. The mark was sitting at 0.42, nowhere near it,
+floating in a wide empty ring.
+
+**It is now 0.55** — a 0.555 circle, a comfortable five per cent inside the
+guarantee, and 31 per cent larger on screen. Not 0.606, because the guarantee
+is a minimum rather than a target and an icon that exactly fills it looks
+cramped under a mask that happens to be tight.
+
+`android-icon-monochrome.png` moved to 0.55 with it. That file is the Android
+13 themed launcher icon, the same mark in the same place, and had it been left
+at 0.42 the themed and untinted icons would have read as two different sizes on
+one home screen.
+
+### What was deliberately not changed
+
+`icon.png` stays at 0.54 and `favicon.png` at 0.66. Neither feeds the Android
+launcher — the adaptive icon does — and their constraints are different ones
+(an iOS squircle crops far less than a launcher mask). Changing them would have
+been an unasked-for change to the iOS icon to fix an Android complaint.
+
+### Both need a real build
+
+The notification icon becomes a drawable resource and a manifest meta-data
+entry; the adaptive icon becomes launcher resources. Neither lives in the
+JavaScript bundle, so an OTA update changes neither and the phone would keep
+showing the old art. This goes out with the next EAS build.
+
+## The full audit (2026-09-23)
+
+Four read-only passes over the whole project: database security, the serverless
+API, the mobile app's UI conventions, and the core matching/V-Score logic
+against the spec. What follows is what they found and what was done, including
+the findings that turned out to be wrong.
+
+The tree was green before the audit and is green after it: 27 suites, 693 tests
+(three more than before, all of them new guard assertions), typecheck clean on
+both trees, lint zero on both.
+
+### The one that mattered most: a multi-role outreach reached almost nobody
+
+Both broadcast notification passes scored every outreach with the SINGLE-ROLE
+scorer. `/api/match`'s `notify_candidates` (the pass that runs on publish) and
+`server/underSubscription.ts` (the 7/3/1-day shortfall ladder) each called
+`computeLayer1MatchScore` against the outreach row alone, while the three paths
+that matter to an organisation's own screens all call
+`computeMultiRoleMatchScore` with the `outreach_roles` rows.
+
+Why that is not cosmetic. An outreach using role rows deliberately stores
+`required_category = null`, because there is no single answer once there are
+several and the roles carry it instead. `categoryMatchScore` scores a null
+requirement as 0. So on EVERY multi-role outreach the 20-point category
+component was a guaranteed zero for every candidate and nothing could score
+above 80, against a notification threshold of 75. A nurse one district away who
+exactly filled the "3 nurses" role scored 70 and was never told the event
+existed, neither on publish nor at the escalation that exists specifically to
+fill it. Only somebody in the exact same district, with full skill coverage,
+full availability and at least intermediate experience could clear the bar.
+
+The comments at both sites justified skipping LAYER 2 to conserve Gemini quota,
+and that reasoning is sound and untouched. It never extended to the multi-role
+scorer, which is pure code with no I/O and no quota cost at all.
+
+`fetchRolesByOutreach` moved out of `/api/match`'s route file and into
+`api/src/server/outreachInput.ts`, beside `fetchDaysByOutreach`, whose own
+comment already referred to it. That is the actual root cause: the loader was
+private to a route the two notification passes do not belong to, so neither
+could have used it without duplicating the query.
+
+A single-role outreach scores identically, because an empty role list delegates
+straight back to the original scorer.
+
+### Publishing a support-role outreach told nobody unverified
+
+`notify_candidates` filtered `verification_status = 'verified'` unconditionally.
+The escalation ladder applies that filter only when the role type is not
+`support`, which is the documented rule: an unverified volunteer may Quick Join
+a support role, so they are exactly the audience for it. The result was two
+pools answering the same question differently, and the on-publish one silently
+excluding the students and first aiders the support role exists for. They then
+heard about the same event a week later through the shortfall escalation.
+
+### Suspending an organisation told everyone the event was cancelled, and left it running
+
+The worst answer available, and it came from an ordering.
+
+`refuse_outreach_from_unverified_org` is a TRIGGER on `outreaches`, and a
+trigger fires for the service role too: it is row-level security the service key
+bypasses, never triggers. Its very first test raises when the owning
+organisation's `moderation_state` is anything but `active`, before the
+status-unchanged exit and before the draft exception.
+
+`/api/moderation` wrote `moderation_state = 'suspended'` FIRST and then called
+`stopOrganisation`, which cancels that organisation's outreaches. Every one of
+those cancellations was therefore refused by the trigger. And the cancel write
+discarded its error: `await admin.from("outreaches").update(...)` with no
+destructuring. So the code carried on and pushed and emailed every accepted,
+waitlisted and pending volunteer to say the event would no longer take place,
+while the event stayed `open` in the feed and open to new applications.
+
+Two changes, both in the API and neither touching the database. The stop now
+runs BEFORE the account is marked, which is the same order account closure
+already uses and fails in the safer direction anyway: a failure after the stop
+leaves an account whose events were cancelled but which can still be acted on,
+where the reverse left a suspended account whose events were never stopped. And
+the cancel write now reads its error and refuses to notify anybody if it failed.
+
+### Which then broke the nightly cron, every night, silently
+
+Pass 4 of the cron closes past outreaches with ONE bulk statement:
+`update outreaches set status = 'closed' where status = 'open' and date < today`.
+Once the bug above had left a suspended organisation's outreach sitting at
+`open`, the same trigger raised on that row, and because it is one statement the
+whole UPDATE aborted and the pass threw. The cron awaits its passes in sequence,
+so the two that run after it never ran at all: the late-release penalty backstop
+and the notification retention sweep. Every night, until somebody noticed and
+fixed one row by hand.
+
+The pass now selects the rows first and excludes any outreach whose organisation
+is not `active`, which is also right on its own terms: a suspended
+organisation's event was STOPPED, not finished, and "closed" is the word this
+app uses for an event that ran its course.
+
+### Any organisation could destroy any volunteer's V-Score
+
+`public_volunteer_profiles` is granted to every signed-in user and carries `id`,
+so any organisation can read the id of every volunteer on the platform. The only
+authorisation on filing a review was that the caller owns the outreach. Nothing
+required the volunteer to have applied to it, been accepted for it, or attended
+it. The replay counts every `event_reviews` row for a volunteer with no such
+check, and a review filed with `attended: false` floors that event's outcome to
+0: one fabricated review takes a new volunteer from 70 to 49, repeatable once
+per outreach, on as many outreaches as the organisation cares to create.
+
+The organiser's attendance verdict in `/api/checkin` had the same gap. That one
+does not move a score by itself (with no committed days the ratio is null, which
+correctly means "do not scale"), but it puts a false absence on a record the
+volunteer can see and must dispute, and it feeds the platform no-show figure.
+
+Both endpoints now require an `accepted` application for that volunteer on that
+outreach. `accepted` specifically rather than merely "applied", because that is
+exactly the set the organisation's own review screen offers, so nothing a
+legitimate reviewer can reach is refused.
+
+**THE ENDPOINT IS ONLY HALF OF IT.** The matching RLS policy
+`event_reviews_insert_org` carries the same gap, and a client holding an
+organisation session can reach PostgREST directly with the shipped anon key.
+Closing that is a schema change and is gated; the SQL is in the report to the
+owner and is not applied.
+
+### The Info Hub was telling volunteers the wrong cost of a no-show
+
+It printed `V_SCORE_PENALTIES.no_show`, which is -15. NOTHING APPLIES THAT
+NUMBER. `no_show` is deliberately not a `score_events` kind, because an absence
+is already expressed by a review filed with `attended: false`; the real cost is
+that the event's outcome is floored to 0 and the blend makes the new score
+`0.7 x old`. That is a PROPORTION, not a fixed subtraction, and it is LARGER
+than 15 points for anyone above 50: 70 becomes 49, 90 becomes 63.
+
+So the figure was wrong for everybody and wrong in the harmful direction,
+understating the worst penalty in the app to precisely the people it exists to
+deter. The row now states the mechanism. The late per-day release, live since
+2026-08-31 and able to reach the same -8 a late withdrawal costs, was missing
+from that list entirely and has been added.
+
+CLAUDE.md contradicted itself on this: the V-Score section listed "no-show -15"
+as spec-final while the `score_events` section said `no_show` is not a kind and
+never becomes one. Both were written truthfully at different times and neither
+was updated when the other changed. The line is corrected rather than deleted,
+with the contradiction recorded, because that is the failure mode the multi-day
+section already warns about.
+
+### A guard that could not fail, and the bug it was hiding
+
+`constants/__tests__/skillAffinities.test.ts` claimed to prove the affinity
+table only names skills that exist. It drove `companionSkills` with every real
+skill and asserted everything returned was in the vocabulary. `companionSkills`
+FILTERS OUT anything not in the vocabulary before returning it, so the
+assertion re-checked the filter and passed by construction whatever the table
+said. It is the third time this project has written a guard that enumerates
+through the complying code instead of from the authority.
+
+Rewritten to read `SKILL_AFFINITIES` directly, it failed on the first run.
+`'Sterile technique'` was retired on 2026-09-21, owner-approved, and the
+affinity group still named it: `companionSkills` dropped it silently and that
+group had been offering three companions instead of four ever since. Nothing
+reported it, which is the whole point.
+
+`lib/__tests__/userFacingText.test.ts`'s self-guard was vacuous in the same way.
+It asserted `Array.isArray(probe)` (trivially true) and that a clean file
+returns no offences, which passes both when the file is clean AND when the
+scanner is broken. `walkFiles` swallows a readdir failure with a bare catch, so
+a renamed root would have made the whole suite pass having scanned nothing. A
+detector needs a POSITIVE CONTROL: it now writes a fixture outside the
+repository containing an em dash in a string and another in a comment, and
+asserts exactly one is reported, which also pins the parse-not-grep behaviour.
+
+### Smaller things, fixed
+
+- `/api/document-url` answered 404 for a missing organisation-document row
+  before the ownership check and 403 after it, so any signed-in caller could
+  tell a real document row id from an invented one. That is the distinction the
+  file's own header comment rules out. One flat 403 now covers both. A second
+  comment in the same file claimed the wording was identical for an authorised
+  viewer and a stranger, which was untrue; the behaviour was safe because that
+  branch sits after the authorisation check, and the comment now says so. A
+  wrong comment about an access rule is how the rule gets relaxed later.
+- The rate limiter's map sweep tested every key against the window of whichever
+  rule triggered it. Harmless while all seven rules use one minute, and a silent
+  reset of exactly the cap that mattered the moment one does not. It now
+  measures against the longest configured window, derived rather than written
+  down.
+- Manage Event threw away the `from` param the notification inbox has always
+  sent it, so an organisation opening an outreach notification and pressing back
+  landed on the Dashboard. The volunteer's copy of the same screen had read it
+  all along.
+- The admin activity log had no back control in any of its three branches and is
+  registered `href: null`, so it has no tab button either. Android's hardware key
+  rescued it; on iOS there is neither a hardware key nor a swipe gesture inside a
+  tab navigator.
+- The clinical gate opened identity verification without a `from`, so a
+  volunteer blocked from a Full Application pressed back and lost the outreach
+  they were trying to apply to.
+- **`ConfirmDialog` had no keyboard handling**, and its `children` slot exists to
+  hold a required reason field with the Confirm button below it. Four of its
+  five callers make that field required, including the dispute statement. The
+  screens behind it do have their own `KeyboardAvoidingView`, but a `Modal` is
+  not in their view tree, so none of that protection ever reached the dialog.
+  Fixed once, in the component.
+- `EventReviewSheet` was the one bottom sheet with a text field and no keyboard
+  handling, on the screen that is the sole source of every V-Score movement.
+  `FullApplicationSheet` is the identical arrangement and always had one.
+- Eleven refusals were still printed under a submit button, the pattern the
+  standing rule names explicitly. The two worst: the Manage Event lifecycle
+  failure was the last element of a very long ScrollView, and the Accept/Reject
+  failure was inside the bar fixed to the bottom of the screen. All eleven are
+  `ErrorAlert` now; field validation stays inline, which is the carve-out.
+- The onboarding completion screen had no scroll container and is centred, so at
+  a large font size it overflowed at both ends with no way to reach "Add my
+  document now".
+- The check-in scanner's privacy footnote carries `marginTop: 'auto'` and the
+  screen has no scroller, so its last lines were drawn under the floating tab
+  pill. The clearance exemption was written about the buttons, which really are
+  centred.
+- The push-test failure for an unrecognised code put the push service's own
+  message straight on screen, which can carry the `ExponentPushToken` value. It
+  goes through `humanError` now.
+- `lib/outreachDays.ts` declared its own `LATE_RELEASE_FREE_COUNT = 2` beside the
+  `LATE_RELEASE_FREE_ALLOWANCE = 2` in `lib/vscore.ts` that actually decides the
+  deduction, with nothing tying them together. Raise one and the warning copy
+  would have told a volunteer the wrong threshold for a deduction against their
+  own reputation. It is an alias now.
+- `constants/categories.ts` held shadow `OutreachStatus` and `ApplicationStatus`
+  unions that had both fallen behind the database, missing `cancelled` and
+  `not_selected`. Nothing broke only because every status consumer happened to
+  import from `types/database`. They are re-exports now.
+
+### Findings checked and REJECTED
+
+Recorded because a rejected finding costs the next reader the same time twice.
+
+- The Applications tracker was reported as receiving a `from` param that nothing
+  reads. It renders `TabBackLink`, which reads `from` and draws the back link.
+  Not a defect.
+- `expo-doctor`'s config-schema check fails, which looks like a fault in
+  `app.json`. It is a network timeout reaching Expo's API and says so in the
+  verbose output. 19 of 21 checks pass.
+
+### Not fixed, because gated
+
+The schema, dependencies, the matching engine and the V-Score formula are gated
+under CLAUDE.md. These are proposed to the owner and NOT applied: the
+`event_reviews` RLS policy that is the other half of the fabricated-review fix;
+`organisation_profiles`' `select using (true)`, which now exposes an
+organisation's street address, named contact and the verbatim reason an admin
+wrote when rejecting it; the four places `supabase/schema.sql` has fallen behind
+the migrations while still calling itself safe to re-run; two enum values
+missing from that file; the trigger that refuses to let a non-verified
+organisation move an outreach to `cancelled`; and sixteen Expo packages behind
+their SDK patch versions.
+
+### The audit's own recommendation was wrong about `organisation_profiles` (2026-09-23)
+
+Worth recording, because the wrong fix was approved and would have broken the
+volunteer feed.
+
+The finding was right: `organisation_profiles_select_authenticated` is
+`using (true)`, justified by a comment listing the table as holding "org_name,
+org_type, description, website, verified", and that stopped being true when
+verification shipped and added `official_email`, `physical_address`,
+`contact_person`, `verification_state`, `verification_reason` and two
+timestamps. Any volunteer or rival organisation could read an organisation's
+street address, its named contact, and the verbatim reason an admin wrote when
+rejecting it.
+
+The proposed fix was to narrow the policy to `id = auth.uid() or is_admin()`,
+on the stated grounds that every volunteer-facing read already goes through
+`public_organisation_profiles`. **That is not true.** `useOutreaches` and
+`useApplications` both EMBED the base table into their outreach reads:
+
+```
+organisation:organisation_profiles ( id, org_name, org_type, verified )
+```
+
+so that a feed card can name the organisation running the event. A row-scoped
+policy would return null for every outreach a volunteer does not own, which is
+all of them. The feed would have kept working and quietly lost every
+organisation name.
+
+**So the split is by COLUMN, which RLS cannot express.** The row policy stays
+broad. `authenticated` now holds SELECT on the public columns only, and the
+private ones come back through `organisation_private_profiles`, a
+`security_invoker = false` view whose `where id = auth.uid() or is_admin()` is
+the whole access rule. Four hooks were repointed at it: the organisation's own
+verification submission, the admin verification queue, the organisation's own
+profile editor (which does `select('*')`, and a `*` that includes an ungranted
+column fails outright rather than omitting it), and the two admin statistics
+counts that filter on `verification_state`.
+
+`verified` stays public and `verification_state` does not. The boolean is the
+badge every volunteer is meant to see; the state distinguishes rejected,
+suspended, banned and documents_submitted, which is the organisation's business
+and the admin's.
+
+**The general lesson is the one this project keeps relearning:** a finding that
+names the right problem can still propose a fix that was never checked against
+the callers. The grep that mattered was not for `.from('organisation_profiles')`
+but for the string anywhere, because a PostgREST embed is a read that does not
+look like one.
+
+### `supabase/schema.sql` had stopped being safe to re-run (2026-09-23)
+
+The header said "Safe to re-run" and six places had fallen behind
+`supabase/migrations/`. Re-running it would have been a silent regression
+rather than a no-op:
+
+1. **Both public views lost `and p.closed_at is null`.** They are
+   `security_invoker = false` and bypass RLS entirely, so that clause is the
+   only thing hiding a closed account. Re-running would have republished every
+   closed volunteer's name, avatar, bio, skills and V-Score to every signed-in
+   user, contradicting the privacy policy account closure was written to make
+   true. The worst of the six by some distance.
+2. **`applications` lost INSERT on `outreach_role_id`.** `apply_to_outreach()`
+   is SECURITY INVOKER and inserts it, so every application to a multi-role
+   outreach would have failed with `permission denied for table applications`.
+3. **`organisation_profiles` lost `show_gallery` on INSERT and UPDATE**, so the
+   gallery opt-out would have failed the same way.
+4. **`applications_update_own_cancel` reverted to the pre-per-role gate**,
+   reintroducing exactly the bug `20260817_per_role_verification_gate.sql`
+   exists to fix: an unverified volunteer who withdrew from the SUPPORT role of
+   a mixed event could not re-apply, because the event summarises to
+   `clinical`.
+5. **`outreach_status` was missing `cancelled`** and **`application_status` was
+   missing `not_selected`**. Harmless on an existing project, because every
+   enum here is wrapped in `exception when duplicate_object then null` which
+   swallows the "already exists" error. On a FRESH project the values would
+   simply be absent, with nothing said, and cancelling an outreach would fail.
+
+All six are corrected, each with a comment naming the migration it came from,
+and the header now says plainly that the file has to keep earning that claim
+and that a migration and this file change in the same pass.
+
+### The map stub is gone (2026-09-23)
+
+`app/(volunteer)/map.tsx` was twelve lines, registered `href: null`, and linked
+from nowhere in the entire tree. Map discovery was scoped out on 2026-09-22 for
+a data reason that has not changed: an outreach stores a region, a district and
+a venue name, and no coordinates. The route, its `Tabs.Screen` registration and
+its entry in the tab-bar clearance guard's `EXEMPT` list all went together.
+
+Deleting it does not delete the plan, which lives in the README and here. What
+it does delete is a guard exemption that had to be carried for a screen nobody
+could reach, and the only remaining placeholder in the app.
+
+The `scan` exemption was sharpened at the same time. It said the screen's
+"buttons are vertically centred, never at the bottom", which was true and hid a
+bottom-pinned privacy paragraph; it now says the exemption covers CONTROLS and
+names where the footnote's clearance comes from.
+
+### The Expo SDK patch drift is closed (2026-09-23)
+
+Sixteen packages were behind the versions SDK 57 asks for, `expo` itself at
+57.0.9 against 57.0.24 and `expo-notifications` at 57.0.8 against 57.0.20.
+Every one was a patch-level move inside SDK 57, so there is no migration to do
+and no breaking change to absorb. `npx expo-doctor` now reports 21 of 21 checks
+passing, where it previously failed that one. Tests, typecheck and lint were
+green before and after, which is the only evidence that matters here.
