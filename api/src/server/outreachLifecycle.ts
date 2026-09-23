@@ -46,15 +46,57 @@ export async function closeAndResolvePastOutreaches(): Promise<OutreachLifecycle
   const today = new Date().toISOString().slice(0, 10);
 
   // ---- 1. Close ----------------------------------------------------------
-  const { data: closedRows, error: closeError } = await admin
-    .from("outreaches")
-    .update({ status: "closed" })
-    .eq("status", "open")
-    .lt("date", today)
-    .select("id");
-  if (closeError) throw Errors.internal("Could not close past outreaches.");
+  /*
+    PICK THE ROWS FIRST, THEN CLOSE THEM. This used to be one bulk UPDATE, and
+    one bulk UPDATE is all-or-nothing.
 
-  const closed = (closedRows ?? []).length;
+    `refuse_outreach_from_unverified_org` is a trigger on `outreaches` that
+    raises on any status change made for an organisation whose
+    `moderation_state` is not `active`. A single such row therefore aborted the
+    entire statement, this function threw, and because the nightly cron awaits
+    its passes in sequence, the two that run AFTER it never ran at all -- the
+    late-release penalty backstop and the notification retention sweep. Every
+    night, silently, until somebody fixed one row by hand.
+
+    Excluding those outreaches is also right on its own terms, quite apart from
+    the trigger: a suspended organisation's event was STOPPED, not finished,
+    and "closed" is the word this app uses for an event that has run its
+    course. Leaving it alone is the honest answer.
+  */
+  const { data: pastOpen, error: pastOpenError } = await admin
+    .from("outreaches")
+    .select("id, organisation_id")
+    .eq("status", "open")
+    .lt("date", today);
+  if (pastOpenError) throw Errors.internal("Could not list past outreaches.");
+
+  const pastOpenRows = (pastOpen ?? []) as { id: string; organisation_id: string }[];
+  let closed = 0;
+
+  if (pastOpenRows.length > 0) {
+    // Two plain queries rather than an embed: the join is only needed to drop
+    // a handful of rows, and naming a foreign key in a PostgREST embed is a
+    // string that fails at runtime rather than at compile time.
+    const { data: activeOrgs, error: orgError } = await admin
+      .from("profiles")
+      .select("id")
+      .in("id", [...new Set(pastOpenRows.map((row) => row.organisation_id))])
+      .eq("moderation_state", "active");
+    if (orgError) throw Errors.internal("Could not check organisation standing.");
+
+    const active = new Set((activeOrgs ?? []).map((row) => row.id as string));
+    const closableIds = pastOpenRows.filter((row) => active.has(row.organisation_id)).map((r) => r.id);
+
+    if (closableIds.length > 0) {
+      const { data: closedRows, error: closeError } = await admin
+        .from("outreaches")
+        .update({ status: "closed" })
+        .in("id", closableIds)
+        .select("id");
+      if (closeError) throw Errors.internal("Could not close past outreaches.");
+      closed = (closedRows ?? []).length;
+    }
+  }
 
   // ---- 2. Resolve --------------------------------------------------------
   // Reads the list first rather than resolving blindly, so the pass reports

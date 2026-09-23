@@ -1,3 +1,4 @@
+import { Errors } from "./httpErrors";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 import { notifyUsers } from "./notify";
 import { emailApplicant, promoteFromWaitlist, type WaitlistOutreach } from "./waitlist";
@@ -58,7 +59,27 @@ export async function stopOrganisation(
   if (outreaches.length === 0) return { outreachesCancelled: 0, volunteersNotified: 0 };
 
   const ids = outreaches.map((o) => o.id);
-  await admin.from("outreaches").update({ status: "cancelled" }).in("id", ids);
+  const { error: cancelError } = await admin
+    .from("outreaches")
+    .update({ status: "cancelled" })
+    .in("id", ids);
+
+  // THE ERROR IS READ, and this is not defensive tidying -- it was silently
+  // discarded and that hid a real failure. `refuse_outreach_from_unverified_org`
+  // is a TRIGGER, and a trigger fires for the service role too (it is RLS the
+  // service key bypasses, never triggers). Its first test raises when the
+  // owning organisation is not `active`, so if anything marks the organisation
+  // suspended BEFORE this runs, every cancellation here is refused -- and the
+  // code below would still push and email every accepted, waitlisted and
+  // pending volunteer to say the event was cancelled, while it stayed `open`
+  // in the feed and open to new applications. Telling people not to come to an
+  // event that is still running is the worst answer available, so this fails
+  // loudly instead.
+  if (cancelError) {
+    throw Errors.internal(
+      "Could not cancel this organisation's outreaches, so nobody was told. Nothing was changed."
+    );
+  }
 
   // Everyone holding a place, and everyone still hoping for one. A waitlisted
   // volunteer has kept the date free; not telling them would be the same

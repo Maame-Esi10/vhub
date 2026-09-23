@@ -90,6 +90,37 @@ export async function POST(req: Request): Promise<Response> {
       throw Errors.badRequest("This account is banned. Reinstate it first if that was wrong.");
     }
 
+    const effects: Record<string, unknown> = { previousState, nextState };
+
+    /*
+      STOP THE FUTURE FIRST, THEN MARK THE ACCOUNT. The order is load-bearing
+      and it used to be the other way round.
+
+      `refuse_outreach_from_unverified_org` is a trigger on `outreaches`, and a
+      trigger fires for the service role as well (the service key bypasses RLS,
+      not triggers). Its very first test raises when the owning organisation's
+      `moderation_state` is anything but `active` -- before the
+      status-unchanged exit and before the draft exception. So writing
+      `suspended` first made the organisation's own outreaches uncancellable a
+      moment later: every cancellation was refused, the events stayed `open` in
+      the feed and open to new applications, and `stopOrganisation` went on to
+      push and email everyone holding a place to say the event would no longer
+      take place.
+
+      Stopping first also fails in the safer direction generally: if the state
+      write below fails, an account has had its events cancelled but is still
+      live and can be acted on again, which is recoverable. The reverse left a
+      suspended account whose events were never stopped. It is the same
+      argument account closure already makes for revoking the login last.
+    */
+    if (body.action !== "reinstate") {
+      if (target.role === "organisation") {
+        Object.assign(effects, await stopOrganisation(admin, body.targetUserId, body.reason));
+      } else {
+        Object.assign(effects, await stopVolunteer(admin, body.targetUserId));
+      }
+    }
+
     const { error: stateError } = await admin
       .from("profiles")
       .update({
@@ -103,16 +134,6 @@ export async function POST(req: Request): Promise<Response> {
       .eq("id", body.targetUserId);
 
     if (stateError) throw Errors.internal("Could not change this account's status.");
-
-    const effects: Record<string, unknown> = { previousState, nextState };
-
-    if (body.action !== "reinstate") {
-      if (target.role === "organisation") {
-        Object.assign(effects, await stopOrganisation(admin, body.targetUserId, body.reason));
-      } else {
-        Object.assign(effects, await stopVolunteer(admin, body.targetUserId));
-      }
-    }
 
     await recordAdminAction(caller, {
       targetType: target.role === "organisation" ? "organisation" : "volunteer",
