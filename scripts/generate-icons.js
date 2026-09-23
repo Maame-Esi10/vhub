@@ -3,17 +3,18 @@
  *
  *   node scripts/generate-icons.js
  *
- * WHY THIS EXISTS. There are six derived icon files (in-app mark, iOS/legacy
- * launcher icon, web favicon, and the three halves of the Android adaptive
- * icon). Hand-cropping them in an image editor is how they drift: the mark
- * ends up a different size in each, and nobody can tell which file is stale.
- * One master plus this script means the geometry below IS the specification,
- * and re-running it after an artwork change regenerates all six identically.
+ * WHY THIS EXISTS. There are seven derived icon files (in-app mark, iOS/legacy
+ * launcher icon, web favicon, the three halves of the Android adaptive icon,
+ * and the Android notification icon). Hand-cropping them in an image editor is
+ * how they drift: the mark ends up a different size in each, and nobody can
+ * tell which file is stale. One master plus this script means the geometry
+ * below IS the specification, and re-running it after an artwork change
+ * regenerates all seven identically.
  *
  * NO NEW DEPENDENCY. scripts/lib/png.js is a small PNG reader/writer built on
  * node's own zlib. Adding `sharp` would have been the conventional answer and
  * was rejected because dependencies are a gated change under CLAUDE.md, and a
- * native-binary image library is a heavy thing to install for six files that
+ * native-binary image library is a heavy thing to install for seven files that
  * change roughly never.
  *
  * THE MASTER IS THE TRANSPARENT ONE. design-refs/logo-master-transparent.png
@@ -25,7 +26,7 @@
  * project keeps every piece of source artwork, the Figma exports included, and
  * none of it is committed. So this script runs on a machine that has the design
  * folder and not on a bare clone. That is the existing convention and following
- * it beats inventing a second home for artwork; the six OUTPUTS below are
+ * it beats inventing a second home for artwork; the seven OUTPUTS below are
  * committed, which is what actually matters to a build.
  *
  * NOTE ON THE MARK'S KNOCKOUTS. The ECG line through the heart, and the gap
@@ -34,7 +35,9 @@
  * on the launcher icon, near-black on the dark splash. That is intentional and
  * matches how the previous mark behaved; it is also why the background of the
  * Android adaptive icon and `android.adaptiveIcon.backgroundColor` in app.json
- * must always agree, or the knockouts show the wrong colour.
+ * must always agree, or the knockouts show the wrong colour. On the monochrome
+ * and notification icons the knockouts are what stop a flat silhouette reading
+ * as a blob, so they matter most exactly where the colour is thrown away.
  */
 
 const path = require('path');
@@ -46,6 +49,8 @@ const ASSETS = path.join(ROOT, 'assets');
 
 const TRANSPARENT = [0, 0, 0, 0];
 const WHITE = [255, 255, 255, 255];
+const BLACK_RGB = [0, 0, 0];
+const WHITE_RGB = [255, 255, 255];
 
 /** Tightest box containing every pixel that is not effectively transparent. */
 function inkBox(img, threshold = 8) {
@@ -187,42 +192,72 @@ function solid(size, colour) {
 }
 
 /**
- * Android 13+ themed icon: the launcher keeps only the ALPHA of this file and
- * tints the shape with the wallpaper palette, so the colour written here is
- * never displayed. Flat black is the convention.
+ * The mark's SHAPE only: every pixel forced to one flat colour, the alpha left
+ * exactly as it was. Two callers want this and they want different colours.
+ *
+ *  - The Android 13+ themed launcher icon keeps only the ALPHA and tints the
+ *    shape with the wallpaper palette, so the colour written there is never
+ *    displayed. Flat black is the convention.
+ *  - The notification icon is silhouetted by Android in the same way and then
+ *    tinted with `expo-notifications`' `color`. Expo's own plugin documents the
+ *    input as "96x96 all-white png with transparency", so white it is.
+ *
+ * The transparent knockouts survive both, which is the point: the ECG line and
+ * the gap between the heart and the V stay cut out, so the silhouette still
+ * reads as the mark rather than as a blob.
  */
-function monochrome(size, fill) {
+function flatten(size, fill, [r, g, b]) {
   const img = build(size, fill, TRANSPARENT);
   for (let i = 0; i < size * size; i++) {
-    img.data[i * 4] = 0;
-    img.data[i * 4 + 1] = 0;
-    img.data[i * 4 + 2] = 0;
+    img.data[i * 4] = r;
+    img.data[i * 4 + 1] = g;
+    img.data[i * 4 + 2] = b;
   }
   return img;
 }
 
 /*
- * The fill ratios are the ones the previous artwork used, measured off the old
- * files before they were replaced, so no placement in the app changed optical
- * weight when the mark did. They are not arbitrary:
+ * THE MARK IS EFFECTIVELY CIRCULAR, and every ratio below depends on that.
+ * Measured off the master: the ink box is 1203x1122 and the furthest ink pixel
+ * sits 607px from its centre, so the mark's longest side and the diameter of
+ * the circle enclosing it are within 1% of each other. Its bounding-box corners
+ * are empty — a heart has no corners. So a fill of f puts the whole mark inside
+ * a circle of diameter 1.009 * f of the canvas, and a circular mask that clears
+ * that circle clips nothing.
  *
  *  0.86  in-app mark — nearly edge to edge, because every caller sizes it via
  *        getLogoSize() and expects the box it asks for to be mostly mark.
  *  0.54  launcher icon — iOS and most launchers round the corners off, so the
  *        mark needs real margin or it gets clipped.
  *  0.66  favicon — a 96px tab icon needs the mark bigger to stay recognisable.
- *  0.42  Android adaptive icon — the launcher may mask this to a circle, a
- *        squircle or a teardrop, and animates it during a pull-down. Only the
- *        centre 66% is guaranteed visible, so the mark stays well inside that.
+ *  0.55  Android adaptive icon — RAISED FROM 0.42 on 2026-09-23. Android
+ *        guarantees the centre 66/108 (0.611) of an adaptive icon is visible
+ *        under every launcher mask. Given the circularity above, the largest
+ *        fill that fits inside that guarantee is 0.611 / 1.009 = 0.606, and
+ *        0.42 was nowhere near it: it was inherited from the previous artwork
+ *        rather than derived, and it left the mark floating in a wide empty
+ *        ring. 0.55 encloses the mark in a 0.555 circle, a comfortable 5%
+ *        inside the guarantee, and is 31% larger on screen. The owner reported
+ *        this as "the logo is quite small" in the notification shade, where
+ *        Android draws the launcher icon in a white disc.
+ *  0.88  notification icon — this one is NOT masked to a circle by anything;
+ *        Android draws it at 24dp in the status bar. Google's notification
+ *        iconography keeps the artwork inside the central 22 of 24dp, so 0.88
+ *        (a 0.888 circle, ~6% margin) is as large as it should go.
  */
 const OUTPUTS = [
   ['logo.png', build(512, 0.86, TRANSPARENT)],
   ['icon.png', build(1024, 0.54, WHITE)],
   ['favicon.png', build(96, 0.66, WHITE)],
-  ['android-icon-foreground.png', build(1024, 0.42, TRANSPARENT)],
+  ['android-icon-foreground.png', build(1024, 0.55, TRANSPARENT)],
   // Must stay in step with android.adaptiveIcon.backgroundColor in app.json.
   ['android-icon-background.png', solid(1024, WHITE)],
-  ['android-icon-monochrome.png', monochrome(1024, 0.42)],
+  // Same fill as the foreground: the themed icon and the normal one are the
+  // same mark and must not read as two different sizes on one home screen.
+  ['android-icon-monochrome.png', flatten(1024, 0.55, BLACK_RGB)],
+  // 96x96 is what expo-notifications' plugin documents as its input; it derives
+  // every density below that from this file.
+  ['notification-icon.png', flatten(96, 0.88, WHITE_RGB)],
 ];
 
 for (const [name, img] of OUTPUTS) {
