@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import favicon from "@/assets/favicon.png";
+import appIcon from "@/assets/icon.png";
 
 /**
  * Root layout for the VHub website (the pages under `(site)/`) and for the
@@ -28,6 +30,17 @@ export const metadata: Metadata = {
   // confirmation briefly carries are in the URL FRAGMENT, which a browser never
   // sends to any server, so no crawler can ever see them.
   robots: { index: true, follow: true },
+  // THE TAB ICON (added 2026-09-24). The site declared none, so browsers fell
+  // back to /favicon.ico, found nothing, and kept showing whatever icon they
+  // had cached for the address. These are the app's own brand files, imported
+  // from assets/ like the logo rather than copied, so there is still one copy
+  // and scripts/generate-icons.js stays their only author: favicon.png (96px)
+  // for the tab, icon.png (1024px) for a phone's home screen shortcut.
+  icons: {
+    icon: [{ url: favicon.src, type: "image/png", sizes: "96x96" }],
+    shortcut: [{ url: favicon.src, type: "image/png" }],
+    apple: [{ url: appIcon.src, sizes: "1024x1024" }],
+  },
 };
 
 export const viewport: Viewport = {
