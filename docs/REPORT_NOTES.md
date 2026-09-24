@@ -405,41 +405,53 @@ because its regex was accidentally more permissive."
 
 ## Before final submission / demo
 
-- **Delete all test accounts and test data from Supabase.** Every account
-  created while dogfooding auth/onboarding/matching during development is
-  still in the project: Authentication → Users (delete each test user —
-  this cascades to their `profiles`/`volunteer_profiles`/
-  `organisation_profiles` rows via the FK), plus any leftover rows in
-  `outreaches`, `applications`, and `event_reviews` created against those
-  accounts. Check the table editor for each of the 6 tables, not just Auth
-  → Users, since outreach/application rows can outlive the account that
-  created them if deletion order was inconsistent. Do this last, right
-  before the demo/submission build, so it isn't accidentally repopulated by
-  further testing.
+**Rewritten 2026-09-24.** The first two items here were written in July and had
+gone stale in a dangerous direction: the cleanup step said to delete test users
+from the Supabase dashboard, which since account closure is documented as the
+one action that silently rewrites OTHER people's records. The demo walkthrough
+itself is in [DEMO.md](DEMO.md).
 
-- **Verify the Supabase email confirmation setting.** As of 2026-07-10 the
-  `vhub` project's "Confirm email" (Authentication → Providers → Email) is
-  left ON. `app/(auth)/register.tsx` (via `hooks/useSignUp.ts`) handles both
-  states. The first-login-after-confirmation profile bootstrap gap noted
-  here previously is now **fixed**: `useSignUp` passes role/full_name/org
-  fields as Supabase `signUp` `options.data` (auth user metadata — see
-  `lib/auth-metadata.ts`), and `hooks/useAuthGuard.ts` reads that metadata
-  to create the `profiles` / `volunteer_profiles` / `organisation_profiles`
-  rows on the user's first authenticated session if they don't exist yet
-  (i.e. right after they click the confirmation link and log in). Before
-  submission, re-test end-to-end for whichever setting is final:
-  - **With confirmation ON:** register → "check your email" state shows →
-    click the link → log in → profile rows exist and land in onboarding
-    (volunteer) / dashboard (organisation) correctly.
-  - **With confirmation OFF:** register → straight into onboarding
-    (volunteer) or the dashboard (organisation), no email step.
-  - Also sanity-check the defensive fallback: an authenticated session with
-    genuinely no profile row and no usable metadata (shouldn't happen via
-    normal signup, but could via a manually-created auth user) gets signed
-    out by `useAuthGuard` rather than landing in a broken tab group — worth
-    a manual check via the Supabase dashboard if time allows.
+- **Clean the database, and choose ONE of two ways. Never delete some accounts
+  and keep others.** Every table hangs off `profiles` with `on delete cascade`.
+  Deleting a user from Authentication, Users removes their outreaches, and with
+  those every other person's applications, attendance and reviews for them, and
+  because a V-Score is REPLAYED from reviews, every volunteer who worked for a
+  deleted organisation drifts back toward 70 with nothing on screen to explain
+  it.
+  - **A fresh start (recommended for the demo).** Keep only the admin account.
+    Delete every other user in Authentication, Users; the cascade clears
+    everything they touched, and since all of it is test data nothing real is
+    lost. Then build the demo data from nothing, following DEMO.md. Check the
+    table editor afterwards: `outreaches`, `applications` and `event_reviews`
+    should be empty.
+  - **Keeping some accounts.** Do not delete anything. Close the unwanted
+    accounts through the app (Profile, Account & Security, Close account), which
+    anonymises the person and keeps the records of work, so no remaining score
+    moves.
+  - **The ten seeded volunteers are the exception** in either case:
+    `supabase/seed/03_teardown.sql` removes exactly those (their emails end in
+    `@seed.vhub.test`) and nothing else.
+- **Do the cleanup LAST**, after the final rehearsal, so further testing does
+  not repopulate it.
+- **Email confirmation is ON and works by a six-digit code.** Both the
+  **Confirm signup** and **Reset password** templates (Authentication, Email
+  Templates) must contain `{{ .Token }}`, or the email arrives with no code in
+  it. Re-test once on the final setup: register, receive the code, type it, land
+  in onboarding (volunteer) or the dashboard (organisation). Email goes through
+  Gmail SMTP, which allows roughly 500 recipients a day, shared between the app
+  and Supabase.
+- **Check the Supabase project is awake the day before.** UptimeRobot pings
+  `/api/keepalive` every five minutes, and the nightly cron queries the database
+  too, so the free tier should never pause it; open the Supabase dashboard once
+  anyway to be sure.
+- **Install the release APK on the demo phone** from the website's Download
+  button, not a development build, so what the panel sees is what a user gets.
 
-- **The Supabase client isn't typed with the `Database` generic.**
+### Older notes, kept for the record
+
+Each is marked with where it stands today.
+
+- **STILL TRUE: the Supabase client isn't typed with the `Database` generic.**
   `lib/supabase.ts` calls `createClient(supabaseUrl, supabasePublishableKey, {...})`
   without a `Database` type parameter, so `.from(table).insert(...)`/`.update(...)`
   calls aren't checked against `types/database.ts` at all — a stale or
@@ -451,7 +463,9 @@ because its regex was accidentally more permissive."
   (or generate it via `supabase gen types typescript`) — worth doing before
   Phase 2 adds many more `.from(...)` call sites.
 
-- **Orphaned-account sign-out has no user-facing message.** `hooks/useAuthGuard.ts`'s
+- **~~Orphaned-account sign-out has no user-facing message.~~ RESOLVED 2026-09-14.**
+  A failure after a successful sign-in is now recorded in
+  `authStore.authError` and shown on the login screen. Original note: `hooks/useAuthGuard.ts`'s
   `loadProfileForUser` silently calls `supabase.auth.signOut()` if an
   authenticated session has no `profiles` row and no usable
   `user_metadata` to bootstrap from (rare — normal signup always sets
@@ -461,6 +475,13 @@ because its regex was accidentally more permissive."
   ("Your account needs attention — please sign up again") once the app has
   a toast system, rather than looking like a random logout.
 
+- **SUPERSEDED: the July edge-case rules below no longer describe the code.**
+  An outreach with no required skills now scores 1.0 (and a support outreach
+  always does), a missing rating moves the score not at all (the 3/5 default
+  was removed on 2026-08-07), and there is no -15 no-show penalty: an absence
+  floors that event's outcome to 0 through the review. The current rules are in
+  `docs/architecture/matching.md` and `docs/architecture/vscore.md`. Kept as the
+  record of what was first built:
 - **Layer 1 scorer and V-Score recompute math implemented (2026-07-28),
   `lib/matching/layer1.ts` and `lib/vscore.ts`, both flagged for owner
   sign-off since CLAUDE.md leaves several edge cases undefined:**
