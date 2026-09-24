@@ -76,6 +76,7 @@ The full setup, the build commands, where the secrets live and how everything is
 ## Documentation
 
 - **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**: setup, building, secrets, testing, project structure and conventions.
+- **[docs/DEMO.md](docs/DEMO.md)**: the live demo, with setup, a scene-by-scene script and answers to likely questions.
 - **[docs/REPORT_NOTES.md](docs/REPORT_NOTES.md)**: the decision record, with the reasoning behind every non-obvious choice, the known limitations and the pre-submission checklist.
 - **[docs/architecture/](docs/architecture/)**: the design decisions by area, such as matching, the V-Score, outreaches and the admin tools.
 - **[docs/ADMIN_PHASE_PLAN.md](docs/ADMIN_PHASE_PLAN.md)**, **[docs/MULTI_ROLE_PLAN.md](docs/MULTI_ROLE_PLAN.md)** and **[docs/REBUILD_GUIDE.md](docs/REBUILD_GUIDE.md)**: the plans the build followed.
