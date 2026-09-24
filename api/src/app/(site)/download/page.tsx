@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 const STEPS = [
-  { title: "Download the app", body: "Tap the button above. Your phone saves the VHub installer (a file ending in .apk)." },
+  { title: "Download the app", body: "Tap the button above. Your phone saves the VHub installer, a file ending in .apk. If Google Drive says it cannot scan the file for viruses, tap Download anyway: Drive says that about every large file." },
   { title: "Open the file", body: "Open it from your notifications or your Downloads folder." },
   { title: "Allow the install", body: "VHub is not from the Play Store yet, so Android asks first. Tap Settings, turn on Allow from this source for your browser or Files app, then go back." },
   { title: "Install and sign up", body: "Tap Install, open VHub, and create your account as a volunteer or an organisation." },
@@ -42,8 +42,9 @@ export default function DownloadPage() {
             </ol>
           </div>
           <p className="vh-small">
-            Your phone may warn that apps from unknown sources can be harmful. That warning appears
-            for every app installed outside the Play Store. Only download VHub from this website.
+            Your browser or phone may warn that this type of file can harm your device. That warning
+            appears for every app installed outside the Play Store, so tap Download anyway or Keep.
+            Only download VHub from this website.
           </p>
         </div>
       </section>
