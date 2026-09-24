@@ -6987,7 +6987,7 @@ probably because testing since then used the seed script, which inserts as the
 database owner.
 
 The proposed fix (`supabase/migrations/20260924_apply_without_delete_privilege.sql`,
-awaiting approval because it changes the schema) skips the delete on a first
+approved and applied 2026-09-24) skips the delete on a first
 application, which has nothing to clear, and routes the re-application case
 through one narrow definer function that accepts only the caller's own
 withdrawn application with no attendance recorded. Rejected alternatives:
