@@ -1,318 +1,231 @@
 # VHub demo guide
 
-A 20-minute live walkthrough of VHub for a panel, with everything to prepare
-beforehand, the script to follow on the day, what to say at each step, and what
-to do if something goes wrong.
+A live walkthrough of VHub for the defence panel: about 15 minutes, six
+essential scenes and two optional ones.
 
-The demo follows one story: **a nurse finds and joins an outreach, an
-organisation builds its team, the event happens, and the nurse's reputation
-grows.** Every feature shown serves that story, so the panel never has to
-wonder why they are looking at a screen.
+It tells one story: **a nurse finds an outreach that fits her, an organisation
+builds its team, the event happens, and her reputation grows.** Every screen
+shown serves that story.
+
+**There is no setup in this guide.** Everything the demo uses is created once,
+during the screenshot preparation (the thesis screenshot guide, section A.2).
+On the day you only sign in.
 
 ---
 
-## 1. What you need
+## 1. What must already exist
 
-- **Two Android phones** with the release app installed from the website's
-  Download button (not a development build, so the panel sees what users get):
-  - **Phone V** is the volunteer.
-  - **Phone O** is the organisation, and later the admin.
-- **A laptop** with the website open, and ideally both phones mirrored onto a
-  screen the panel can see.
-- **Internet on all three.** Mobile data as a backup if the venue Wi-Fi is weak.
+Check each of these a few days before. If one is missing, the scene that needs
+it can be shown from its screenshot instead (section 4).
 
-### The accounts
-
-Create these once, as soon as possible, following section 2. Write the passwords
-down; you will sign in and out on the day. **Each account you register needs an
-email address that can receive the six-digit sign-up code.** One Gmail account
-covers all three: Gmail delivers `yourname+org@gmail.com`,
-`yourname+hospital@gmail.com` and `yourname+nurse@gmail.com` to the same inbox,
-and VHub treats them as three different accounts.
-
-| Account | Role | Used for |
+| Needed | How to check | Used in |
 |---|---|---|
-| Your admin account | Admin | Verifying organisations and credentials |
-| **Demo Health Outreach** | Organisation, verified | Posting outreaches, choosing the team, check-in, reviews |
-| **Anwiam Hospital (Demo)** | Organisation, submitted but NOT approved | Showing the HeFRA licence check in the admin queue |
-| **Demo volunteer** (for example "Esi Nurse") | Volunteer, nurse, credential approved | The main character of the story |
-| Ten seeded volunteers | Volunteers | Filling an outreach so the ranking has something to rank. Password for all ten: `SeedVolunteer1` |
+| The demo volunteer: nurse, **verified**, Greater Accra / Ayawaso East | Her Profile shows the verified tick | Scenes 1, 2, 5 |
+| Outreach **A** (Blood Pressure Screening, Madina) with **11 pending applicants**, nobody accepted | Organisation, Applicants, A | Scene 3 |
+| Outreach **B** (Community Health Walk, support), Quick Joined by the demo volunteer | Her Applications tab lists B | Scene 2 |
+| Outreach **C** (Diabetes Check Day, clinical) that the demo volunteer has **not** applied to | In her feed without an "Applied" label | Scene 2 |
+| Outreach **D** past its date, the demo volunteer **checked in** and **not yet reviewed** | Organisation, Reviews tab, D lists her | Scene 5 |
+| **Anwiam Hospital (Demo)** submitted and **not approved** | Admin, Orgs tab | Scene 6 |
+| The release app (1.0.0) installed from the website on both phones | App opens without a development menu | All |
 
-Use a clearly fictional name for the verified organisation. **Anwiam Hospital
-(Demo)** is named after a real licensed facility on purpose, because it makes the
-HeFRA check show a real match; keep it unapproved, never publish anything from
-it, and close it after the demo.
+## 2. On the day
 
----
-
-## 2. Setting up (once, well before the defence)
-
-**Everything here is done ONCE, as soon as possible, and never repeated.** The
-defence date is not fixed, so nothing in this guide depends on it: the
-outreaches used live are dated in December (they stay open whenever the
-defence falls), and the only outreach that has to happen on a particular day
-(D, for check-in) runs within the next few days and is finished long before.
-On the day itself you only sign in. No scripts, no setup.
-
-Do these in order. Each step says where it happens.
-
-1. **Start from a clean database.** Follow the first item of "Before final
-   submission / demo" in [REPORT_NOTES.md](REPORT_NOTES.md): keep only the
-   admin, delete every other test user, and check `outreaches`,
-   `applications` and `event_reviews` are empty.
-2. **Add the ten seeded volunteers** (Supabase SQL editor): run
-   `supabase/seed/01_test_volunteers.sql`. Five of them are in Greater Accra,
-   two in Ayawaso East, which is what makes outreach A below rank them
-   visibly.
-3. **Register Demo Health Outreach** (Phone O): register as an organisation,
-   confirm the email code, then Profile, Organisation Verification, fill it in
-   and submit.
-4. **Approve it** (Phone O, signed in as admin): Orgs tab, open Demo Health
-   Outreach, approve with a short reason such as "Demo organisation, details
-   checked". Sign back in as the organisation.
-5. **Register Anwiam Hospital (Demo)** (Phone O): register a second
-   organisation and confirm the code. Then Profile, **Edit Profile**, set the
-   region to **Ashanti** and save. Then Profile, Organisation Verification,
-   fill it in and **submit, but do not approve it**. It has to be waiting in the queue on the day. The region matters: the
-   "(Demo)" in the name lowers the name match, and being in the same region as
-   the real facility is what lifts it back over the threshold.
-6. **Register the demo volunteer** (Phone V): register as a volunteer and go
-   through onboarding with these values, so the ranking favours her:
-   - Category: **Nurse**, experience **Experienced**
-   - Region **Greater Accra**, district **Ayawaso East**
-   - Skills: at least **Blood pressure measurement**, **Vital signs
-     monitoring** and **Blood glucose testing**
-   - Availability: tick **every Saturday slot** and today's weekday
-   - At step 5, sign the declaration and upload a document. **Use a sample
-     file, never a real person's licence**: a one-page PDF with the word
-     SAMPLE on it is enough.
-7. **Approve her credential** (admin): Creds tab, open her document, approve
-   with a reason. She is now verified, so clinical roles open to her.
-8. **Create the outreaches** (Phone O, as Demo Health Outreach, Create tab).
-   Publish each one. Dates are deliberately far ahead so none of them closes
-   before the defence.
-
-   | | Title | Type | Region, district | Date and time | Places | Required skills |
-   |---|---|---|---|---|---|---|
-   | **A** | Blood Pressure Screening, Madina | Clinical, Nurse | Greater Accra, Ayawaso East | Saturday 5 December 2026, 08:00 to 14:00 | **3** | Blood pressure measurement, Vital signs monitoring |
-   | **R** | Blood Pressure Screening, Madina (Rehearsal) | Same as A | Same as A | Saturday 12 December 2026, 08:00 to 14:00 | **3** | Same as A |
-   | **B** | Community Health Walk | Support | Greater Accra, Ayawaso East | Saturday 28 November 2026, 07:00 to 11:00 | 10 | none |
-   | **C** | Diabetes Check Day | Clinical, Nurse | Greater Accra, Ga West | Saturday 19 December 2026, 09:00 to 15:00 | 4 | Blood glucose testing |
-   | **D** | Morning Health Screening | Clinical, Nurse | Greater Accra, Ayawaso East | **A day within the next week that suits you**, 06:00 to 09:00 | 2 | Vital signs monitoring |
-   | **E** | Eye Screening Week, Kumasi | Clinical, **several roles**: 2 Nurse (Experienced and above), 4 Health or Medical Student (support) | Ashanti, Kumasi Metropolitan | **Three consecutive days** from Monday 7 December 2026, 09:00 to 15:00; open the third day and set it to 09:00 to 12:00 | from the roles | Visual acuity screening (nurse role) |
-
-   R exists so rehearsals never use up A. E is not used in the live demo; it is
-   there for the multi-day and multi-role screenshots.
-9. **Fill A and R with applicants** (SQL editor): open
-   `supabase/seed/02_apply_to_outreach.sql`, find-and-replace the title with
-   exactly `Blood Pressure Screening, Madina` (it appears seven times), run it.
-   Then do the same again with `Blood Pressure Screening, Madina (Rehearsal)`.
-   This is the only script, and it is run once.
-10. **The demo volunteer applies to A, R and D** (Phone V): open each, tap
-    **Apply Now** (the Full Application), write a sentence, submit.
-11. **Accept her on D** (Phone O): Applicants tab, choose D, accept her. Leave
-    A and R alone; A is accepted live at the defence.
-12. **On D's day, check her in** (both phones): Phone O opens D, **Show
-    check-in code**; Phone V, Schedule tab, D, **Scan check-in code**, scans it
-    and allows location. **Do NOT file a review for D.** From the day after,
-    D is closed automatically and stays reviewable for as long as it is left
-    unreviewed, so the review is filed live at the defence.
-13. **Rehearse on R**, never on A or D: Scenes 5 and 6 on R. For Scenes 7 and 8,
-    open D's check-in code and open the review sheet, then close it without
-    submitting.
+- **Two phones**: Phone V signed in as the demo volunteer, Phone O as Demo
+  Health Outreach. **A laptop** with `https://vhub-mu.vercel.app` open, and the
+  admin password to hand.
+- **Wake the service**: open `https://vhub-mu.vercel.app/api/keepalive` on the
+  laptop (it should say `"ok": true`), then open the app on both phones and
+  scroll the feed once. The first request after a quiet spell takes a few
+  seconds; better now than in front of the panel.
+- Notifications allowed on both phones, Do Not Disturb off, sound on,
+  brightness up, batteries charged, mobile data on as a backup to Wi-Fi.
+- If you can, mirror both phones onto the projector.
+- Have the screenshot folder open on the laptop as the backup for any scene.
 
 ---
 
-## 3. On the day (sign in, nothing else)
+## 3. The walkthrough
 
-- Open https://vhub-mu.vercel.app/api/keepalive in a browser. `"ok": true`
-  means the API and the database are both awake.
-- Open each phone's app and scroll the feed once. The API sleeps when unused,
-  and the first request after a sleep takes a few seconds; do it now, not in
-  front of the panel.
-- Phone V signed in as the demo volunteer, Phone O as Demo Health Outreach.
-- Notifications allowed on both phones, Do Not Disturb off, volume up,
-  brightness up, battery charged.
-- The laptop on the website home page.
+Each scene has what to **do**, what to **say**, and what the panel should
+**see**. Essential scenes are marked; the optional ones are for when there is
+time.
 
----
+### Opening (optional, 1 minute): the website
 
-## 4. The walkthrough
+- **Do**: on the laptop, scroll the home page to the map of the sixteen
+  regional capitals, then to the closing band with the QR code.
+- **Say**: "VHub connects health volunteers with the organisations running
+  medical outreach across Ghana. Anyone can download it here; on a computer
+  they scan this code to open the download on their phone."
 
-Each scene says what to **do**, what to **say**, and what the panel should
-**see**. Times are a guide; the whole thing runs about 20 minutes.
+### Scene 1 (essential, 3 minutes): a feed ranked for her
 
-### Scene 1. The website (1 minute)
+- **Do (Phone V)**: open **Home**. Tap the match percentage on outreach A to
+  open **Why this match?**
+- **Say**: "Every outreach is scored against her profile out of 100: skills
+  count 35, category 20, location 20, availability 15, experience 10. She sees
+  exactly why an event sits where it does. This scoring is plain code and always
+  runs. On top of it, Google's Gemini recognises skills written differently
+  that mean the same thing, like venipuncture and blood draw. If Gemini is slow
+  or unavailable, the ranking simply carries on without it; matching never
+  stops."
+- **See**: the ranked feed, then the five-part breakdown.
+- **If asked about support roles**: "A support outreach like B gives everyone
+  full marks on skills and category, so a first-year student is not ranked down
+  for a registration desk."
 
-- **Do:** on the laptop, scroll the home page slowly to the map, then to the
-  closing band with the QR code.
-- **Say:** "VHub connects health volunteers with the organisations running
-  medical outreach across Ghana. This is its website: anyone can download the
-  app here, and on a computer they scan this code to open the download on their
-  phone."
-- **See:** the animated feed on the phone, the skills, the map of the sixteen
-  regional capitals.
+### Scene 2 (essential, 2 minutes): joining an outreach
 
-### Scene 2. A feed ranked for you (3 minutes)
+- **Do (Phone V)**: open outreach **B**, a support outreach she joined with
+  **Quick Join** in one tap. Then open outreach **C** and tap **Apply Now**;
+  show the Full Application sheet with her match score and statement box, and
+  submit.
+- **Say**: "Support roles, like registration and health talks, are open to
+  everyone in one tap. Clinical roles are hands-on care, so they need a
+  credential an admin has checked. Hers was approved, so this form is open to
+  her. An unverified volunteer sees Apply Now disabled with a prompt to verify
+  first, and the database itself refuses a clinical application from an
+  unverified account, so the rule cannot be bypassed."
+- **See**: the confirmation, and C listed under the **Applications** tab.
 
-- **Do (Phone V):** open Home. Tap the match percentage on outreach A to open
-  **Why this match?**
-- **Say:** "Every outreach is scored against this nurse's profile out of 100:
-  skills count 35, category 20, location 20, availability 15, experience 10.
-  She can see exactly why an event sits where it does. The scoring always
-  runs; Google's Gemini adds a second layer that recognises when two
-  differently worded skills mean the same thing, and if Gemini is unavailable
-  the ranking simply continues without it."
-- **Do:** open the search (magnifier) and search `screening`.
-- **See:** the ranked feed, the breakdown, search results.
+### Scene 3 (essential, 3 minutes): the organisation chooses its team
 
-### Scene 3. Joining an outreach (2 minutes)
+- **Do (Phone O)**: **Applicants** tab, choose outreach **A**.
+- **Say**: "Eleven people applied for three places. They are ranked by how well
+  they fit, adjusted for reliability: an At Risk V-Score multiplies the match by
+  0.7. The organiser sees the match score and the V-Score side by side, and
+  skill coverage shows whether the team as a whole covers what the event
+  needs."
+- **Do**: point at the seeded nurse Kwabena Osei: "His raw match is the
+  second highest, 58.5, but his reliability puts him lower." Then tap
+  **Accept top 3** and confirm.
+- **Say**: "The best three are accepted and the next six go on the waitlist.
+  Nobody is rejected unless the organiser chooses to. Everyone is told
+  immediately, by push notification and email."
+- **See**: three accepted, six waitlisted; Phone V receives "You're
+  confirmed!".
 
-- **Do (Phone V):** open outreach B, **Quick Join**.
-- **Say:** "Support roles such as registration, crowd flow and health talks
-  are open to everyone in one tap. That is how a first-year student gets
-  started."
-- **Do:** open outreach C, tap **Apply Now** (the Full Application).
-- **Say:** "Clinical roles are hands-on care, so they need a credential an
-  admin has checked. Hers was approved, so this form is open to her; an
-  unverified volunteer is asked to verify first. Support roles never ask."
-- **Do:** submit, then open the **Applications** tab.
-- **See:** both applications with their status.
+### Scene 4 (optional, 2 minutes): a place frees up
 
-### Scene 4. Posting an outreach (2 minutes)
+- **Do (Phone V)**: **Applications**, outreach A, **Withdraw**, choose a
+  reason.
+- **Say**: "When an accepted volunteer pulls out, the place goes straight to the
+  first person on the waitlist, in exactly the order the waitlist shows, and
+  they are told at once. The organiser does nothing. Pulling out of a place you
+  were given costs a couple of V-Score points, more within 24 hours of the
+  start, which keeps the waitlist honest; withdrawing while still pending costs
+  nothing."
+- **Do (Phone O)**: refresh A's applicants.
+- **See**: the first waitlisted volunteer is now accepted.
 
-- **Do (Phone O):** open the **Create** tab. Type a title and a description
-  such as "Free breast cancer screening for market women", then tap **Suggest
-  skills**.
-- **Say:** "Organisers describe the event in their own words, and the app
-  suggests the skills it needs from the platform's list. It never adds
-  anything by itself, and the full list is always there underneath. One
-  outreach can ask for several roles, for example two doctors, three nurses
-  and six helpers, and run over several days."
-- **Do:** go back without publishing.
+### Scene 5 (essential, 3 minutes): the event, the review and the V-Score
 
-### Scene 5. Choosing the team (3 minutes)
+- **Do (Phone O)**: open outreach **D**, **Show check-in code**.
+- **Say**: "On the day, an accepted volunteer scans this code at the venue. It
+  only works on a day the outreach runs and only for someone accepted. The
+  phone's location is compared with the venue once and only the result is
+  kept, never her coordinates."
+- **Do (Phone O)**: open D's **Attendance**: she is recorded present.
+- **Do (Phone V)**: **Profile**, point at her V-Score.
+- **Do (Phone O)**: **Reviews** tab, choose D, review the demo volunteer:
+  attended, reliability 5, clinical 5, a remark such as "Punctual", submit.
+- **Do (Phone V)**: pull to refresh Profile, then open **My Feedback**.
+- **Say**: "Everyone starts at 70. Each review blends 70% of the old score with
+  30% of the event score, and ratings of 1 to 5 map to 20 to 100. The score is
+  recalculated from her whole history every time, so if a review is disputed
+  and upheld, that event simply stops counting."
+- **See**: her V-Score has moved, and the review is in My Feedback.
 
-- **Do (Phone O):** **Applicants** tab, choose outreach A.
-- **Say:** "Eleven people applied for three places. They are ranked by how well
-  they fit, adjusted for reliability, and the organiser sees the match score
-  and the V-Score side by side. Skill coverage shows whether the team as a
-  whole covers what the event needs."
-- **Do:** tap **Accept top 3** and confirm.
-- **Say:** "The best three are accepted and the rest go on the waitlist. Nobody
-  is rejected unless the organiser chooses to."
-- **See:** Phone V receives a notification if the demo volunteer was accepted.
+### Scene 6 (essential, 2 minutes): trust, through the admin
 
-### Scene 6. A place frees up (2 minutes)
+- **Do (Phone O)**: sign out, sign in as the admin. **Orgs** tab, open
+  **Anwiam Hospital (Demo)**, scroll to **HeFRA licence register**.
+- **Say**: "No organisation can publish an outreach until an admin has verified
+  it. Here the app has checked the name against HeFRA's register of 1,778
+  licensed facilities and found a licensed hospital of that name, with its
+  licence date. It is evidence for the admin, not a verdict: most outreach
+  organisers are NGOs and churches that will never be on that register."
+- **Do**: **Home**, open **Statistics**.
+- **Say**: "Every admin decision needs a written reason and is kept in a
+  permanent record, and the statistics answer whether the platform is doing its
+  job: how full outreaches are and whether no-shows are falling."
 
-- **Do (Phone V):** Applications, outreach A, **Withdraw**, give a reason.
-- **Say:** "If an accepted volunteer pulls out, the place goes straight to the
-  next person on the waitlist, the same order the waitlist shows, and they are
-  told by push and email. The organiser does nothing. Withdrawing from a place
-  you were given costs a couple of V-Score points, more if it is within 24
-  hours, which is what keeps the waitlist honest."
-- **Do (Phone O):** refresh the applicants on A.
-- **See:** the first volunteer on the waitlist is now accepted.
+### Close (1 minute)
 
-### Scene 7. Check-in (2 minutes)
-
-- **Do (Phone O):** open outreach D, **Show check-in code**.
-- **Say:** "Every outreach has its own check-in code. On the day, an accepted
-  volunteer scans it at the venue. It only works on a day the outreach runs and
-  only for someone accepted, and the phone's location is compared with the
-  venue once, keeping only the result, never her coordinates."
-- **Do (Phone O):** open D's **Attendance**.
-- **See:** the demo volunteer recorded as present from her scan on D's day.
-
-### Scene 8. The review and the V-Score (2 minutes)
-
-- **Do (Phone V):** Profile. Point at her V-Score.
-- **Do (Phone O):** the **Reviews** tab, choose D, review the demo volunteer:
-  attended, reliability and clinical ratings of 5, submit.
-- **Do (Phone V):** pull to refresh Profile, then open **My Feedback**.
-- **Say:** "Her V-Score is built from reviews like this one. Everyone starts at
-  70, and the score is recalculated from her whole history each time, so if a
-  review is disputed and upheld, that event simply stops counting."
-- **See:** the V-Score has moved, and the review is on My Feedback.
-
-### Scene 9. The admin (3 minutes)
-
-- **Do (Phone O):** sign out, sign in as the admin.
-- **Do:** **Home**, open **Statistics**.
-- **Say:** "The admin sees whether the platform is working: how full outreaches
-  are, whether no-shows are falling, and what is waiting on them."
-- **Do:** **Orgs** tab, open **Anwiam Hospital (Demo)**. Scroll to **HeFRA
-  licence register**.
-- **Say:** "Before an organisation can publish anything, an admin reviews it.
-  Here the app has checked the name against HeFRA's register of 1,778 licensed
-  facilities and found a licensed hospital of that name, with its licence date.
-  It is evidence, not a verdict: most outreach organisers are NGOs and
-  churches that will never be on that list."
-- **Do:** **Creds** tab (empty now, which is fine: "her document was checked
-  here"), then **People**, search for a seeded volunteer by name.
-- **Say:** "Every admin decision needs a written reason and is recorded
-  permanently, and moderation starts from a search for a specific person,
-  never a browsable list of everyone."
-
-### Scene 10. Close (1 minute)
-
-- **Say:** "So: volunteers find outreaches that fit them, organisations get
-  the right team, and trust is built in on both sides. Credential documents are
-  private and every link to one expires in fifteen minutes, contact details
-  are shared only with organisations someone applied to, location is never
-  stored, and the whole thing runs on Supabase, a serverless API and free
-  tiers, sized for Ghana."
+- **Say**: "Volunteers find outreaches that fit them, organisations get the
+  right team, and trust is built in on both sides: verified organisations,
+  reviewed credentials, private documents, and a reputation that is earned
+  event by event. It is built on Supabase with row-level security on every
+  table, a serverless API and Google Gemini, with 706 automated tests behind
+  it."
 
 ---
 
-## 5. If something goes wrong
+## 4. If something goes wrong
+
+**Any scene can be shown from its screenshot.** Keep the screenshot folder open
+and say "here is that step from our testing".
 
 | What happens | What to do |
 |---|---|
-| The feed shows "Not ranked yet" or loads slowly | The API was asleep. Pull to refresh once. Say: "the ranking service is waking up; if it is ever unreachable the feed still shows every outreach, just unranked." |
-| A push notification does not arrive | Open the bell (Notifications). Every push is also written to the in-app inbox. |
-| D does not appear under Reviews | It was reviewed during a rehearsal. Show My Feedback with that review and explain the scene instead. |
-| The demo volunteer was not in the top 3 on A | Skip Scene 6 and describe the waitlist promotion in words. |
-| No internet at all | The app shows an offline screen rather than crashing. Show it, explain, and continue with screenshots if you took them during the rehearsal. |
-| Gemini does not suggest skills | It falls back to general skills and says so. This is the designed behaviour; point it out. |
-
-**Take screenshots of every scene during the rehearsal.** If the venue has no
-signal, they are the demo.
+| The feed says "Not ranked yet" or is slow | The service was asleep. Pull to refresh once. Say: "if the ranking service is ever unreachable, the feed still shows every outreach, just unranked." |
+| A push notification does not arrive | Open the bell icon: every notification is also saved in the in-app inbox. |
+| D does not appear in the Reviews tab | Her review was already filed. Open My Feedback on Phone V and explain the scene from there. |
+| Accept top 3 was already done on A | Show the accepted and waitlisted lists as they are, and explain. |
+| Gemini-based skill suggestions show general skills | That is the designed fallback when Gemini does not answer; point it out as resilience. |
+| No internet | The app shows an offline banner and the saved feed rather than crashing. Show it, then continue from screenshots. |
 
 ---
 
-## 6. Questions the panel may ask
+## 5. Questions the panel may ask
 
-- **Why Supabase and not Firebase?** Supabase is Postgres, so the data is
-  relational (volunteers, outreaches, applications, reviews all point at each
-  other), and Row Level Security enforces who can read which row inside the
-  database itself rather than in app code.
+- **Why Supabase rather than Firebase?** The data is relational: volunteers,
+  outreaches, applications and reviews all refer to each other, which suits
+  PostgreSQL. Row-level security enforces who can read which row inside the
+  database itself rather than in app code. (Android push notifications travel
+  through Firebase Cloud Messaging because Android allows no other route; no
+  data is stored in Firebase.)
+- **How does matching work, and why those weights?** Five parts, weighted
+  35/20/20/15/10: skills matter most because they decide whether someone can do
+  the work; category and location next; availability and experience refine the
+  order. Skills are measured against what the outreach requires, so extra skills
+  never count against anyone.
+- **What if Gemini fails or runs out of quota?** Matching never stops. The first
+  layer is plain, fully tested code; Gemini only improves the skills part, with
+  an 8-second limit, and any failure silently falls back to the first layer.
+  Answers are cached, so each skill pair is only asked about once.
 - **What stops someone giving themselves a high V-Score?** The app cannot write
-  the score at all. Column-level permissions make it server-only, and it is
-  recalculated by the API from reviews, which only an organisation that
-  accepted the volunteer can file.
-- **What if Gemini is down or out of quota?** Matching never stops. The first
-  layer is plain, fully tested code; Gemini only improves the skills part, and
-  any failure falls back to the first layer silently.
-- **How is this fair to new volunteers?** Everyone starts at 70, in the Active
-  band, and reliability can only lower a ranking, never raise it above what
-  the fit earns. An untested record is not a bad one.
-- **Why only Android?** Nothing in the code is Android-only; iOS needs a paid
-  Apple developer account to build and test, which is a cost, not a technical
-  limit.
-- **How do you know the organisations are real?** Registration numbers,
-  official contact details and documents are reviewed by an admin before an
+  the score at all: the database only allows the server to write it, and the
+  server recalculates it from reviews, which only an organisation that accepted
+  the volunteer can file.
+- **Is the V-Score fair to new volunteers?** Everyone starts at 70, in the
+  Active band, and reliability can only lower a ranking, never raise it above
+  what the fit earns. An untested record is not a bad one.
+- **How do you know organisations are real?** Registration numbers, official
+  contact details and documents are reviewed by an admin before an
   organisation can publish, with the HeFRA register as supporting evidence.
-- **What happens to someone's data if they leave?** They can close their
-  account in the app. Their personal details are removed immediately; records
-  of work (that an outreach happened, who attended) are kept without their
-  name, so nobody else's score changes.
+- **How is personal data protected?** Credential documents are stored
+  privately and every link to one expires in fifteen minutes; phone numbers and
+  emails are shown only to organisations someone applied to; the location check
+  keeps only a yes-or-no result.
+- **What happens when someone leaves?** They can close their account in the
+  app. Personal details are removed at once; records of work, such as who
+  attended an outreach, are kept without the name, so nobody else's score
+  changes.
+- **How was it tested?** 706 automated tests cover the matching engine, the
+  V-Score, rostering and the app's guard rules, alongside repeated device
+  testing of every role's flows on Android.
+- **Why only Android?** Nothing in the code is Android-only; an iOS release
+  needs an Apple developer account, which is the planned next step.
+- **Will it scale?** The feed only ranks outreaches in the volunteer's region
+  and its neighbours, widening only when there are too few, and Gemini answers
+  are cached and shared across all users.
 
 ---
 
-## 7. After the demo
+## 6. After the defence
 
 - Close **Anwiam Hospital (Demo)** (sign in as it, Profile, Account & Security,
   Close account), so a real facility's name does not stay on the platform.
-- Remove the seeded volunteers with `supabase/seed/03_teardown.sql` if they
-  are no longer needed.
+- Remove the seeded volunteers with `supabase/seed/03_teardown.sql` if they are
+  no longer needed.
