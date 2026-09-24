@@ -107,7 +107,7 @@ export default function VerifyIdentity() {
     // wizard's submit path; until it exists, nothing should link here.
     if (onboarding.category === null && volunteerProfile?.category != null) {
       setValidationError(
-        'Your profile is already set up. To manage your identity verification, go to Settings and open Identity Verification.'
+        'Your profile is already set up. To manage your identity verification, go to Profile and open Identity Verification.'
       );
       return;
     }

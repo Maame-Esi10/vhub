@@ -117,7 +117,7 @@ export async function requirePosition(): Promise<DevicePosition> {
 
   if (!granted) {
     throw new LocationUnavailableError(
-      'VHub needs location permission to mark where the venue is. You can enable it in Settings.',
+      'VHub needs location permission to mark where the venue is. You can enable it in your phone settings.',
       true
     );
   }

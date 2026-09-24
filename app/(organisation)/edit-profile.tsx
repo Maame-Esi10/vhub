@@ -322,7 +322,7 @@ export default function EditOrganisationProfile() {
               <Text style={styles.helper}>
                 Shown to volunteers so they can reach you. Both are optional.
                 {profile?.email
-                  ? ` You sign in as ${profile.email}. Change that under Settings, Account and Security.`
+                  ? ` You sign in as ${profile.email}. Change that under Profile, Account & Security.`
                   : ''}
               </Text>
             </EditSectionCard>

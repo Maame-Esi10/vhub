@@ -94,7 +94,7 @@ export default function OnboardingComplete() {
             detail={
               declarationSigned
                 ? 'On file, so a document can be attached to it.'
-                : 'You can sign it any time from Settings.'
+                : 'You can sign it any time from Profile, Identity Verification.'
             }
           />
           <StatusRow

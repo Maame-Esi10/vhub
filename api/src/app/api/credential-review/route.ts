@@ -121,7 +121,7 @@ export async function POST(req: Request): Promise<Response> {
         body:
           body.decision === "approve"
             ? "You can now submit full applications to clinical outreaches."
-            : `${body.reason} You can upload a different document from Settings.`,
+            : `${body.reason} You can upload a different document from Profile, Identity Verification.`,
         data: { kind: "credential_review", decision: body.decision },
         tokens: (tokens ?? []).map((t) => t.expo_push_token as string),
       },

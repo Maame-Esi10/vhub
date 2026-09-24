@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendApplicationStatusEmail, type ApplicationStatusEmailKind } from "./email";
 import { notifyUsers } from "./notify";
+import { rankApplicants } from "@/lib/roster";
 
 /**
  * Waitlist promotion, and the two ways an applicant is told about a decision.
@@ -79,9 +80,17 @@ export async function pushApplicant(
 
 /**
  * Waitlist policy: promotion is AUTOMATIC. The moment an accepted application
- * transitions to cancelled, the outreach's highest-match_score `waitlisted`
- * application (ties broken by earliest application) is promoted to `accepted`
- * and emailed + pushed immediately. This keeps a freed slot from sitting empty
+ * transitions to cancelled, the outreach's FIRST-RANKED `waitlisted`
+ * application is promoted to `accepted` and emailed + pushed immediately.
+ *
+ * "First-ranked" is `rankApplicants` from lib/roster.ts: match score times the
+ * V-Score reliability multiplier, ties to the earliest application. It is the
+ * SAME order /api/waitlist-position shows each volunteer and the same order
+ * "Accept top N" uses (fixed 2026-09-24). Promotion used to take the highest
+ * RAW match_score, so a volunteer told "position 1" could be passed over for an
+ * At Risk volunteer whose raw score was higher but whose ranking was lower.
+ *
+ * This keeps a freed slot from sitting empty
  * waiting for an organiser to notice, and matches the best-fit-first behaviour
  * the matching engine is built around.
  *
@@ -91,17 +100,30 @@ export async function promoteFromWaitlist(
   admin: SupabaseClient,
   outreach: WaitlistOutreach
 ): Promise<WaitlistApplication | null> {
-  const { data: waitlisted, error } = await admin
+  const { data: rows, error } = await admin
     .from("applications")
-    .select("id, outreach_id, volunteer_id, status, match_score")
+    .select("id, outreach_id, volunteer_id, status, match_score, created_at, volunteer:volunteer_profiles(v_score)")
     .eq("outreach_id", outreach.id)
-    .eq("status", "waitlisted")
-    .order("match_score", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .eq("status", "waitlisted");
 
-  if (error || !waitlisted) return null;
+  if (error || !rows || rows.length === 0) return null;
+
+  const ranked = rankApplicants(
+    (rows as unknown as {
+      id: string;
+      match_score: number | null;
+      created_at: string;
+      volunteer: { v_score: number | null } | null;
+    }[]).map((row) => ({
+      id: row.id,
+      status: "waitlisted" as const,
+      matchScore: row.match_score,
+      vScore: row.volunteer?.v_score ?? null,
+      createdAt: row.created_at,
+    }))
+  );
+  const waitlisted = ranked[0];
+  if (!waitlisted) return null;
 
   const { data: promoted, error: promoteError } = await admin
     .from("applications")

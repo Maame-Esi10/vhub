@@ -362,9 +362,11 @@ because its regex was accidentally more permissive."
 
 - **Absence has no V-Score effect until the review is filed.** Marking a
   volunteer absent on the post-event attendance screen (`/api/checkin`, mode
-  `resolve`) records the absence and moves no score. The −15 no-show penalty
-  arrives only when the organisation files the post-event review with
-  `attended: false` (`/api/vscore`, action `review`). **Consequence: an
+  `resolve`) records the absence and moves no score. The absence reaches the
+  score only when the organisation files the post-event review with
+  `attended: false` (`/api/vscore`, action `review`), which makes that event's
+  outcome 0 in the blend. (This line used to say "the −15 no-show penalty";
+  there is no flat no-show penalty, corrected 2026-09-24.) **Consequence: an
   organisation that marks its no-shows but never reviews leaves them
   unpenalised** — the attendance record exists, but the volunteer's V-Score is
   untouched and the ranking multiplier never reflects it.
@@ -7169,3 +7171,19 @@ creating a new release labelled Latest with the same asset name, and the
 website never needs changing. Chrome's own "Download anyway?" prompt remains:
 it appears for every APK installed from outside the Play Store, and only a Play
 Store listing removes it.
+
+### Waitlist promotion follows the order the waitlist shows (2026-09-24)
+
+`promoteFromWaitlist` promoted the waitlisted application with the highest
+RAW match score, while `/api/waitlist-position` and "Accept top N" order
+applicants with `rankApplicants` (match score times the V-Score reliability
+multiplier). The two disagreed whenever a waitlisted volunteer was below 60:
+with the seeded test volunteers, the volunteer shown first on the waitlist
+would have been passed over for an At Risk volunteer with a higher raw score.
+Promotion now uses `rankApplicants`, so the queue a volunteer sees is the
+queue that is honoured.
+
+Also corrected: six user-facing texts still sent people to "Settings", which
+became part of Profile on 2026-09-22 (the credential-rejection push, the
+organisation-rejection email, onboarding completion, the onboarding identity
+screen, the organisation's email-change note and the privacy policy).

@@ -66,3 +66,6 @@ firebase-service-account*.json
 
 # HeFRA source PDF: the extracted list is committed instead (scripts/extract-hefra.py)
 docs/FACILITIES-WITH-VALID-LICENCES*.pdf
+
+# Personal thesis-writing guides: local only, never committed
+docs/thesis-evidence*.md

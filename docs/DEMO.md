@@ -23,7 +23,7 @@ wonder why they are looking at a screen.
 
 ### The accounts
 
-Create these one to two days before, following section 2. Write the passwords
+Create these once, as soon as possible, following section 2. Write the passwords
 down; you will sign in and out on the day. **Each account you register needs an
 email address that can receive the six-digit sign-up code.** One Gmail account
 covers all three: Gmail delivers `yourname+org@gmail.com`,
@@ -45,7 +45,14 @@ it, and close it after the demo.
 
 ---
 
-## 2. Setting up (one to two days before)
+## 2. Setting up (once, well before the defence)
+
+**Everything here is done ONCE, as soon as possible, and never repeated.** The
+defence date is not fixed, so nothing in this guide depends on it: the
+outreaches used live are dated in December (they stay open whenever the
+defence falls), and the only outreach that has to happen on a particular day
+(D, for check-in) runs within the next few days and is finished long before.
+On the day itself you only sign in. No scripts, no setup.
 
 Do these in order. Each step says where it happens.
 
@@ -81,35 +88,42 @@ Do these in order. Each step says where it happens.
      SAMPLE on it is enough.
 7. **Approve her credential** (admin): Creds tab, open her document, approve
    with a reason. She is now verified, so clinical roles open to her.
-8. **Create the four outreaches** (Phone O, as Demo Health Outreach, Create
-   tab). Publish each one.
+8. **Create the outreaches** (Phone O, as Demo Health Outreach, Create tab).
+   Publish each one. Dates are deliberately far ahead so none of them closes
+   before the defence.
 
    | | Title | Type | Region, district | Date and time | Places | Required skills |
    |---|---|---|---|---|---|---|
-   | **A** | Blood Pressure Screening, Madina | Clinical, Nurse | Greater Accra, Ayawaso East | A Saturday 1 to 2 weeks away, 08:00 to 14:00 | **3** | Blood pressure measurement, Vital signs monitoring |
-   | **B** | Community Health Walk | Support | Greater Accra, Ayawaso East | A Saturday about a week away, 07:00 to 11:00 | 10 | none |
-   | **C** | Diabetes Check Day | Clinical, Nurse | Greater Accra, Ga West | A Saturday about 3 weeks away, 09:00 to 15:00 | 4 | Blood glucose testing |
-   | **D** | Morning Health Screening | Clinical, Nurse | Greater Accra, Ayawaso East | **The demo day itself, 06:00 to 07:00** | 2 | Vital signs monitoring |
+   | **A** | Blood Pressure Screening, Madina | Clinical, Nurse | Greater Accra, Ayawaso East | Saturday 5 December 2026, 08:00 to 14:00 | **3** | Blood pressure measurement, Vital signs monitoring |
+   | **R** | Blood Pressure Screening, Madina (Rehearsal) | Same as A | Same as A | Saturday 12 December 2026, 08:00 to 14:00 | **3** | Same as A |
+   | **B** | Community Health Walk | Support | Greater Accra, Ayawaso East | Saturday 28 November 2026, 07:00 to 11:00 | 10 | none |
+   | **C** | Diabetes Check Day | Clinical, Nurse | Greater Accra, Ga West | Saturday 19 December 2026, 09:00 to 15:00 | 4 | Blood glucose testing |
+   | **D** | Morning Health Screening | Clinical, Nurse | Greater Accra, Ayawaso East | **A day within the next week that suits you**, 06:00 to 09:00 | 2 | Vital signs monitoring |
+   | **E** | Eye Screening Week, Kumasi | Clinical, **several roles**: 2 Nurse (Experienced and above), 4 Health or Medical Student (support) | Ashanti, Kumasi Metropolitan | **Three consecutive days** from Monday 7 December 2026, 09:00 to 15:00; open the third day and set it to 09:00 to 12:00 | from the roles | Visual acuity screening (nurse role) |
 
-   **D is the one that makes the day work.** Check-in only works on a day the
-   outreach runs, and reviews only open once it has finished, so D must be
-   dated the demo day and end before the demo starts.
-9. **Fill outreach A with applicants** (SQL editor): open
+   R exists so rehearsals never use up A. E is not used in the live demo; it is
+   there for the multi-day and multi-role screenshots.
+9. **Fill A and R with applicants** (SQL editor): open
    `supabase/seed/02_apply_to_outreach.sql`, find-and-replace the title with
-   exactly `Blood Pressure Screening, Madina` (it appears seven times), run
-   it. The ten seeded volunteers are now pending applicants.
-10. **The demo volunteer applies to A and D** (Phone V): open each, choose
-   Full Application, write a sentence, submit.
+   exactly `Blood Pressure Screening, Madina` (it appears seven times), run it.
+   Then do the same again with `Blood Pressure Screening, Madina (Rehearsal)`.
+   This is the only script, and it is run once.
+10. **The demo volunteer applies to A, R and D** (Phone V): open each, tap
+    **Apply Now** (the Full Application), write a sentence, submit.
 11. **Accept her on D** (Phone O): Applicants tab, choose D, accept her. Leave
-    A alone; it is accepted live on the day.
-12. **Rehearse the whole script once**, then undo what the rehearsal changed:
-    the rehearsal accepts people on A, so either repeat steps 8 (for A only)
-    and 9 with a fresh outreach A, or rehearse on a copy of A with a different
-    title.
+    A and R alone; A is accepted live at the defence.
+12. **On D's day, check her in** (both phones): Phone O opens D, **Show
+    check-in code**; Phone V, Schedule tab, D, **Scan check-in code**, scans it
+    and allows location. **Do NOT file a review for D.** From the day after,
+    D is closed automatically and stays reviewable for as long as it is left
+    unreviewed, so the review is filed live at the defence.
+13. **Rehearse on R**, never on A or D: Scenes 5 and 6 on R. For Scenes 7 and 8,
+    open D's check-in code and open the review sheet, then close it without
+    submitting.
 
 ---
 
-## 3. The morning of the demo
+## 3. On the day (sign in, nothing else)
 
 - Open https://vhub-mu.vercel.app/api/keepalive in a browser. `"ok": true`
   means the API and the database are both awake.
@@ -119,7 +133,6 @@ Do these in order. Each step says where it happens.
 - Phone V signed in as the demo volunteer, Phone O as Demo Health Outreach.
 - Notifications allowed on both phones, Do Not Disturb off, volume up,
   brightness up, battery charged.
-- Location turned on for Phone V (check-in asks for it).
 - The laptop on the website home page.
 
 ---
@@ -159,7 +172,7 @@ Each scene says what to **do**, what to **say**, and what the panel should
 - **Say:** "Support roles such as registration, crowd flow and health talks
   are open to everyone in one tap. That is how a first-year student gets
   started."
-- **Do:** open outreach C, choose **Full Application**.
+- **Do:** open outreach C, tap **Apply Now** (the Full Application).
 - **Say:** "Clinical roles are hands-on care, so they need a credential an
   admin has checked. Hers was approved, so this form is open to her; an
   unverified volunteer is asked to verify first. Support roles never ask."
@@ -192,34 +205,30 @@ Each scene says what to **do**, what to **say**, and what the panel should
 
 ### Scene 6. A place frees up (2 minutes)
 
-*Only if the demo volunteer was among the three accepted on A. If not, skip to
-Scene 7 and mention it instead.*
-
 - **Do (Phone V):** Applications, outreach A, **Withdraw**, give a reason.
 - **Say:** "If an accepted volunteer pulls out, the place goes straight to the
-  next person on the waitlist, and they are told by push and email. The
-  organiser does nothing. Withdrawing from a place you were given costs a
-  couple of V-Score points, more if it is within 24 hours, which is what keeps
-  the waitlist honest."
+  next person on the waitlist, the same order the waitlist shows, and they are
+  told by push and email. The organiser does nothing. Withdrawing from a place
+  you were given costs a couple of V-Score points, more if it is within 24
+  hours, which is what keeps the waitlist honest."
 - **Do (Phone O):** refresh the applicants on A.
-- **See:** the next-ranked volunteer now accepted.
+- **See:** the first volunteer on the waitlist is now accepted.
 
-### Scene 7. Check-in on the day (2 minutes)
+### Scene 7. Check-in (2 minutes)
 
 - **Do (Phone O):** open outreach D, **Show check-in code**.
-- **Do (Phone V):** **Schedule** tab, outreach D, **Scan check-in code**, scan
-  Phone O's screen, allow location.
-- **Say:** "Check-in works only on a day the outreach runs and only for
-  someone accepted. The phone's location is compared with the venue once, and
-  only the result is kept, never her coordinates."
-- **See:** the check-in confirmed on Phone V.
+- **Say:** "Every outreach has its own check-in code. On the day, an accepted
+  volunteer scans it at the venue. It only works on a day the outreach runs and
+  only for someone accepted, and the phone's location is compared with the
+  venue once, keeping only the result, never her coordinates."
+- **Do (Phone O):** open D's **Attendance**.
+- **See:** the demo volunteer recorded as present from her scan on D's day.
 
 ### Scene 8. The review and the V-Score (2 minutes)
 
 - **Do (Phone V):** Profile. Point at her V-Score.
-- **Do (Phone O):** open outreach D, **Mark completed**. Then the **Reviews**
-  tab, choose D, review the demo volunteer: attended, reliability and clinical
-  ratings of 5, submit.
+- **Do (Phone O):** the **Reviews** tab, choose D, review the demo volunteer:
+  attended, reliability and clinical ratings of 5, submit.
 - **Do (Phone V):** pull to refresh Profile, then open **My Feedback**.
 - **Say:** "Her V-Score is built from reviews like this one. Everyone starts at
   70, and the score is recalculated from her whole history each time, so if a
@@ -262,8 +271,7 @@ Scene 7 and mention it instead.*
 |---|---|
 | The feed shows "Not ranked yet" or loads slowly | The API was asleep. Pull to refresh once. Say: "the ranking service is waking up; if it is ever unreachable the feed still shows every outreach, just unranked." |
 | A push notification does not arrive | Open the bell (Notifications). Every push is also written to the in-app inbox. |
-| Check-in says the outreach is not running today | Outreach D is dated wrong. Show the check-in code screen and explain the rule instead. |
-| "Mark completed" says the event has not finished | Outreach D's end time is after now. Explain the rule, and review a different finished outreach if you have one. |
+| D does not appear under Reviews | It was reviewed during a rehearsal. Show My Feedback with that review and explain the scene instead. |
 | The demo volunteer was not in the top 3 on A | Skip Scene 6 and describe the waitlist promotion in words. |
 | No internet at all | The app shows an offline screen rather than crashing. Show it, explain, and continue with screenshots if you took them during the rehearsal. |
 | Gemini does not suggest skills | It falls back to general skills and says so. This is the designed behaviour; point it out. |

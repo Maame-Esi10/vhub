@@ -216,7 +216,7 @@ function organisationVerificationBody(params: VerificationDecisionEmailParams): 
     `${params.reason}
 
 ` +
-    `You can update your details and documents in VHub under Settings, then submit again. ` +
+    `You can update your details and documents in VHub under Profile, Organisation Verification, then submit again. ` +
     `Resubmitting replaces what you sent before, so send the full set rather than only the part that changed.
 
 ` +
