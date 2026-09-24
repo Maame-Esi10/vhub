@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import {
   decideOrganisationVerification,
+  lookupFacilities,
   submitOrganisationVerification,
   type OrganisationVerificationSubmission,
 } from '@/lib/api-client';
@@ -135,6 +136,23 @@ export function useVerificationQueue() {
 }
 
 /** Everything an admin needs to judge one organisation. */
+/**
+ * Admin only: the HeFRA-licensed facilities whose names match this
+ * organisation, for the review screen. Evidence, never a verdict.
+ *
+ * Cached for the session: the register is a file in the API deployment and
+ * only changes with a deploy, so asking twice about one organisation can only
+ * ever return the same answer.
+ */
+export function useFacilityLookup(organisationId: string | undefined) {
+  return useQuery({
+    queryKey: ['facility-lookup', organisationId],
+    enabled: !!organisationId,
+    staleTime: Infinity,
+    queryFn: () => lookupFacilities(organisationId as string),
+  });
+}
+
 export function useVerificationDetail(organisationId: string | undefined) {
   const role = useAuthStore((state) => state.profile?.role);
 

@@ -63,3 +63,6 @@ design-refs/
 # it would silently drop it from the build and Android push would fail again.
 *-firebase-adminsdk-*.json
 firebase-service-account*.json
+
+# HeFRA source PDF: the extracted list is committed instead (scripts/extract-hefra.py)
+docs/FACILITIES-WITH-VALID-LICENCES*.pdf

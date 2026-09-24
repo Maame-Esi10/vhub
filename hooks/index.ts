@@ -32,6 +32,7 @@ export {
   useSubmitVerification,
   useVerificationQueue,
   useVerificationDetail,
+  useFacilityLookup,
   useDecideVerification,
 } from './useOrganisationVerification';
 export type {

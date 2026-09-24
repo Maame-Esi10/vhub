@@ -7050,3 +7050,29 @@ illustrations are HTML rather than screenshots so they stay sharp and cannot
 go stale against a changed screen. Inter is served through next/font, which
 ships with Next (no new dependency) and serves the font from this deployment.
 Verified by a production build and by screenshots at 390px and 1366px.
+
+### HeFRA licence check in the organisation review (2026-09-24)
+
+The owner supplied HeFRA's published list of facilities with valid licences
+(1,778 rows). `scripts/extract-hefra.py` turns it into JSON the API ships with,
+refusing to write if any row number is missing, and `/api/facility-lookup`
+(admin only) returns the entries whose names match the organisation under
+review, with type, region, location, ownership and licence expiry. The admin
+screen shows them as a section beside the registration numbers.
+
+It is evidence, not a gate, and the wording says so. Most organisations that
+run outreach are NGOs, churches and student associations, which HeFRA does not
+license, so an empty result is normal for them; it only matters for an
+organisation that says it is a facility. Name matching drops company suffixes
+and filler, weights distinctive words far above "hospital" or "clinic" (so two
+unrelated "... Medical Centre"s never match), and needs 60 percent of the
+organisation's own weighted name to appear, with a small bonus for the same
+region. Stored as a file rather than a table because it is read-only reference
+data that changes only when HeFRA publishes, which would otherwise be a schema
+change for something a file answers.
+
+**Limitations:** the list is a snapshot (about a quarter of its licences had
+already expired on the day it was loaded, and every result shows its date), 36
+of the 1,778 rows could not be split into type and region and are searchable
+by name only, and a similar name is never proof of identity, which the screen
+tells the admin in so many words.

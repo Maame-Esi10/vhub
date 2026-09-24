@@ -24,8 +24,17 @@ import {
   Toast,
 } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { useAdminActionsForTarget, useDecideVerification, useVerificationDetail } from '@/hooks';
-import { getOrganisationDocumentUrl, type SignedDocument } from '@/lib/api-client';
+import {
+  useAdminActionsForTarget,
+  useDecideVerification,
+  useFacilityLookup,
+  useVerificationDetail,
+} from '@/hooks';
+import {
+  getOrganisationDocumentUrl,
+  type FacilityLookupResponse,
+  type SignedDocument,
+} from '@/lib/api-client';
 import type { OrganisationDocument, OrgVerificationState } from '@/types/database';
 import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
@@ -53,6 +62,7 @@ export default function AdminOrganisationDetail() {
   const detail = useVerificationDetail(organisationId);
   const history = useAdminActionsForTarget('organisation', organisationId);
   const decide = useDecideVerification();
+  const facilities = useFacilityLookup(organisationId);
 
   const [reason, setReason] = useState('');
   const [attempted, setAttempted] = useState(false);
@@ -173,6 +183,15 @@ export default function AdminOrganisationDetail() {
             ) : (
               registrations.map((row) => <Fact key={row.id} label={row.label} value={row.number} />)
             )}
+          </Section>
+
+          <Section title="HeFRA licence register">
+            <FacilityEvidence
+              loading={facilities.isLoading}
+              failed={facilities.isError}
+              data={facilities.data}
+              onRetry={() => void facilities.refetch()}
+            />
           </Section>
 
           <Section title={`Documents (${documents.length})`}>
@@ -314,6 +333,85 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/**
+ * What HeFRA's register says about a facility of this name. EVIDENCE, never a
+ * verdict, and the copy has to keep saying so: most organisations running
+ * outreach are NGOs, churches and student groups, which HeFRA does not
+ * license, so "no match" is the normal answer for them and must not read as a
+ * warning. It matters for an organisation that CALLS ITSELF a hospital or
+ * clinic, and that is the case the empty-state wording names.
+ */
+function FacilityEvidence({
+  loading,
+  failed,
+  data,
+  onRetry,
+}: {
+  loading: boolean;
+  failed: boolean;
+  data: FacilityLookupResponse | undefined;
+  onRetry: () => void;
+}) {
+  if (loading) return <Text style={styles.emptyLine}>Checking the register...</Text>;
+  if (failed || !data) {
+    return (
+      <Pressable onPress={onRetry} accessibilityRole="button">
+        <Text style={styles.emptyLine}>The register could not be checked. Tap to try again.</Text>
+      </Pressable>
+    );
+  }
+
+  const source = `Checked against ${data.register.count.toLocaleString()} facilities licensed by HeFRA.`;
+
+  if (data.matches.length === 0) {
+    return (
+      <View style={styles.facilityNote}>
+        <Text style={styles.emptyLine}>
+          No licensed facility with a similar name. That is expected for an NGO, church or student
+          group. It matters only if this organisation says it is a hospital, clinic or other
+          health facility.
+        </Text>
+        <Text style={styles.facilitySource}>{source}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.facilityNote}>
+      {data.matches.map((match) => (
+        <View key={`${match.name}-${match.expires}`} style={styles.facilityRow}>
+          <View style={styles.facilityHead}>
+            <Text style={styles.facilityName}>{match.name}</Text>
+            <Badge
+              label={match.expired ? 'Licence expired' : 'Licensed'}
+              tone={match.expired ? 'danger' : 'success'}
+            />
+          </View>
+          <Text style={styles.facilityMeta}>
+            {[match.type, match.region, match.location].filter(Boolean).join(' · ')}
+          </Text>
+          <Text style={styles.facilityMeta}>
+            {match.ownership.charAt(0) + match.ownership.slice(1).toLowerCase()} ·{' '}
+            {match.expired ? 'Expired' : 'Valid until'} {formatDate(match.expires)} ·{' '}
+            {Math.round(match.score * 100)}% name match
+          </Text>
+        </View>
+      ))}
+      <Text style={styles.facilitySource}>
+        {source} A similar name is not proof it is the same organisation: compare the town and
+        the registration details above.
+      </Text>
+    </View>
+  );
+}
+
+/** "2027-06-30" as "30 Jun 2027", without a timezone shifting the day. */
+function formatDate(iso: string): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${day} ${months[(month ?? 1) - 1]} ${year}`;
+}
+
 function Fact({ label, value }: { label: string; value: string | null }) {
   return (
     <View style={styles.factRow}>
@@ -339,6 +437,23 @@ const styles = StyleSheet.create({
   factLabel: { fontFamily: fontFamily.medium, fontSize: 12, color: colors.textSecondary },
   factValue: { fontFamily: fontFamily.regular, fontSize: 15, color: colors.textPrimary },
   emptyLine: { fontFamily: fontFamily.regular, fontSize: 14, color: colors.textSecondary },
+  facilityNote: { gap: spacing.md },
+  facilityRow: {
+    gap: spacing.xs,
+    padding: spacing.base,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  facilityHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    flexWrap: 'wrap',
+  },
+  facilityName: { flex: 1, minWidth: 160, fontFamily: fontFamily.semiBold, fontSize: 14, color: colors.textPrimary },
+  facilityMeta: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 19, color: colors.textSecondary },
+  facilitySource: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 18, color: colors.textSecondary },
   documentRow: {
     flexDirection: 'row',
     alignItems: 'center',

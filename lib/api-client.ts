@@ -1,4 +1,5 @@
 import type { Layer1MatchResult } from '@/lib/matching/layer1';
+import type { Facility } from '@/lib/facilityMatch';
 import { supabase } from '@/lib/supabase';
 import type { VScoreBand } from '@/lib/vscore';
 import type { ApplicationStatus, Outreach, OutreachRoleType } from '@/types/database';
@@ -54,6 +55,7 @@ export const API_ROUTES = {
   accountClosure: '/api/account-closure',
   skillSuggest: '/api/skill-suggest',
   mailHealth: '/api/mail-health',
+  facilityLookup: '/api/facility-lookup',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -1077,6 +1079,30 @@ export interface VettedSourceInput {
   url: string;
   sourceType?: string;
   rationale: string;
+}
+
+/** One HeFRA register entry that looks like the organisation under review. */
+export interface FacilityLookupMatch extends Facility {
+  score: number;
+  expired: boolean;
+}
+
+export interface FacilityLookupResponse {
+  matches: FacilityLookupMatch[];
+  searchedName: string | null;
+  register: { source: string; extracted: string; count: number };
+}
+
+/**
+ * Admin only: the HeFRA-licensed facilities whose names match this
+ * organisation. Evidence for the review, never a verdict (see
+ * lib/facilityMatch.ts for why "no match" is not a warning sign).
+ */
+export function lookupFacilities(
+  organisationId: string,
+  options?: RequestOptions
+): Promise<FacilityLookupResponse> {
+  return apiPost<FacilityLookupResponse>(API_ROUTES.facilityLookup, { organisationId }, options);
 }
 
 /**
