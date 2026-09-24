@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 
 /**
- * Root layout for the ONE page this API project serves.
+ * Root layout for the ONE page this API project serves (the landing page, which
+ * doubles as where email-confirmation links land).
  *
  * Added 2026-09-01 alongside app/page.tsx. Everything else here is a route
  * handler under app/api/, which needs no layout -- this exists only because
@@ -11,9 +12,11 @@ import type { Metadata, Viewport } from "next";
 export const metadata: Metadata = {
   title: "VHub",
   description: "VHub - connecting health volunteers with medical outreach organisations across Ghana.",
-  // The page exists to be landed on from an email link, never to be found in a
-  // search result, and it briefly carries auth tokens in its URL fragment.
-  robots: { index: false, follow: false },
+  // Indexable since 2026-09-24, when the root became the landing page. It was
+  // noindex while its only job was receiving email links. The auth tokens a
+  // confirmation briefly carries are in the URL FRAGMENT, which a browser never
+  // sends to any server, so no crawler can ever see them.
+  robots: { index: true, follow: true },
 };
 
 /** Almost every visitor arrives by tapping a link in a mail app on a phone. */

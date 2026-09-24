@@ -7018,3 +7018,20 @@ slept. The route runs one HEAD count and returns 502 if the database does not
 answer, so the monitor reports the project down rather than up. The nightly
 cron already queries the database once a day; the monitor is a second
 safeguard and an outage alarm, not the only thing keeping the project awake.
+
+### A landing page at the API's root (2026-09-24)
+
+`https://vhub-mu.vercel.app/` now introduces the app, lists what it does for
+volunteers and for organisations, and links the Android download with install
+steps. It shares the root with the email-confirmation card rather than taking
+a new address, because Supabase's Site URL already points there and moving it
+would be a dashboard change with a silent failure mode (a wrong redirect lands
+people on the wrong page with no error). The card shows only when the URL
+carries Supabase's auth parameters; everyone else gets the landing page, which
+is prerendered so it loads fast on a slow connection. The page became
+indexable at the same time: a confirmation's tokens travel in the URL
+fragment, which browsers never send to a server, so no crawler can see them.
+
+**Limitation:** the download button points at an EAS build link, which is not
+permanent. The APK needs a stable home (a GitHub release or a shared Drive
+file) before the page is shared widely.
