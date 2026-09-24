@@ -11,8 +11,8 @@ Three things, in one repository:
 | | Where | What it is |
 |---|---|---|
 | The mobile app | `app/`, `components/`, `hooks/`, `lib/` | Expo + React Native, TypeScript strict, Expo Router. Talks to Supabase directly for everything that is not a secret. |
-| The serverless API | `api/` | A separate Next.js project deployed to Vercel. It owns every secret and every decision the client is not allowed to make: matching, V-Score, application decisions, email, push, private document links. |
-| The database | `supabase/` | `schema.sql` plus a numbered migration per change, pasted into the Supabase SQL editor. Row Level Security on every table, column-level GRANTs on top of it. |
+| The serverless API and website | `api/` | A separate Next.js project deployed to Vercel. It owns every secret and every decision the client is not allowed to make: matching, V-Score, application decisions, email, push, private document links. The same deployment serves the public VHub website at its root. |
+| The database | `supabase/` | `schema.sql`, the complete database in one file, plus a numbered migration per change. Row Level Security on every table, column-level GRANTs on top of it. |
 
 ## Status
 
@@ -25,7 +25,9 @@ Every phase of the build order is complete, as is the admin phase that followed 
 - **Phase 4, Polish.** Push notifications, cancellation and waitlist promotion, per-day release, offline handling, check-in by QR, keyword search, rate limiting, error monitoring, notification retention.
 - **Admin phase, packages A to J.** The admin role and audit trail, private documents, organisation verification, credential review, consent and guidelines, moderation, disputes, the privacy policy and terms, account closure, platform statistics, vetted sources.
 
-What is left is an audit, an EAS build and device testing, not features.
+- **After the build.** A full four-area audit (2026-09-23) with every finding fixed, the public website, and a check of organisations against HeFRA's register of licensed health facilities.
+
+What is left is the release build, a permanent home for its download link, and device testing, not features.
 
 ### Scoped out, on purpose
 
@@ -82,7 +84,11 @@ EXPO_PUBLIC_API_BASE_URL=https://your-api.vercel.app
 
 ### The database
 
-In the Supabase SQL editor, run `supabase/schema.sql` first, then every file in `supabase/migrations/` in filename order. They are numbered by date, and a few come in lettered pairs (`20260906a`, then `20260906b`) because Postgres will not let a migration use an enum value it added in the same transaction, and the SQL editor wraps a paste in one transaction.
+**For a new Supabase project, run `supabase/schema.sql` in the SQL editor, and nothing else.** It is the complete database in one file: every table, column, function, policy, trigger and grant, in an order that works on an empty project. That is tested rather than assumed: the file was checked in a real Postgres against a rebuild of the live database's full history, and a fresh build from it matches with no differences. It is also safe to run again on an existing project, where it changes nothing.
+
+**`supabase/migrations/` is the history of the live database**, one file per change, applied in date order as each change was made. Each file carries the reasoning for its change, which is why they are kept. Do not replay them after `schema.sql` on a new project: they rebuild things the file already contains, and a few stop on their own safety checks when they find the work already done. A few come in lettered pairs (`20260906a`, then `20260906b`) because Postgres will not let a migration use an enum value it added in the same transaction, and the SQL editor wraps a paste in one transaction.
+
+**When you change the database**, write a migration for the live project and change `schema.sql` in the same pass, so the two never disagree.
 
 Then, in Authentication, Email Templates, add `{{ .Token }}` to both the **Confirm signup** and the **Reset password** templates. The app confirms and recovers with a typed six-digit code rather than a link, and without that line the email arrives with no code in it.
 
@@ -95,6 +101,20 @@ npm run dev
 ```
 
 It deploys to Vercel as its own project. Its environment variables are documented name by name in `api/.env.example`, with what each one is for and what breaks without it. Set them in the Vercel dashboard, never in a file.
+
+The same deployment serves **the VHub website** from `api/src/app/(site)/`: home, volunteers, organisations, about, FAQ, download, privacy and terms. The privacy and terms pages import the app's own text from `constants/policy.ts`, so the site and the app cannot disagree, and the download button's address is one constant in `api/src/app/(site)/site.ts`. Its root also receives Supabase's email-confirmation links and shows the confirmation instead of the home page when the address carries them.
+
+`/api/keepalive` runs one small database query and is what an uptime monitor pings, so the Supabase free tier never judges the project idle and pauses it.
+
+### Building the app
+
+```bash
+npx eas-cli build --platform android --profile release
+```
+
+The `release` profile builds with production settings and version numbering, as an **APK** that installs directly from the website. The `production` profile builds an Android App Bundle, which is what the Play Store takes and which a phone cannot install on its own. `preview` is an installable test build and `development` is the dev client. The three `EXPO_PUBLIC_*` values are set as EAS environment variables, because EAS bundles the JavaScript on its own servers and cannot see a local `.env`.
+
+App icons and the notification icon live in the native build, so changing them needs a new build; an over-the-air update cannot carry them.
 
 ## Secrets
 
@@ -125,13 +145,13 @@ The score is **derived, not accumulated**. `volunteer_profiles.v_score` is a cac
 ## Testing
 
 ```bash
-npm test          # 691 unit tests across 27 suites
+npm test          # 705 unit tests across 28 suites
 npm run typecheck # tsc --noEmit, strict
 npx eslint app components hooks lib stores constants types
 npx eslint api/src
 ```
 
-Lint is clean in both projects and must stay clean. The suite is Jest over the pure modules: the Layer 1 scorer, the V-Score maths, day and availability arithmetic, the rate limiter, error grouping, notification retention, Ghana's region adjacency, and a set of guard tests that fail the build on real mistakes rather than on style. Three of those guards are worth knowing about before you add a screen:
+Lint is clean in both projects and must stay clean. The suite is Jest over the pure modules: the Layer 1 scorer, the V-Score maths, day and availability arithmetic, the rate limiter, error grouping, notification retention, Ghana's region adjacency, the HeFRA facility matcher, and a set of guard tests that fail the build on real mistakes rather than on style. Three of those guards are worth knowing about before you add a screen:
 
 - `lib/__tests__/userFacingText.test.ts` fails on an em dash or en dash in anything a user can read. Run `node scripts/findUserText.js` to see the list while you fix them.
 - `components/ui/__tests__/tabBarClearance.test.ts` fails on a screen inside a tab group that does not leave room for the floating tab bar. The bar is `position: absolute`, so it reserves no space and every screen behind it must pad its own scroll content with `useTabBarContentPadding()`.
@@ -161,15 +181,19 @@ vhub/
 │   ├── roster.ts               # oversubscription: ranking, batch plan, waitlist cap
 │   └── ...                     # rate limiting, retention, error grouping, all pure
 ├── api/src/
-│   ├── app/api/                # 22 endpoints
+│   ├── app/(site)/             # the public website: 8 pages, plus the email-confirmation card
+│   ├── app/api/                # 24 route handlers, the nightly cron among them
 │   └── server/                 # the I/O half: mailer, push, Gemini, replay, waitlist, rate limit
+│       └── data/               # HeFRA's licensed-facility register, as JSON
 ├── stores/authStore.ts         # Zustand: user, profile, role, loading, auth error
 ├── constants/                  # skills, categories, Ghana's 16 regions and 261 districts, theme
 ├── types/                      # entity types mirroring the database
 ├── supabase/
-│   ├── schema.sql              # tables, RLS policies, column-level GRANTs
-│   └── migrations/             # one numbered file per change, applied in order
-└── scripts/generate-icons.js   # rebuilds the six brand PNGs in assets/ from one master
+│   ├── schema.sql              # the complete database: run this alone on a new project
+│   └── migrations/             # the live database's history, one file per change
+└── scripts/
+    ├── generate-icons.js       # rebuilds the seven brand PNGs in assets/ from one master
+    └── extract-hefra.py        # turns HeFRA's published PDF into the facility JSON
 ```
 
 ## Conventions worth knowing
@@ -185,6 +209,7 @@ vhub/
 ## Documentation
 
 - **[docs/REPORT_NOTES.md](docs/REPORT_NOTES.md)** — the decision record: why each non-obvious thing is the way it is, the known gaps, the accepted limitations, and the pre-submission checklist. It is the longest document here and the one to read first.
+- **[docs/architecture/](docs/architecture/)** — the design decisions by area (admin, matching, V-Score, outreaches, the API, the screens), each with the reasoning and the traps it avoids.
 - **[docs/ADMIN_PHASE_PLAN.md](docs/ADMIN_PHASE_PLAN.md)** — the plan of record for the admin packages.
 - **[docs/MULTI_ROLE_PLAN.md](docs/MULTI_ROLE_PLAN.md)** — how per-category role slots work.
 - **[docs/REBUILD_GUIDE.md](docs/REBUILD_GUIDE.md)** — setting the project up from nothing.
