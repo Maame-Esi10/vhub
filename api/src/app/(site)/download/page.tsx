@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 const STEPS = [
   {
     title: "Download the app",
-    body: "Tap the button. Your phone saves the VHub installer, a file ending in .apk. If Google Drive says it cannot scan the file for viruses, tap Download anyway: Drive says that about every large file.",
+    body: "Tap the button. Your phone saves the VHub installer, a file ending in .apk. If Chrome asks whether to download it anyway, tap Download anyway: it asks that about every app from outside the Play Store.",
   },
   { title: "Open the file", body: "Open it from your notifications or your Downloads folder." },
   {

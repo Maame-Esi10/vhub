@@ -7,22 +7,24 @@
  */
 
 /**
- * Where every Download button points. THE ONE LINE TO CHANGE when a new
- * release APK is published: replace the id with the new Drive file's.
+ * Where every Download button points.
  *
- * The release APK (VHub-1.0.0.apk, 121 MB) lives on Google Drive, shared as
- * "anyone with the link". This is Drive's DIRECT download address, not the
- * share link: the share link opens Drive's preview page, and a file this size
- * then shows "too large to scan for viruses" before it will download at all.
- * `confirm=t` answers that page in advance, so the button starts the download.
- * Checked 2026-09-24: it returns the file itself (application/octet-stream).
+ * A GitHub RELEASE on the public repository Maame-Esi10/vhub-releases (the
+ * code repository stays private). `releases/latest/download/VHub.apk` always
+ * resolves to the asset of that name on whichever release is labelled Latest,
+ * so PUBLISHING A NEW VERSION NEEDS NO CHANGE HERE: create a new release, mark
+ * it Latest, attach the APK named exactly `VHub.apk`. Rename the asset, or
+ * leave a release unlabelled, and this link returns 404.
  *
- * If Google ever changes that behaviour, the fallback is
- * https://drive.google.com/uc?export=download&id=<id>, which shows the warning
- * page first; the Download page already tells people to tap Download anyway.
+ * WHY NOT GOOGLE DRIVE (tried first, 2026-09-24). Drive will not hand a
+ * 121 MB file over directly: it shows "Google Drive has detected issues with
+ * your download... too large to scan... Download anyway" in front of it, and
+ * the documented `confirm=t` bypass worked for a script but not for a signed-in
+ * browser, which is what the owner saw. GitHub serves the file itself with the
+ * Android package content type, checked the same day. Chrome's own "Download
+ * anyway?" prompt remains, as it does for every APK from outside the Play Store.
  */
-export const ANDROID_DOWNLOAD_URL =
-  "https://drive.usercontent.google.com/download?id=1icfnBSn41KuWiwdqox_oAoN2Qlu_gPAy&export=download&confirm=t";
+export const ANDROID_DOWNLOAD_URL = "https://github.com/Maame-Esi10/vhub-releases/releases/latest/download/VHub.apk";
 
 export const NAV_LINKS = [
   { href: "/", label: "Home" },

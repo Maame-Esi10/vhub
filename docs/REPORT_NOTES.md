@@ -7133,3 +7133,18 @@ and the scannable QR code was generated once with the `qrcode` package the app
 already carries. The Download button now points at the release APK on Google
 Drive through Drive's direct-download address, which skips the "too large to
 scan" page a 121 MB file otherwise shows.
+
+### Where the APK is downloaded from (2026-09-24)
+
+The Download button first pointed at the release APK on Google Drive, using
+Drive's direct-download address with `confirm=t`, which returned the file to a
+script. In the owner's signed-in browser Drive still showed its "too large to
+scan for viruses... Download anyway" page, so it was abandoned. The APK is now
+a GitHub release on a public repository created only for releases
+(`Maame-Esi10/vhub-releases`), while the code repository stays private. GitHub
+serves the file directly with the Android package content type, and the link
+uses `releases/latest/download/VHub.apk`, so a new version is published by
+creating a new release labelled Latest with the same asset name, and the
+website never needs changing. Chrome's own "Download anyway?" prompt remains:
+it appears for every APK installed from outside the Play Store, and only a Play
+Store listing removes it.
