@@ -6995,9 +6995,9 @@ granting DELETE back reopens the hole 20260821 closed; making
 `apply_to_outreach` a definer function would bypass `applications_insert_own`,
 which is the verification gate itself.
 
-**Known drift, recorded rather than fixed here:** `supabase/schema.sql` contains
-none of the multi-day objects (`outreach_days`, `application_days`,
-`apply_to_outreach`), so it no longer describes the whole database.
+**Drift found here, fixed the same day:** `supabase/schema.sql` contained none
+of the multi-day objects (`outreach_days`, `application_days`,
+`apply_to_outreach`). See "schema.sql describes the whole database" below.
 
 ### The match pill said "NOT RANKED YET" on every outreach page
 
@@ -7076,3 +7076,37 @@ already expired on the day it was loaded, and every result shows its date), 36
 of the 1,778 rows could not be split into type and region and are searchable
 by name only, and a similar name is never proof of identity, which the screen
 tells the admin in so many words.
+
+### schema.sql describes the whole database, and that is tested (2026-09-24)
+
+The multi-day gap was the visible part of a larger one. Measured against the
+database the migrations actually build, `schema.sql` differed in 932 places:
+multi-role (`outreach_roles`), multi-day (`outreach_days`, `application_days`,
+`apply_to_outreach`, `save_outreach`), the event gallery, vetted sources and
+the V-Score replay functions existed only in migrations, and on an empty
+database the file stopped at line 198 because statements used tables and
+columns created further down. It had been "safe to re-run" on the live
+database and nothing more.
+
+**How it was fixed, and why this way.** The live database was rebuilt the way
+it was actually built (the July `schema.sql` from git history, then all 49
+migrations in date order) inside PGlite, a real Postgres compiled to run in
+Node, and its catalog was used as the reference. The file now has three parts:
+a generated Part 0 creating every enum, table and column first; the untouched
+hand-written file as Part 1, with every explanatory comment kept; and a
+generated Part 2 stating the final form of every constraint, index, function,
+policy, trigger and grant the migrations changed. Hand-copying the final state
+out of 49 migrations was the alternative, and was rejected because it can only
+be checked by reading, which is how the file drifted in the first place.
+
+**Proven three ways:** a fresh build from the file alone matches the rebuilt
+live history with zero differences; a second run changes nothing; and a run on
+top of the live history changes nothing. The only objects the file has that
+the migration history lacks are the `push_tokens` table and its rules, which
+were only ever created by `schema.sql` itself. The two one-off V-Score backup
+tables are deliberately left out. PGlite was installed only for the check and
+is not a project dependency.
+
+**Limitation:** the reference is the migration history, not a dump of the live
+database, so anything ever changed by hand in the Supabase dashboard is not
+reflected. Nothing suggests there is any.

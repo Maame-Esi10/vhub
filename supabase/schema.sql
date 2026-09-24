@@ -3,21 +3,1372 @@
 -- Safe to re-run: uses IF NOT EXISTS / CREATE OR REPLACE / DO blocks for enums.
 -- Paste directly into the Supabase SQL editor.
 --
--- "SAFE TO RE-RUN" IS A CLAIM THIS FILE HAS TO KEEP EARNING, and on 2026-09-23
--- an audit found it had stopped: six places had fallen behind
--- supabase/migrations/ while the line above still promised a no-op. Re-running
--- it would have silently REVERSED four fixes, the worst being both public views
--- losing `and p.closed_at is null` -- the only thing hiding a closed account,
--- because those views are `security_invoker = false` and bypass RLS -- which
--- would have republished every closed volunteer's name, photo, bio and V-Score.
--- All six are corrected and each carries a comment naming the migration it came
--- from.
+-- THIS FILE NOW DESCRIBES THE WHOLE DATABASE, AND THAT IS TESTED (2026-09-24).
+-- Until then it had fallen far behind supabase/migrations/: multi-role
+-- (outreach_roles), multi-day (outreach_days, application_days,
+-- apply_to_outreach, save_outreach), the event gallery, vetted sources and the
+-- V-Score replay functions existed ONLY in migrations, and on an empty database
+-- the file stopped partway, because statements used tables and columns created
+-- further down. It had been "safe to re-run" on the live database and nothing
+-- more.
 --
--- SO: WHEN YOU WRITE A MIGRATION, CHANGE THIS FILE IN THE SAME PASS. A snapshot
+-- IT HAS THREE PARTS, and the order is what makes a fresh run work:
+--
+--   PART 0  every enum, table and column, plus the functions that exist only in
+--           migrations, so nothing below meets an object that does not exist yet.
+--   PART 1  the hand-written schema, unchanged, with the reasoning behind each
+--           decision. Where a migration later changed something here, the
+--           comment names the migration.
+--   PART 2  the FINAL form of everything the migrations changed or added:
+--           constraints, indexes, functions, policies, triggers and grants.
+--           WHERE PART 1 AND PART 2 DISAGREE, PART 2 IS THE LIVE DEFINITION;
+--           the reasoning is in the migration of the same subject.
+--
+-- PARTS 0 AND 2 ARE GENERATED, NOT HAND-WRITTEN. They were produced by rebuilding
+-- the database the way the live one was built (this file as of July, then every
+-- migration in date order) in a real Postgres, reading its catalog, and writing
+-- out whatever this file lacked. The result was then checked three ways, all of
+-- which must hold for the file to be trusted:
+--   1. an EMPTY database built from this file alone matches that rebuild exactly
+--      (functions, policies, triggers, columns, constraints, indexes, grants);
+--   2. running this file TWICE changes nothing the second time;
+--   3. running it on top of the rebuilt live history changes nothing either.
+-- Only the two one-off V-Score backup tables are left out, deliberately: they
+-- were snapshots taken during a migration, not part of the design.
+--
+-- WHEN YOU WRITE A MIGRATION, CHANGE THIS FILE IN THE SAME PASS. A snapshot
 -- nobody maintains is worse than no snapshot, because it looks authoritative.
--- The live database is still this file THEN the migrations in date order; where
--- the two disagree the migration wins, and the disagreement is the bug.
+-- The live database is this file THEN the migrations in date order; where the
+-- two disagree the migration wins, and the disagreement is the bug.
 
+-- Function bodies are checked when they run, not when they are created, so a
+-- function can be defined before the tables it reads. This is what pg_dump
+-- itself does, and it lasts only for this session.
+set check_function_bodies = off;
+
+-- ============================================================
+-- PART 0: every enum, table and column (generated)
+-- ============================================================
+create extension if not exists "pgcrypto";
+
+-- Enums, with every value the migrations added. On an existing database each
+-- block hits duplicate_object and does nothing.
+do $$ begin
+  create type application_status as enum ('pending', 'accepted', 'rejected', 'waitlisted', 'cancelled', 'not_selected');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type application_type as enum ('quick_join', 'full');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type dispute_status as enum ('open', 'upheld', 'rejected', 'withdrawn');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type dispute_type as enum ('attendance', 'review');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type experience_level as enum ('beginner', 'intermediate', 'experienced');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type moderation_state as enum ('active', 'suspended', 'banned');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type org_verification_state as enum ('unverified', 'documents_submitted', 'verified', 'rejected', 'suspended', 'banned');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type outreach_role_type as enum ('clinical', 'support');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type outreach_status as enum ('draft', 'open', 'closed', 'completed', 'cancelled');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type profile_role as enum ('volunteer', 'organisation', 'admin');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type score_event_kind as enum ('late_cancellation', 'on_time_cancellation', 'late_release');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type verification_status as enum ('unverified', 'documents_pending', 'verified');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type volunteer_category as enum ('doctor', 'nurse', 'midwife', 'pharmacist', 'student', 'first_aider', 'other');
+exception when duplicate_object then null;
+end $$;
+
+-- Every table with every column, and its primary key. Foreign keys, checks,
+-- uniques and indexes come later, once every table they point at exists.
+create table if not exists admin_actions (
+  id uuid default gen_random_uuid() not null,
+  actor_id uuid,
+  actor_email text,
+  target_type text not null,
+  target_id uuid,
+  action text not null,
+  reason text,
+  payload jsonb default '{}'::jsonb not null,
+  created_at timestamp with time zone default now() not null,
+  constraint admin_actions_pkey PRIMARY KEY (id)
+);
+alter table admin_actions add column if not exists id uuid default gen_random_uuid();
+alter table admin_actions add column if not exists actor_id uuid;
+alter table admin_actions add column if not exists actor_email text;
+alter table admin_actions add column if not exists target_type text;
+alter table admin_actions add column if not exists target_id uuid;
+alter table admin_actions add column if not exists action text;
+alter table admin_actions add column if not exists reason text;
+alter table admin_actions add column if not exists payload jsonb default '{}'::jsonb;
+alter table admin_actions add column if not exists created_at timestamp with time zone default now();
+create table if not exists application_days (
+  id uuid default gen_random_uuid() not null,
+  application_id uuid not null,
+  outreach_day_id uuid not null,
+  created_at timestamp with time zone default now() not null,
+  released_at timestamp with time zone,
+  late_release boolean default false not null,
+  constraint application_days_pkey PRIMARY KEY (id)
+);
+alter table application_days add column if not exists id uuid default gen_random_uuid();
+alter table application_days add column if not exists application_id uuid;
+alter table application_days add column if not exists outreach_day_id uuid;
+alter table application_days add column if not exists created_at timestamp with time zone default now();
+alter table application_days add column if not exists released_at timestamp with time zone;
+alter table application_days add column if not exists late_release boolean default false;
+create table if not exists applications (
+  id uuid default gen_random_uuid() not null,
+  outreach_id uuid not null,
+  volunteer_id uuid not null,
+  type application_type default 'full'::application_type not null,
+  status application_status default 'pending'::application_status not null,
+  match_score numeric,
+  cancelled_at timestamp with time zone,
+  late_cancellation boolean default false not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  motivation text,
+  cancellation_reason text,
+  outreach_role_id uuid,
+  constraint applications_pkey PRIMARY KEY (id)
+);
+alter table applications add column if not exists id uuid default gen_random_uuid();
+alter table applications add column if not exists outreach_id uuid;
+alter table applications add column if not exists volunteer_id uuid;
+alter table applications add column if not exists type application_type default 'full'::application_type;
+alter table applications add column if not exists status application_status default 'pending'::application_status;
+alter table applications add column if not exists match_score numeric;
+alter table applications add column if not exists cancelled_at timestamp with time zone;
+alter table applications add column if not exists late_cancellation boolean default false;
+alter table applications add column if not exists created_at timestamp with time zone default now();
+alter table applications add column if not exists updated_at timestamp with time zone default now();
+alter table applications add column if not exists motivation text;
+alter table applications add column if not exists cancellation_reason text;
+alter table applications add column if not exists outreach_role_id uuid;
+create table if not exists attendance (
+  id uuid default gen_random_uuid() not null,
+  outreach_id uuid not null,
+  volunteer_id uuid not null,
+  checked_in_at timestamp with time zone,
+  check_in_method text,
+  location_check text default 'not_checked'::text not null,
+  organiser_status text,
+  organiser_note text,
+  resolved_by uuid,
+  resolved_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  outreach_day_id uuid not null,
+  constraint attendance_pkey PRIMARY KEY (id)
+);
+alter table attendance add column if not exists id uuid default gen_random_uuid();
+alter table attendance add column if not exists outreach_id uuid;
+alter table attendance add column if not exists volunteer_id uuid;
+alter table attendance add column if not exists checked_in_at timestamp with time zone;
+alter table attendance add column if not exists check_in_method text;
+alter table attendance add column if not exists location_check text default 'not_checked'::text;
+alter table attendance add column if not exists organiser_status text;
+alter table attendance add column if not exists organiser_note text;
+alter table attendance add column if not exists resolved_by uuid;
+alter table attendance add column if not exists resolved_at timestamp with time zone;
+alter table attendance add column if not exists created_at timestamp with time zone default now();
+alter table attendance add column if not exists updated_at timestamp with time zone default now();
+alter table attendance add column if not exists outreach_day_id uuid;
+create table if not exists disputes (
+  id uuid default gen_random_uuid() not null,
+  volunteer_id uuid not null,
+  outreach_id uuid not null,
+  type dispute_type not null,
+  outreach_day_id uuid,
+  statement text not null,
+  status dispute_status default 'open'::dispute_status not null,
+  resolution text,
+  resolved_by uuid,
+  resolved_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint disputes_pkey PRIMARY KEY (id)
+);
+alter table disputes add column if not exists id uuid default gen_random_uuid();
+alter table disputes add column if not exists volunteer_id uuid;
+alter table disputes add column if not exists outreach_id uuid;
+alter table disputes add column if not exists type dispute_type;
+alter table disputes add column if not exists outreach_day_id uuid;
+alter table disputes add column if not exists statement text;
+alter table disputes add column if not exists status dispute_status default 'open'::dispute_status;
+alter table disputes add column if not exists resolution text;
+alter table disputes add column if not exists resolved_by uuid;
+alter table disputes add column if not exists resolved_at timestamp with time zone;
+alter table disputes add column if not exists created_at timestamp with time zone default now();
+create table if not exists event_reviews (
+  id uuid default gen_random_uuid() not null,
+  outreach_id uuid not null,
+  volunteer_id uuid not null,
+  reviewed_by uuid not null,
+  attended boolean,
+  reliability_score integer,
+  clinical_score integer,
+  notes text,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  remark_chips text[] default '{}'::text[] not null,
+  constraint event_reviews_pkey PRIMARY KEY (id)
+);
+alter table event_reviews add column if not exists id uuid default gen_random_uuid();
+alter table event_reviews add column if not exists outreach_id uuid;
+alter table event_reviews add column if not exists volunteer_id uuid;
+alter table event_reviews add column if not exists reviewed_by uuid;
+alter table event_reviews add column if not exists attended boolean;
+alter table event_reviews add column if not exists reliability_score integer;
+alter table event_reviews add column if not exists clinical_score integer;
+alter table event_reviews add column if not exists notes text;
+alter table event_reviews add column if not exists created_at timestamp with time zone default now();
+alter table event_reviews add column if not exists updated_at timestamp with time zone default now();
+alter table event_reviews add column if not exists remark_chips text[] default '{}'::text[];
+create table if not exists notifications (
+  id uuid default gen_random_uuid() not null,
+  user_id uuid not null,
+  type text not null,
+  title text not null,
+  body text not null,
+  outreach_id uuid,
+  data jsonb default '{}'::jsonb not null,
+  read_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint notifications_pkey PRIMARY KEY (id)
+);
+alter table notifications add column if not exists id uuid default gen_random_uuid();
+alter table notifications add column if not exists user_id uuid;
+alter table notifications add column if not exists type text;
+alter table notifications add column if not exists title text;
+alter table notifications add column if not exists body text;
+alter table notifications add column if not exists outreach_id uuid;
+alter table notifications add column if not exists data jsonb default '{}'::jsonb;
+alter table notifications add column if not exists read_at timestamp with time zone;
+alter table notifications add column if not exists created_at timestamp with time zone default now();
+create table if not exists organisation_documents (
+  id uuid default gen_random_uuid() not null,
+  organisation_id uuid not null,
+  document_id text not null,
+  label text,
+  created_at timestamp with time zone default now() not null,
+  constraint organisation_documents_pkey PRIMARY KEY (id)
+);
+alter table organisation_documents add column if not exists id uuid default gen_random_uuid();
+alter table organisation_documents add column if not exists organisation_id uuid;
+alter table organisation_documents add column if not exists document_id text;
+alter table organisation_documents add column if not exists label text;
+alter table organisation_documents add column if not exists created_at timestamp with time zone default now();
+create table if not exists organisation_profiles (
+  id uuid not null,
+  org_name text not null,
+  org_type text,
+  description text,
+  website text,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  contact_email text,
+  contact_phone text,
+  show_gallery boolean default true not null,
+  official_email text,
+  physical_address text,
+  contact_person text,
+  verification_state org_verification_state default 'unverified'::org_verification_state not null,
+  verification_reason text,
+  verification_decided_at timestamp with time zone,
+  verification_submitted_at timestamp with time zone,
+  verified boolean generated always as ((verification_state = 'verified'::org_verification_state)) stored,
+  document_consent_at timestamp with time zone,
+  constraint organisation_profiles_pkey PRIMARY KEY (id)
+);
+alter table organisation_profiles add column if not exists id uuid;
+alter table organisation_profiles add column if not exists org_name text;
+alter table organisation_profiles add column if not exists org_type text;
+alter table organisation_profiles add column if not exists description text;
+alter table organisation_profiles add column if not exists website text;
+alter table organisation_profiles add column if not exists created_at timestamp with time zone default now();
+alter table organisation_profiles add column if not exists updated_at timestamp with time zone default now();
+alter table organisation_profiles add column if not exists contact_email text;
+alter table organisation_profiles add column if not exists contact_phone text;
+alter table organisation_profiles add column if not exists show_gallery boolean default true;
+alter table organisation_profiles add column if not exists official_email text;
+alter table organisation_profiles add column if not exists physical_address text;
+alter table organisation_profiles add column if not exists contact_person text;
+alter table organisation_profiles add column if not exists verification_state org_verification_state default 'unverified'::org_verification_state;
+alter table organisation_profiles add column if not exists verification_reason text;
+alter table organisation_profiles add column if not exists verification_decided_at timestamp with time zone;
+alter table organisation_profiles add column if not exists verification_submitted_at timestamp with time zone;
+alter table organisation_profiles add column if not exists document_consent_at timestamp with time zone;
+create table if not exists organisation_registrations (
+  id uuid default gen_random_uuid() not null,
+  organisation_id uuid not null,
+  label text not null,
+  number text not null,
+  created_at timestamp with time zone default now() not null,
+  constraint organisation_registrations_pkey PRIMARY KEY (id)
+);
+alter table organisation_registrations add column if not exists id uuid default gen_random_uuid();
+alter table organisation_registrations add column if not exists organisation_id uuid;
+alter table organisation_registrations add column if not exists label text;
+alter table organisation_registrations add column if not exists number text;
+alter table organisation_registrations add column if not exists created_at timestamp with time zone default now();
+create table if not exists outreach_checkin_codes (
+  outreach_id uuid not null,
+  code uuid default gen_random_uuid() not null,
+  created_at timestamp with time zone default now() not null,
+  constraint outreach_checkin_codes_pkey PRIMARY KEY (outreach_id)
+);
+alter table outreach_checkin_codes add column if not exists outreach_id uuid;
+alter table outreach_checkin_codes add column if not exists code uuid default gen_random_uuid();
+alter table outreach_checkin_codes add column if not exists created_at timestamp with time zone default now();
+create table if not exists outreach_days (
+  id uuid default gen_random_uuid() not null,
+  outreach_id uuid not null,
+  day date not null,
+  start_time time without time zone,
+  end_time time without time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint outreach_days_pkey PRIMARY KEY (id)
+);
+alter table outreach_days add column if not exists id uuid default gen_random_uuid();
+alter table outreach_days add column if not exists outreach_id uuid;
+alter table outreach_days add column if not exists day date;
+alter table outreach_days add column if not exists start_time time without time zone;
+alter table outreach_days add column if not exists end_time time without time zone;
+alter table outreach_days add column if not exists created_at timestamp with time zone default now();
+create table if not exists outreach_images (
+  id uuid default gen_random_uuid() not null,
+  outreach_id uuid not null,
+  url text not null,
+  caption text,
+  position integer default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  constraint outreach_images_pkey PRIMARY KEY (id)
+);
+alter table outreach_images add column if not exists id uuid default gen_random_uuid();
+alter table outreach_images add column if not exists outreach_id uuid;
+alter table outreach_images add column if not exists url text;
+alter table outreach_images add column if not exists caption text;
+alter table outreach_images add column if not exists position integer default 0;
+alter table outreach_images add column if not exists created_at timestamp with time zone default now();
+create table if not exists outreach_roles (
+  id uuid default gen_random_uuid() not null,
+  outreach_id uuid not null,
+  category text not null,
+  role_type text not null,
+  min_experience_level text,
+  required_skills text[],
+  slots_total integer not null,
+  slots_filled integer default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  constraint outreach_roles_pkey PRIMARY KEY (id)
+);
+alter table outreach_roles add column if not exists id uuid default gen_random_uuid();
+alter table outreach_roles add column if not exists outreach_id uuid;
+alter table outreach_roles add column if not exists category text;
+alter table outreach_roles add column if not exists role_type text;
+alter table outreach_roles add column if not exists min_experience_level text;
+alter table outreach_roles add column if not exists required_skills text[];
+alter table outreach_roles add column if not exists slots_total integer;
+alter table outreach_roles add column if not exists slots_filled integer default 0;
+alter table outreach_roles add column if not exists created_at timestamp with time zone default now();
+create table if not exists outreaches (
+  id uuid default gen_random_uuid() not null,
+  organisation_id uuid not null,
+  title text not null,
+  description text,
+  date date not null,
+  start_time time without time zone,
+  end_time time without time zone,
+  region text,
+  district text,
+  location_name text,
+  required_skills text[],
+  required_category text,
+  role_type outreach_role_type not null,
+  slots_total integer not null,
+  slots_filled integer default 0 not null,
+  status outreach_status default 'draft'::outreach_status not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  flyer_url text,
+  venue_latitude double precision,
+  venue_longitude double precision,
+  venue_anchored_at timestamp with time zone,
+  location_image_url text,
+  location_lat numeric,
+  location_lng numeric,
+  constraint outreaches_pkey PRIMARY KEY (id)
+);
+alter table outreaches add column if not exists id uuid default gen_random_uuid();
+alter table outreaches add column if not exists organisation_id uuid;
+alter table outreaches add column if not exists title text;
+alter table outreaches add column if not exists description text;
+alter table outreaches add column if not exists date date;
+alter table outreaches add column if not exists start_time time without time zone;
+alter table outreaches add column if not exists end_time time without time zone;
+alter table outreaches add column if not exists region text;
+alter table outreaches add column if not exists district text;
+alter table outreaches add column if not exists location_name text;
+alter table outreaches add column if not exists required_skills text[];
+alter table outreaches add column if not exists required_category text;
+alter table outreaches add column if not exists role_type outreach_role_type;
+alter table outreaches add column if not exists slots_total integer;
+alter table outreaches add column if not exists slots_filled integer default 0;
+alter table outreaches add column if not exists status outreach_status default 'draft'::outreach_status;
+alter table outreaches add column if not exists created_at timestamp with time zone default now();
+alter table outreaches add column if not exists updated_at timestamp with time zone default now();
+alter table outreaches add column if not exists flyer_url text;
+alter table outreaches add column if not exists venue_latitude double precision;
+alter table outreaches add column if not exists venue_longitude double precision;
+alter table outreaches add column if not exists venue_anchored_at timestamp with time zone;
+alter table outreaches add column if not exists location_image_url text;
+alter table outreaches add column if not exists location_lat numeric;
+alter table outreaches add column if not exists location_lng numeric;
+create table if not exists profiles (
+  id uuid not null,
+  role profile_role not null,
+  full_name text not null,
+  phone text,
+  email text,
+  region text,
+  district text,
+  avatar_url text,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  moderation_state moderation_state default 'active'::moderation_state not null,
+  moderation_reason text,
+  moderated_at timestamp with time zone,
+  closed_at timestamp with time zone,
+  constraint profiles_pkey PRIMARY KEY (id)
+);
+alter table profiles add column if not exists id uuid;
+alter table profiles add column if not exists role profile_role;
+alter table profiles add column if not exists full_name text;
+alter table profiles add column if not exists phone text;
+alter table profiles add column if not exists email text;
+alter table profiles add column if not exists region text;
+alter table profiles add column if not exists district text;
+alter table profiles add column if not exists avatar_url text;
+alter table profiles add column if not exists created_at timestamp with time zone default now();
+alter table profiles add column if not exists updated_at timestamp with time zone default now();
+alter table profiles add column if not exists moderation_state moderation_state default 'active'::moderation_state;
+alter table profiles add column if not exists moderation_reason text;
+alter table profiles add column if not exists moderated_at timestamp with time zone;
+alter table profiles add column if not exists closed_at timestamp with time zone;
+create table if not exists score_events (
+  id uuid default gen_random_uuid() not null,
+  volunteer_id uuid not null,
+  kind score_event_kind not null,
+  points numeric not null,
+  outreach_id uuid,
+  application_id uuid,
+  outreach_day_id uuid,
+  reason text not null,
+  voided_at timestamp with time zone,
+  voided_reason text,
+  dedupe_key text not null,
+  created_at timestamp with time zone default now() not null,
+  constraint score_events_pkey PRIMARY KEY (id)
+);
+alter table score_events add column if not exists id uuid default gen_random_uuid();
+alter table score_events add column if not exists volunteer_id uuid;
+alter table score_events add column if not exists kind score_event_kind;
+alter table score_events add column if not exists points numeric;
+alter table score_events add column if not exists outreach_id uuid;
+alter table score_events add column if not exists application_id uuid;
+alter table score_events add column if not exists outreach_day_id uuid;
+alter table score_events add column if not exists reason text;
+alter table score_events add column if not exists voided_at timestamp with time zone;
+alter table score_events add column if not exists voided_reason text;
+alter table score_events add column if not exists dedupe_key text;
+alter table score_events add column if not exists created_at timestamp with time zone default now();
+create table if not exists skill_match_cache (
+  id uuid default gen_random_uuid() not null,
+  skill_a text not null,
+  skill_b text not null,
+  is_match boolean not null,
+  created_at timestamp with time zone default now() not null,
+  constraint skill_match_cache_pkey PRIMARY KEY (id)
+);
+alter table skill_match_cache add column if not exists id uuid default gen_random_uuid();
+alter table skill_match_cache add column if not exists skill_a text;
+alter table skill_match_cache add column if not exists skill_b text;
+alter table skill_match_cache add column if not exists is_match boolean;
+alter table skill_match_cache add column if not exists created_at timestamp with time zone default now();
+create table if not exists vetted_sources (
+  id uuid default gen_random_uuid() not null,
+  name text not null,
+  url text not null,
+  source_type text,
+  rationale text not null,
+  added_by uuid,
+  created_at timestamp with time zone default now() not null,
+  constraint vetted_sources_pkey PRIMARY KEY (id)
+);
+alter table vetted_sources add column if not exists id uuid default gen_random_uuid();
+alter table vetted_sources add column if not exists name text;
+alter table vetted_sources add column if not exists url text;
+alter table vetted_sources add column if not exists source_type text;
+alter table vetted_sources add column if not exists rationale text;
+alter table vetted_sources add column if not exists added_by uuid;
+alter table vetted_sources add column if not exists created_at timestamp with time zone default now();
+create table if not exists volunteer_profiles (
+  id uuid not null,
+  category volunteer_category,
+  skill_tags text[],
+  specialties text[],
+  experience_level experience_level,
+  availability_slots text[],
+  bio text,
+  v_score numeric default 70 not null,
+  events_attended integer default 0 not null,
+  declaration_signed boolean default false not null,
+  verification_status verification_status default 'unverified'::verification_status not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  credential_document_id text,
+  verification_reason text,
+  verification_decided_at timestamp with time zone,
+  verification_submitted_at timestamp with time zone,
+  document_consent_at timestamp with time zone,
+  v_score_recomputed_at timestamp with time zone,
+  constraint volunteer_profiles_pkey PRIMARY KEY (id)
+);
+alter table volunteer_profiles add column if not exists id uuid;
+alter table volunteer_profiles add column if not exists category volunteer_category;
+alter table volunteer_profiles add column if not exists skill_tags text[];
+alter table volunteer_profiles add column if not exists specialties text[];
+alter table volunteer_profiles add column if not exists experience_level experience_level;
+alter table volunteer_profiles add column if not exists availability_slots text[];
+alter table volunteer_profiles add column if not exists bio text;
+alter table volunteer_profiles add column if not exists v_score numeric default 70;
+alter table volunteer_profiles add column if not exists events_attended integer default 0;
+alter table volunteer_profiles add column if not exists declaration_signed boolean default false;
+alter table volunteer_profiles add column if not exists verification_status verification_status default 'unverified'::verification_status;
+alter table volunteer_profiles add column if not exists created_at timestamp with time zone default now();
+alter table volunteer_profiles add column if not exists updated_at timestamp with time zone default now();
+alter table volunteer_profiles add column if not exists credential_document_id text;
+alter table volunteer_profiles add column if not exists verification_reason text;
+alter table volunteer_profiles add column if not exists verification_decided_at timestamp with time zone;
+alter table volunteer_profiles add column if not exists verification_submitted_at timestamp with time zone;
+alter table volunteer_profiles add column if not exists document_consent_at timestamp with time zone;
+alter table volunteer_profiles add column if not exists v_score_recomputed_at timestamp with time zone;
+
+-- Functions that exist only because a migration created them. Created here,
+-- before the policies further down that call them.
+CREATE OR REPLACE FUNCTION public.application_role_is_clinical(p_outreach_id uuid, p_role_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(
+    -- The role the volunteer actually applied for, when they chose one.
+    (select r.role_type = 'clinical' from outreach_roles r where r.id = p_role_id),
+    -- Otherwise the outreach's own summary (single-role mode).
+    (select o.role_type = 'clinical' from outreaches o where o.id = p_outreach_id),
+    -- Neither could be resolved: treat it as clinical and require
+    -- verification. Fail closed.
+    true
+  );
+$function$;
+
+CREATE OR REPLACE FUNCTION public.apply_to_outreach(p_outreach_id uuid, p_type text, p_motivation text, p_outreach_role_id uuid, p_day_ids uuid[] DEFAULT NULL::uuid[])
+ RETURNS applications
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+declare
+  existing applications;
+  saved    applications;
+begin
+  select * into existing
+    from applications
+   where outreach_id = p_outreach_id
+     and volunteer_id = auth.uid();
+
+  if found and existing.status <> 'cancelled' then
+    raise exception 'You have already applied to this outreach.'
+      using errcode = 'unique_violation';
+  end if;
+
+  if found then
+    -- Clear the withdrawn commitment WHILE the row still reads 'cancelled',
+    -- which is the only state the helper accepts. Done through the helper
+    -- because this function runs as the volunteer, who holds no DELETE on
+    -- application_days (20260821).
+    perform clear_withdrawn_application_days(existing.id);
+
+    -- A withdrawn application still occupies UNIQUE (outreach_id,
+    -- volunteer_id), so re-applying reactivates the row rather than inserting.
+    -- outreach_role_id is deliberately NOT rewritten: it is INSERT-only, so a
+    -- revived application keeps the role it was made for.
+    update applications
+       set status              = 'pending',
+           type                = p_type::application_type,
+           motivation          = p_motivation,
+           cancellation_reason = null
+     where id = existing.id
+     returning * into saved;
+  else
+    -- A first application has no committed days, so there is nothing to clear
+    -- and no DELETE is issued at all.
+    insert into applications (
+      outreach_id, volunteer_id, type, motivation, outreach_role_id
+    ) values (
+      p_outreach_id, auth.uid(), p_type::application_type, p_motivation, p_outreach_role_id
+    )
+    returning * into saved;
+  end if;
+
+  insert into application_days (application_id, outreach_day_id)
+  select saved.id, d.id
+    from outreach_days d
+   where d.outreach_id = p_outreach_id
+     and (
+       p_day_ids is null
+       or array_length(p_day_ids, 1) is null
+       or d.id = any (p_day_ids)
+     )
+  on conflict (application_id, outreach_day_id) do nothing;
+
+  -- Zero days is never a valid commitment.
+  if not exists (select 1 from application_days where application_id = saved.id) then
+    raise exception 'Choose at least one day you can attend.'
+      using errcode = 'check_violation';
+  end if;
+
+  return saved;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.assert_day_belongs_to_outreach()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if not exists (
+    select 1
+      from applications a
+      join outreach_days d on d.id = new.outreach_day_id
+     where a.id = new.application_id
+       and d.outreach_id = a.outreach_id
+  ) then
+    raise exception 'That day does not belong to this outreach.'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.assert_role_belongs_to_outreach()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if new.outreach_role_id is not null
+     and not exists (
+       select 1 from outreach_roles r
+        where r.id = new.outreach_role_id
+          and r.outreach_id = new.outreach_id
+     )
+  then
+    raise exception 'This role does not belong to that outreach.'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.clear_withdrawn_application_days(p_application_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  app applications;
+begin
+  select * into app from applications where id = p_application_id;
+
+  if not found
+     or app.volunteer_id is distinct from auth.uid()
+     or app.status <> 'cancelled' then
+    raise exception 'Only your own withdrawn application can be cleared.'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  -- An attended day is evidence and is never erased, whatever the status says.
+  if exists (
+    select 1 from attendance
+     where outreach_id = app.outreach_id
+       and volunteer_id = app.volunteer_id
+  ) then
+    raise exception 'This application has attendance recorded and cannot be cleared.'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  delete from application_days where application_id = p_application_id;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.count_recent_late_releases(p_volunteer_id uuid, p_window_days integer DEFAULT 90)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select count(*)::int
+    from application_days ad
+    join applications a on a.id = ad.application_id
+   where a.volunteer_id = p_volunteer_id
+     and ad.late_release
+     and ad.released_at is not null
+     and ad.released_at >= now() - make_interval(days => p_window_days);
+$function$;
+
+CREATE OR REPLACE FUNCTION public.create_default_outreach_day()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  -- Times deliberately left NULL: see section 1. The day inherits the
+  -- outreach's hours rather than freezing a copy of them.
+  insert into outreach_days (outreach_id, day)
+  values (new.id, new.date)
+  on conflict (outreach_id, day) do nothing;
+  return null;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.enforce_outreach_image_cap()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  existing int;
+begin
+  select count(*) into existing from outreach_images where outreach_id = new.outreach_id;
+
+  if existing >= 8 then
+    raise exception 'An outreach can have at most 8 gallery images. Remove one before adding another.'
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.outreaches_needing_resolution()
+ RETURNS TABLE(outreach_id uuid, unresolved_count bigint)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select a.outreach_id, count(*) as unresolved_count
+    from applications a
+    join outreaches o on o.id = a.outreach_id
+   where a.status in ('pending', 'waitlisted')
+     and (
+       -- The organisation ended it.
+       o.status in ('closed', 'completed')
+       -- Or the day came and went while it was still open.
+       or (o.status = 'open' and o.date < current_date)
+     )
+   group by a.outreach_id;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.refuse_committed_day_delete()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  commitments int;
+begin
+  select count(*) into commitments
+    from application_days where outreach_day_id = old.id;
+
+  if commitments > 0 then
+    raise exception
+      'Volunteers have already committed to %. Leave the day in place — a day nobody attends simply does not count.',
+      to_char(old.day, 'FMDay DD Mon YYYY')
+      using errcode = 'restrict_violation';
+  end if;
+
+  return old;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.refuse_delete_of_used_outreach()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  application_count int;
+  attendance_count  int;
+  review_count      int;
+begin
+  select count(*) into application_count from applications  where outreach_id = old.id;
+  select count(*) into attendance_count  from attendance    where outreach_id = old.id;
+  select count(*) into review_count      from event_reviews where outreach_id = old.id;
+
+  -- Cancelled applications count too. Someone applied and withdrew; that is
+  -- still their record of having been involved.
+  if application_count > 0 or attendance_count > 0 or review_count > 0 then
+    raise exception
+      'This outreach has % application(s), % attendance record(s) and % review(s). Cancel it instead of deleting it.',
+      application_count, attendance_count, review_count
+      using errcode = 'restrict_violation';
+  end if;
+
+  return old;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.refuse_uncancelling_outreach()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if old.status = 'cancelled' and new.status <> 'cancelled' then
+    raise exception
+      'This outreach was cancelled and cannot be reopened. Create a new one instead.'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.resolve_unsuccessful_applications(p_outreach_id uuid)
+ RETURNS TABLE(application_id uuid, volunteer_id uuid)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  return query
+  update applications a
+     set status = 'not_selected'
+   where a.outreach_id = p_outreach_id
+     -- Only these two. `accepted` earned a place, `cancelled` withdrew,
+     -- `rejected` already had a decision, and `not_selected` is idempotent.
+     and a.status in ('pending', 'waitlisted')
+  returning a.id, a.volunteer_id;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.save_outreach(p_outreach_id uuid, p_title text, p_description text, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_region text, p_district text, p_location_name text, p_required_skills text[], p_required_category text, p_role_type outreach_role_type, p_slots_total integer, p_flyer_url text, p_roles jsonb, p_days date[] DEFAULT NULL::date[])
+ RETURNS outreaches
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+declare
+  saved outreaches;
+  first_day date;
+  stored_day_count int;
+begin
+  if p_days is not null then
+    if array_length(p_days, 1) is null then
+      raise exception 'An outreach needs at least one day.'
+        using errcode = 'check_violation';
+    end if;
+
+    -- See sync_single_day_from_outreach: the day set is managed explicitly
+    -- below, and letting that trigger fire in between would move an existing
+    -- day row rather than add one.
+    perform set_config('vhub.skip_day_sync', '1', true);
+    select min(d) into first_day from unnest(p_days) as d;
+  else
+    first_day := p_date;
+  end if;
+
+  update outreaches o
+     set title             = p_title,
+         description       = p_description,
+         date              = first_day,
+         start_time        = p_start_time,
+         end_time          = p_end_time,
+         region            = p_region,
+         district          = p_district,
+         location_name     = p_location_name,
+         required_skills   = p_required_skills,
+         required_category = p_required_category,
+         role_type         = p_role_type,
+         slots_total       = coalesce(p_slots_total, o.slots_total),
+         flyer_url         = p_flyer_url
+   where o.id = p_outreach_id;
+
+  if not found then
+    raise exception 'That outreach could not be found, or it is not yours to edit.'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  if p_days is not null then
+    select count(*) into stored_day_count
+      from outreach_days where outreach_id = p_outreach_id;
+
+    if stored_day_count = 1 and array_length(p_days, 1) = 1 then
+      -- Rule 2: a reschedule. Moved in place, so the row keeps its id and every
+      -- commitment on it survives — which is what an organisation means when
+      -- they change the date of their own event.
+      update outreach_days
+         set day = p_days[1]
+       where outreach_id = p_outreach_id
+         and day is distinct from p_days[1];
+    else
+      -- Rule 3. Remove only the days that are genuinely gone; the delete
+      -- trigger refuses any that carry commitments, which aborts the whole save
+      -- — the details included — rather than half-applying the edit.
+      delete from outreach_days
+       where outreach_id = p_outreach_id
+         and day <> all (p_days);
+
+      -- Rule 1. Add only the days that are genuinely new, so surviving days
+      -- keep their ids and the commitments hanging off them.
+      insert into outreach_days (outreach_id, day)
+      select p_outreach_id, d
+        from unnest(p_days) as d
+      on conflict (outreach_id, day) do nothing;
+    end if;
+  end if;
+
+  if p_roles is not null then
+    delete from outreach_roles where outreach_id = p_outreach_id;
+
+    insert into outreach_roles (
+      outreach_id, category, role_type, min_experience_level, slots_total
+    )
+    select
+      p_outreach_id,
+      r.category,
+      r.role_type,
+      r.min_experience_level,
+      r.slots_total
+      from jsonb_to_recordset(p_roles) as r(
+             category             text,
+             role_type            text,
+             min_experience_level text,
+             slots_total          int
+           );
+  end if;
+
+  -- Re-read rather than RETURNING: the day and role triggers rewrite `date`,
+  -- role_type, slots_total and slots_filled after the update above.
+  select * into saved from outreaches where id = p_outreach_id;
+  return saved;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.stamp_application_day_release()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  day_start timestamptz;
+  live_future_days int;
+  any_day_started boolean;
+begin
+  -- Nothing about the release changed; this is some other update to the row.
+  if new.released_at is null and old.released_at is null then
+    return new;
+  end if;
+  if new.released_at is not null and old.released_at is not null then
+    return new;
+  end if;
+
+  select (d.day + coalesce(d.start_time, o.start_time, '00:00'::time))
+           at time zone 'UTC'
+    into day_start
+    from outreach_days d
+    join outreaches o on o.id = d.outreach_id
+   where d.id = new.outreach_day_id;
+
+  -- ---------- taking a released day back on ----------
+  -- Allowed while the day is still ahead, and it clears the late flag: the
+  -- volunteer is committed again, so there is no cancellation to weigh.
+  if new.released_at is null and old.released_at is not null then
+    if day_start is not null and now() >= day_start then
+      raise exception 'That day has already started, so it cannot be taken back on.'
+        using errcode = 'check_violation';
+    end if;
+    new.late_release := false;
+    return new;
+  end if;
+
+  -- ---------- releasing ----------
+  if day_start is not null and now() >= day_start then
+    raise exception 'That day has already started. Releasing it now would be a no-show, not a cancellation.'
+      using errcode = 'check_violation';
+  end if;
+
+  -- The client cannot choose the timestamp, only ask for the release.
+  new.released_at := now();
+  new.late_release := day_start is not null
+                      and now() >= day_start - interval '24 hours';
+
+  select
+    count(*) filter (
+      where ad.released_at is null
+        and ad.id <> new.id
+        and (d.day + coalesce(d.start_time, o.start_time, '00:00'::time))
+              at time zone 'UTC' > now()
+    ),
+    bool_or(
+      (d.day + coalesce(d.start_time, o.start_time, '00:00'::time))
+        at time zone 'UTC' <= now()
+    )
+    into live_future_days, any_day_started
+    from application_days ad
+    join outreach_days d on d.id = ad.outreach_day_id
+    join outreaches o on o.id = d.outreach_id
+   where ad.application_id = new.application_id;
+
+  if live_future_days = 0 and not coalesce(any_day_started, false) then
+    raise exception 'That is the last day you are committed to. Withdraw from the outreach instead.'
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.sync_outreach_first_day()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  affected_outreach uuid := coalesce(new.outreach_id, old.outreach_id);
+begin
+  update outreaches o
+     set date = (select min(d.day) from outreach_days d where d.outreach_id = o.id)
+   where o.id = affected_outreach
+     and exists (select 1 from outreach_days where outreach_id = affected_outreach)
+     -- Added in this migration. Without it the write always happens, which
+     -- re-fires trg_outreaches_sync_single_day below for ever.
+     and o.date is distinct from
+         (select min(d.day) from outreach_days d where d.outreach_id = o.id);
+  return null;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.sync_outreach_role_type()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  affected_outreach uuid := coalesce(new.outreach_id, old.outreach_id);
+begin
+  update outreaches o
+     set role_type = (
+           case
+             when exists (
+               select 1 from outreach_roles r
+                where r.outreach_id = o.id and r.role_type = 'clinical'
+             ) then 'clinical' else 'support'
+           end
+         )::outreach_role_type
+   where o.id = affected_outreach
+     and exists (select 1 from outreach_roles where outreach_id = affected_outreach);
+  return null;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.sync_outreach_totals_from_roles()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  affected_outreach uuid := coalesce(new.outreach_id, old.outreach_id);
+begin
+  update outreaches o
+     set slots_total  = (select coalesce(sum(r.slots_total), 0)  from outreach_roles r where r.outreach_id = o.id),
+         slots_filled = (select coalesce(sum(r.slots_filled), 0) from outreach_roles r where r.outreach_id = o.id)
+   where o.id = affected_outreach
+     and exists (select 1 from outreach_roles where outreach_id = affected_outreach);
+  return null;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.sync_role_slots_filled()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  affected_role uuid := coalesce(new.outreach_role_id, old.outreach_role_id);
+  affected_outreach uuid := coalesce(new.outreach_id, old.outreach_id);
+begin
+  if affected_role is not null then
+    update outreach_roles r
+       set slots_filled = (
+         select count(*) from applications a
+          where a.outreach_role_id = r.id and a.status = 'accepted'
+       )
+     where r.id = affected_role;
+  end if;
+
+  -- Guarded on the existence of role rows, so this NEVER fires for a
+  -- single-role outreach. That guard is what makes the migration safe for
+  -- every outreach that already exists.
+  if exists (select 1 from outreach_roles where outreach_id = affected_outreach) then
+    update outreaches o
+       set slots_filled = (select coalesce(sum(r.slots_filled), 0) from outreach_roles r where r.outreach_id = o.id),
+           slots_total  = (select coalesce(sum(r.slots_total), 0)  from outreach_roles r where r.outreach_id = o.id)
+     where o.id = affected_outreach;
+  end if;
+
+  return null;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.sync_single_day_from_outreach()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  -- STAND ASIDE FOR save_outreach(), which manages the day set explicitly.
+  --
+  -- Without this, adding an EARLIER day to a one-day outreach corrupts it
+  -- silently. save_outreach updates `date` first (for the ownership check), so
+  -- this trigger would see one day row, treat the new first date as a
+  -- reschedule, and MOVE that row -- carrying every commitment on it onto a
+  -- different date -- and the day the organisation actually meant to keep would
+  -- then be re-inserted as a brand-new row with no commitments. The day set
+  -- would look right and the promises would be attached to the wrong dates.
+  --
+  -- `true` scopes the setting to the transaction, so it cannot leak into the
+  -- next statement on a pooled connection.
+  if coalesce(current_setting('vhub.skip_day_sync', true), '') = '1' then
+    return null;
+  end if;
+
+  if (select count(*) from outreach_days where outreach_id = new.id) = 1 then
+    update outreach_days
+       set day = new.date
+     where outreach_id = new.id
+       and day is distinct from new.date;
+  end if;
+  return null;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.vscore_day_ratio(p_volunteer_id uuid, p_outreach_id uuid)
+ RETURNS numeric
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+  with committed as (
+    select ad.outreach_day_id
+      from application_days ad
+      join applications a on a.id = ad.application_id
+     where a.volunteer_id = p_volunteer_id
+       and a.outreach_id  = p_outreach_id
+       and ad.released_at is null
+  )
+  select case
+    when count(*) = 0 then null::numeric
+    else least(
+           1::numeric,
+           greatest(
+             0::numeric,
+             sum(
+               case
+                 when coalesce(
+                        (select attendance_is_present(att)
+                           from attendance att
+                          where att.volunteer_id    = p_volunteer_id
+                            and att.outreach_id     = p_outreach_id
+                            and att.outreach_day_id = c.outreach_day_id
+                          limit 1),
+                        true)
+                 then 1 else 0
+               end
+             )::numeric / count(*)::numeric
+           )
+         )
+  end
+  from committed c;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.vscore_event_outcome(p_attended boolean, p_reliability integer, p_clinical integer)
+ RETURNS numeric
+ LANGUAGE sql
+ IMMUTABLE
+AS $function$
+  select case
+    when p_attended is false then 0::numeric
+    when p_attended is not true then null::numeric
+    when p_reliability is null then null::numeric
+    when p_clinical is null then (p_reliability * 20)::numeric
+    else (((p_reliability + p_clinical) / 2.0) * 20)::numeric
+  end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.vscore_replay()
+ RETURNS TABLE(volunteer_id uuid, score numeric, events_attended integer)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+  with recursive merged as (
+    -- Reviewed events.
+    select
+      er.volunteer_id                                as volunteer_id,
+      er.created_at                                  as at,
+      0                                              as source_rank,
+      er.id                                          as tie,
+      'review'::text                                 as entry_kind,
+      er.attended                                    as attended,
+      er.reliability_score                           as reliability_score,
+      er.clinical_score                              as clinical_score,
+      null::numeric                                  as points,
+      vscore_day_ratio(er.volunteer_id, er.outreach_id) as day_ratio,
+      exists (
+        select 1 from disputes d
+         where d.volunteer_id = er.volunteer_id
+           and d.outreach_id = er.outreach_id
+           and d.status = 'upheld'
+      )                                              as voided,
+      (
+        coalesce(er.attended, false)
+        or exists (
+          select 1 from disputes d
+           where d.volunteer_id = er.volunteer_id
+             and d.outreach_id = er.outreach_id
+             and d.type = 'attendance'
+             and d.status = 'upheld'
+        )
+      )                                              as attended_effective
+    from event_reviews er
+
+    union all
+
+    -- Penalties. They carry no attendance, no ratings and no days, and never
+    -- touch the attendance count -- cancelling is not attending.
+    select
+      se.volunteer_id,
+      se.created_at,
+      1,
+      se.id,
+      'penalty'::text,
+      null::boolean,
+      null::integer,
+      null::integer,
+      se.points,
+      null::numeric,
+      (se.voided_at is not null),
+      false
+    from score_events se
+  ),
+  ordered as (
+    select
+      m.*,
+      row_number() over (
+        partition by m.volunteer_id
+        order by m.at, m.source_rank, m.tie
+      ) as n
+    from merged m
+  ),
+  walk as (
+    select
+      v.volunteer_id,
+      -- The casts are load-bearing. A recursive CTE demands the same type in
+      -- both terms: row_number() returns bigint, so a bare 0 here is an integer
+      -- and Postgres refuses the whole function with "has type integer in
+      -- non-recursive term but bigint overall".
+      0::bigint    as n,
+      70::numeric  as score,
+      0::integer   as attended_count
+    from (select distinct o.volunteer_id from ordered o) v
+
+    union all
+
+    select
+      w.volunteer_id,
+      o.n,
+      case
+        when o.voided then w.score
+        when o.entry_kind = 'penalty'
+          then greatest(0::numeric, least(100::numeric, w.score + o.points))
+        when vscore_event_outcome(o.attended, o.reliability_score, o.clinical_score) is null
+          then w.score
+        else greatest(
+               0::numeric,
+               least(
+                 100::numeric,
+                 0.7 * w.score
+                 + 0.3 * (
+                     vscore_event_outcome(o.attended, o.reliability_score, o.clinical_score)
+                     * coalesce(o.day_ratio, 1::numeric)
+                   )
+               )
+             )
+      end,
+      (w.attended_count + case when o.attended_effective then 1 else 0 end)::integer
+    from walk w
+    join ordered o
+      on o.volunteer_id = w.volunteer_id
+     and o.n = w.n + 1
+  )
+  select distinct on (walk.volunteer_id)
+    walk.volunteer_id,
+    walk.score,
+    walk.attended_count
+  from walk
+  order by walk.volunteer_id, walk.n desc;
+$function$;
+
+-- ============================================================
+-- PART 1: the hand-written schema
 -- ============================================================
 -- Extensions
 -- ============================================================
@@ -2291,3 +3642,922 @@ create policy "score_events_select_own_or_admin"
 revoke insert, update, delete on score_events from authenticated;
 revoke all on score_events from anon;
 grant select on score_events to authenticated;
+
+
+-- ============================================================
+-- PART 2: the final form of everything the migrations changed (generated)
+--
+-- Everything below restates the live definition of an object Part 1 either
+-- lacks or states in an older form. It runs last, so it wins.
+-- ============================================================
+
+-- Constraints
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'application_days_unique' and conrelid = 'application_days'::regclass) then
+    alter table application_days add constraint application_days_unique UNIQUE (application_id, outreach_day_id);
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'applications_outreach_id_volunteer_id_key' and conrelid = 'applications'::regclass) then
+    alter table applications add constraint applications_outreach_id_volunteer_id_key UNIQUE (outreach_id, volunteer_id);
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'attendance_unique_day' and conrelid = 'attendance'::regclass) then
+    alter table attendance add constraint attendance_unique_day UNIQUE (outreach_id, volunteer_id, outreach_day_id);
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'event_reviews_outreach_id_volunteer_id_key' and conrelid = 'event_reviews'::regclass) then
+    alter table event_reviews add constraint event_reviews_outreach_id_volunteer_id_key UNIQUE (outreach_id, volunteer_id);
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'organisation_documents_organisation_id_document_id_key' and conrelid = 'organisation_documents'::regclass) then
+    alter table organisation_documents add constraint organisation_documents_organisation_id_document_id_key UNIQUE (organisation_id, document_id);
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_days_unique' and conrelid = 'outreach_days'::regclass) then
+    alter table outreach_days add constraint outreach_days_unique UNIQUE (outreach_id, day);
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'score_events_volunteer_id_dedupe_key_key' and conrelid = 'score_events'::regclass) then
+    alter table score_events add constraint score_events_volunteer_id_dedupe_key_key UNIQUE (volunteer_id, dedupe_key);
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'skill_match_cache_skill_a_skill_b_key' and conrelid = 'skill_match_cache'::regclass) then
+    alter table skill_match_cache add constraint skill_match_cache_skill_a_skill_b_key UNIQUE (skill_a, skill_b);
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'vetted_sources_url_key' and conrelid = 'vetted_sources'::regclass) then
+    alter table vetted_sources add constraint vetted_sources_url_key UNIQUE (url);
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'admin_actions_action_check' and conrelid = 'admin_actions'::regclass) then
+    alter table admin_actions add constraint admin_actions_action_check CHECK ((length(btrim(action)) > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'admin_actions_reason_check' and conrelid = 'admin_actions'::regclass) then
+    alter table admin_actions add constraint admin_actions_reason_check CHECK (((reason IS NULL) OR (length(btrim(reason)) > 0)));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'admin_actions_target_type_check' and conrelid = 'admin_actions'::regclass) then
+    alter table admin_actions add constraint admin_actions_target_type_check CHECK ((target_type = ANY (ARRAY['volunteer'::text, 'organisation'::text, 'outreach'::text, 'application'::text, 'event_review'::text, 'dispute'::text, 'document'::text, 'vetted_source'::text, 'policy'::text, 'score_event'::text])));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'applications_match_score_check' and conrelid = 'applications'::regclass) then
+    alter table applications add constraint applications_match_score_check CHECK (((match_score >= (0)::numeric) AND (match_score <= (100)::numeric)));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'attendance_check_in_method_check' and conrelid = 'attendance'::regclass) then
+    alter table attendance add constraint attendance_check_in_method_check CHECK ((check_in_method = ANY (ARRAY['qr_scan'::text, 'organiser'::text])));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'attendance_location_check_check' and conrelid = 'attendance'::regclass) then
+    alter table attendance add constraint attendance_location_check_check CHECK ((location_check = ANY (ARRAY['not_checked'::text, 'confirmed'::text, 'unavailable'::text, 'mismatch'::text])));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'attendance_organiser_status_check' and conrelid = 'attendance'::regclass) then
+    alter table attendance add constraint attendance_organiser_status_check CHECK ((organiser_status = ANY (ARRAY['present'::text, 'absent'::text])));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'disputes_statement_check' and conrelid = 'disputes'::regclass) then
+    alter table disputes add constraint disputes_statement_check CHECK ((length(btrim(statement)) > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'event_reviews_clinical_score_check' and conrelid = 'event_reviews'::regclass) then
+    alter table event_reviews add constraint event_reviews_clinical_score_check CHECK (((clinical_score >= 1) AND (clinical_score <= 5)));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'event_reviews_reliability_score_check' and conrelid = 'event_reviews'::regclass) then
+    alter table event_reviews add constraint event_reviews_reliability_score_check CHECK (((reliability_score >= 1) AND (reliability_score <= 5)));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'notifications_type_check' and conrelid = 'notifications'::regclass) then
+    alter table notifications add constraint notifications_type_check CHECK ((type = ANY (ARRAY['new_match'::text, 'application_status'::text, 'event_reminder'::text, 'test'::text])));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'organisation_documents_document_id_check' and conrelid = 'organisation_documents'::regclass) then
+    alter table organisation_documents add constraint organisation_documents_document_id_check CHECK ((length(btrim(document_id)) > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'organisation_registrations_label_check' and conrelid = 'organisation_registrations'::regclass) then
+    alter table organisation_registrations add constraint organisation_registrations_label_check CHECK ((length(btrim(label)) > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'organisation_registrations_number_check' and conrelid = 'organisation_registrations'::regclass) then
+    alter table organisation_registrations add constraint organisation_registrations_number_check CHECK ((length(btrim(number)) > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_roles_category_check' and conrelid = 'outreach_roles'::regclass) then
+    alter table outreach_roles add constraint outreach_roles_category_check CHECK ((category = ANY (ARRAY['doctor'::text, 'nurse'::text, 'midwife'::text, 'pharmacist'::text, 'student'::text, 'first_aider'::text, 'other'::text])));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_roles_min_experience_level_check' and conrelid = 'outreach_roles'::regclass) then
+    alter table outreach_roles add constraint outreach_roles_min_experience_level_check CHECK ((min_experience_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'experienced'::text])));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_roles_role_type_check' and conrelid = 'outreach_roles'::regclass) then
+    alter table outreach_roles add constraint outreach_roles_role_type_check CHECK ((role_type = ANY (ARRAY['clinical'::text, 'support'::text])));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_roles_slots_filled_check' and conrelid = 'outreach_roles'::regclass) then
+    alter table outreach_roles add constraint outreach_roles_slots_filled_check CHECK ((slots_filled >= 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_roles_slots_filled_le_total' and conrelid = 'outreach_roles'::regclass) then
+    alter table outreach_roles add constraint outreach_roles_slots_filled_le_total CHECK ((slots_filled <= slots_total));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_roles_slots_total_check' and conrelid = 'outreach_roles'::regclass) then
+    alter table outreach_roles add constraint outreach_roles_slots_total_check CHECK ((slots_total > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreaches_slots_filled_check' and conrelid = 'outreaches'::regclass) then
+    alter table outreaches add constraint outreaches_slots_filled_check CHECK ((slots_filled >= 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreaches_slots_total_check' and conrelid = 'outreaches'::regclass) then
+    alter table outreaches add constraint outreaches_slots_total_check CHECK ((slots_total > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'slots_filled_le_total' and conrelid = 'outreaches'::regclass) then
+    alter table outreaches add constraint slots_filled_le_total CHECK ((slots_filled <= slots_total));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'score_events_points_check' and conrelid = 'score_events'::regclass) then
+    alter table score_events add constraint score_events_points_check CHECK (((points < (0)::numeric) AND (points >= ('-100'::integer)::numeric)));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'score_events_reason_check' and conrelid = 'score_events'::regclass) then
+    alter table score_events add constraint score_events_reason_check CHECK ((length(btrim(reason)) > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'vetted_sources_name_check' and conrelid = 'vetted_sources'::regclass) then
+    alter table vetted_sources add constraint vetted_sources_name_check CHECK ((length(btrim(name)) > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'vetted_sources_rationale_check' and conrelid = 'vetted_sources'::regclass) then
+    alter table vetted_sources add constraint vetted_sources_rationale_check CHECK ((length(btrim(rationale)) > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'vetted_sources_url_check' and conrelid = 'vetted_sources'::regclass) then
+    alter table vetted_sources add constraint vetted_sources_url_check CHECK ((length(btrim(url)) > 0));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'volunteer_profiles_v_score_check' and conrelid = 'volunteer_profiles'::regclass) then
+    alter table volunteer_profiles add constraint volunteer_profiles_v_score_check CHECK (((v_score >= (0)::numeric) AND (v_score <= (100)::numeric)));
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'admin_actions_actor_id_fkey' and conrelid = 'admin_actions'::regclass) then
+    alter table admin_actions add constraint admin_actions_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'application_days_application_id_fkey' and conrelid = 'application_days'::regclass) then
+    alter table application_days add constraint application_days_application_id_fkey FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'application_days_outreach_day_id_fkey' and conrelid = 'application_days'::regclass) then
+    alter table application_days add constraint application_days_outreach_day_id_fkey FOREIGN KEY (outreach_day_id) REFERENCES outreach_days(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'applications_outreach_id_fkey' and conrelid = 'applications'::regclass) then
+    alter table applications add constraint applications_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'applications_outreach_role_id_fkey' and conrelid = 'applications'::regclass) then
+    alter table applications add constraint applications_outreach_role_id_fkey FOREIGN KEY (outreach_role_id) REFERENCES outreach_roles(id) ON DELETE SET NULL;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'applications_volunteer_id_fkey' and conrelid = 'applications'::regclass) then
+    alter table applications add constraint applications_volunteer_id_fkey FOREIGN KEY (volunteer_id) REFERENCES volunteer_profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'attendance_outreach_day_id_fkey' and conrelid = 'attendance'::regclass) then
+    alter table attendance add constraint attendance_outreach_day_id_fkey FOREIGN KEY (outreach_day_id) REFERENCES outreach_days(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'attendance_outreach_id_fkey' and conrelid = 'attendance'::regclass) then
+    alter table attendance add constraint attendance_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'attendance_resolved_by_fkey' and conrelid = 'attendance'::regclass) then
+    alter table attendance add constraint attendance_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES organisation_profiles(id) ON DELETE SET NULL;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'attendance_volunteer_id_fkey' and conrelid = 'attendance'::regclass) then
+    alter table attendance add constraint attendance_volunteer_id_fkey FOREIGN KEY (volunteer_id) REFERENCES volunteer_profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'disputes_outreach_day_id_fkey' and conrelid = 'disputes'::regclass) then
+    alter table disputes add constraint disputes_outreach_day_id_fkey FOREIGN KEY (outreach_day_id) REFERENCES outreach_days(id) ON DELETE SET NULL;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'disputes_outreach_id_fkey' and conrelid = 'disputes'::regclass) then
+    alter table disputes add constraint disputes_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'disputes_resolved_by_fkey' and conrelid = 'disputes'::regclass) then
+    alter table disputes add constraint disputes_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'disputes_volunteer_id_fkey' and conrelid = 'disputes'::regclass) then
+    alter table disputes add constraint disputes_volunteer_id_fkey FOREIGN KEY (volunteer_id) REFERENCES profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'event_reviews_outreach_id_fkey' and conrelid = 'event_reviews'::regclass) then
+    alter table event_reviews add constraint event_reviews_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'event_reviews_reviewed_by_fkey' and conrelid = 'event_reviews'::regclass) then
+    alter table event_reviews add constraint event_reviews_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES organisation_profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'event_reviews_volunteer_id_fkey' and conrelid = 'event_reviews'::regclass) then
+    alter table event_reviews add constraint event_reviews_volunteer_id_fkey FOREIGN KEY (volunteer_id) REFERENCES volunteer_profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'notifications_outreach_id_fkey' and conrelid = 'notifications'::regclass) then
+    alter table notifications add constraint notifications_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'notifications_user_id_fkey' and conrelid = 'notifications'::regclass) then
+    alter table notifications add constraint notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'organisation_documents_organisation_id_fkey' and conrelid = 'organisation_documents'::regclass) then
+    alter table organisation_documents add constraint organisation_documents_organisation_id_fkey FOREIGN KEY (organisation_id) REFERENCES organisation_profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'organisation_profiles_id_fkey' and conrelid = 'organisation_profiles'::regclass) then
+    alter table organisation_profiles add constraint organisation_profiles_id_fkey FOREIGN KEY (id) REFERENCES profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'organisation_registrations_organisation_id_fkey' and conrelid = 'organisation_registrations'::regclass) then
+    alter table organisation_registrations add constraint organisation_registrations_organisation_id_fkey FOREIGN KEY (organisation_id) REFERENCES organisation_profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_checkin_codes_outreach_id_fkey' and conrelid = 'outreach_checkin_codes'::regclass) then
+    alter table outreach_checkin_codes add constraint outreach_checkin_codes_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_days_outreach_id_fkey' and conrelid = 'outreach_days'::regclass) then
+    alter table outreach_days add constraint outreach_days_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_images_outreach_id_fkey' and conrelid = 'outreach_images'::regclass) then
+    alter table outreach_images add constraint outreach_images_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreach_roles_outreach_id_fkey' and conrelid = 'outreach_roles'::regclass) then
+    alter table outreach_roles add constraint outreach_roles_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outreaches_organisation_id_fkey' and conrelid = 'outreaches'::regclass) then
+    alter table outreaches add constraint outreaches_organisation_id_fkey FOREIGN KEY (organisation_id) REFERENCES organisation_profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'profiles_id_fkey' and conrelid = 'profiles'::regclass) then
+    alter table profiles add constraint profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'score_events_application_id_fkey' and conrelid = 'score_events'::regclass) then
+    alter table score_events add constraint score_events_application_id_fkey FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'score_events_outreach_day_id_fkey' and conrelid = 'score_events'::regclass) then
+    alter table score_events add constraint score_events_outreach_day_id_fkey FOREIGN KEY (outreach_day_id) REFERENCES outreach_days(id) ON DELETE SET NULL;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'score_events_outreach_id_fkey' and conrelid = 'score_events'::regclass) then
+    alter table score_events add constraint score_events_outreach_id_fkey FOREIGN KEY (outreach_id) REFERENCES outreaches(id) ON DELETE SET NULL;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'score_events_volunteer_id_fkey' and conrelid = 'score_events'::regclass) then
+    alter table score_events add constraint score_events_volunteer_id_fkey FOREIGN KEY (volunteer_id) REFERENCES profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'vetted_sources_added_by_fkey' and conrelid = 'vetted_sources'::regclass) then
+    alter table vetted_sources add constraint vetted_sources_added_by_fkey FOREIGN KEY (added_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'volunteer_profiles_id_fkey' and conrelid = 'volunteer_profiles'::regclass) then
+    alter table volunteer_profiles add constraint volunteer_profiles_id_fkey FOREIGN KEY (id) REFERENCES profiles(id) ON DELETE CASCADE;
+  end if;
+end $$;
+
+-- Indexes
+create index if not exists application_days_application_id_idx ON public.application_days USING btree (application_id);
+
+create index if not exists application_days_live_idx ON public.application_days USING btree (outreach_day_id) WHERE (released_at IS NULL);
+
+create index if not exists application_days_outreach_day_id_idx ON public.application_days USING btree (outreach_day_id);
+
+create index if not exists applications_outreach_role_id_idx ON public.applications USING btree (outreach_role_id);
+
+create index if not exists attendance_outreach_day_id_idx ON public.attendance USING btree (outreach_day_id);
+
+create index if not exists outreach_days_day_idx ON public.outreach_days USING btree (day);
+
+create index if not exists outreach_days_outreach_id_idx ON public.outreach_days USING btree (outreach_id);
+
+create index if not exists outreach_images_outreach_id_idx ON public.outreach_images USING btree (outreach_id, "position");
+
+create index if not exists outreach_roles_outreach_id_idx ON public.outreach_roles USING btree (outreach_id);
+
+create unique index if not exists outreach_roles_unique_category_level ON public.outreach_roles USING btree (outreach_id, category, COALESCE(min_experience_level, 'any'::text));
+
+-- Functions, in their final form
+CREATE OR REPLACE FUNCTION public.enforce_volunteer_status_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  -- Not the volunteer acting on their own row -> nothing to constrain here.
+  if new.volunteer_id is distinct from auth.uid() then
+    return new;
+  end if;
+
+  -- The owning organisation may also be acting; orgs keep full transitions.
+  if exists (
+    select 1 from public.outreaches o
+    where o.id = new.outreach_id
+      and o.organisation_id = auth.uid()
+  ) then
+    return new;
+  end if;
+
+  -- A volunteer may only reach 'pending' from a withdrawal of their own.
+  -- Coming from 'rejected' (or 'accepted', or 'waitlisted') is refused: those
+  -- are the organisation's decisions to revisit, not the applicant's.
+  if new.status = 'pending' and old.status is distinct from 'cancelled' then
+    raise exception
+      'A volunteer may only return an application to pending after withdrawing it (was: %).',
+      old.status
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.refuse_outreach_from_unverified_org()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_state org_verification_state;
+  v_moderation moderation_state;
+begin
+  -- FIRST, and before every other test. Taking an event down is always allowed.
+  if tg_op = 'UPDATE'
+     and new.status = 'cancelled'
+     and old.status is distinct from 'cancelled' then
+    return new;
+  end if;
+
+  -- Moderation next, and it allows no draft exception: an organisation
+  -- awaiting verification is preparing to operate, while a suspended one has
+  -- been told to stop.
+  select moderation_state into v_moderation from profiles where id = new.organisation_id;
+  if v_moderation is distinct from 'active' then
+    raise exception
+      'This organisation is suspended and cannot create or publish outreaches.'
+      using errcode = 'check_violation';
+  end if;
+
+  if tg_op = 'UPDATE' and new.status is not distinct from old.status then
+    return new;
+  end if;
+  if new.status = 'draft' then
+    return new;
+  end if;
+
+  select verification_state into v_state
+    from organisation_profiles
+   where id = new.organisation_id;
+
+  if v_state is distinct from 'verified' then
+    raise exception
+      'This organisation is not verified, so it cannot publish outreaches yet. Submit verification from Settings.'
+      using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.stamp_application_cancellation()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  event_start timestamptz;
+begin
+  if new.status = 'cancelled' and old.status is distinct from 'cancelled' then
+    select (o.date + coalesce(o.start_time, '00:00'::time)) at time zone 'UTC'
+      into event_start
+    from outreaches o
+    where o.id = new.outreach_id;
+
+    new.cancelled_at := now();
+
+    -- Both edges. `now() < event_start` is the fix: past the start it is a
+    -- no-show, not a cancellation, and must not be stamped as one.
+    new.late_cancellation :=
+      event_start is not null
+      and now() >= event_start - interval '24 hours'
+      and now() < event_start;
+  end if;
+
+  return new;
+end;
+$function$;
+
+-- Row level security
+alter table application_days enable row level security;
+
+alter table outreach_days enable row level security;
+
+alter table outreach_images enable row level security;
+
+alter table outreach_roles enable row level security;
+
+alter table vetted_sources enable row level security;
+
+-- Policies, in their final form
+drop policy if exists application_days_select on application_days;
+
+create policy application_days_select on application_days as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM (applications a
+     JOIN outreaches o ON ((o.id = a.outreach_id)))
+  WHERE ((a.id = application_days.application_id) AND ((a.volunteer_id = auth.uid()) OR (o.organisation_id = auth.uid()))))));
+
+drop policy if exists application_days_write_own on application_days;
+
+create policy application_days_write_own on application_days as permissive for all to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM applications a
+  WHERE ((a.id = application_days.application_id) AND (a.volunteer_id = auth.uid())))))
+  with check ((EXISTS ( SELECT 1
+   FROM applications a
+  WHERE ((a.id = application_days.application_id) AND (a.volunteer_id = auth.uid())))));
+
+drop policy if exists applications_insert_own on applications;
+
+create policy applications_insert_own on applications as permissive for insert to authenticated
+  with check (((volunteer_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = applications.outreach_id) AND (o.status = 'open'::outreach_status)))) AND ((NOT application_role_is_clinical(outreach_id, outreach_role_id)) OR (EXISTS ( SELECT 1
+   FROM volunteer_profiles vp
+  WHERE ((vp.id = auth.uid()) AND (vp.verification_status = 'verified'::verification_status)))))));
+
+drop policy if exists applications_update_own_cancel on applications;
+
+create policy applications_update_own_cancel on applications as permissive for update to authenticated
+  using ((volunteer_id = auth.uid()))
+  with check (((volunteer_id = auth.uid()) AND ((status = 'cancelled'::application_status) OR ((status = 'pending'::application_status) AND (EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = applications.outreach_id) AND (o.status = 'open'::outreach_status)))) AND ((NOT application_role_is_clinical(outreach_id, outreach_role_id)) OR (EXISTS ( SELECT 1
+   FROM volunteer_profiles vp
+  WHERE ((vp.id = auth.uid()) AND (vp.verification_status = 'verified'::verification_status)))))))));
+
+drop policy if exists outreach_days_select on outreach_days;
+
+create policy outreach_days_select on outreach_days as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_days.outreach_id) AND ((o.status <> 'draft'::outreach_status) OR (o.organisation_id = auth.uid()))))));
+
+drop policy if exists outreach_days_write on outreach_days;
+
+create policy outreach_days_write on outreach_days as permissive for all to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_days.outreach_id) AND (o.organisation_id = auth.uid())))))
+  with check ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_days.outreach_id) AND (o.organisation_id = auth.uid())))));
+
+drop policy if exists outreach_images_select on outreach_images;
+
+create policy outreach_images_select on outreach_images as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_images.outreach_id) AND ((o.status <> 'draft'::outreach_status) OR (o.organisation_id = auth.uid()))))));
+
+drop policy if exists outreach_images_write on outreach_images;
+
+create policy outreach_images_write on outreach_images as permissive for all to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_images.outreach_id) AND (o.organisation_id = auth.uid())))))
+  with check ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_images.outreach_id) AND (o.organisation_id = auth.uid())))));
+
+drop policy if exists outreach_roles_delete on outreach_roles;
+
+create policy outreach_roles_delete on outreach_roles as permissive for delete to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_roles.outreach_id) AND (o.organisation_id = auth.uid())))));
+
+drop policy if exists outreach_roles_insert on outreach_roles;
+
+create policy outreach_roles_insert on outreach_roles as permissive for insert to authenticated
+  with check ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_roles.outreach_id) AND (o.organisation_id = auth.uid())))));
+
+drop policy if exists outreach_roles_select on outreach_roles;
+
+create policy outreach_roles_select on outreach_roles as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_roles.outreach_id) AND ((o.status <> 'draft'::outreach_status) OR (o.organisation_id = auth.uid()))))));
+
+drop policy if exists outreach_roles_update on outreach_roles;
+
+create policy outreach_roles_update on outreach_roles as permissive for update to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM outreaches o
+  WHERE ((o.id = outreach_roles.outreach_id) AND (o.organisation_id = auth.uid())))));
+
+drop policy if exists vetted_sources_select_admin on vetted_sources;
+
+create policy vetted_sources_select_admin on vetted_sources as permissive for select to authenticated
+  using (is_admin());
+
+-- Triggers
+drop trigger if exists trg_application_days_belong on application_days;
+
+CREATE TRIGGER trg_application_days_belong BEFORE INSERT OR UPDATE ON public.application_days FOR EACH ROW EXECUTE FUNCTION assert_day_belongs_to_outreach();
+
+drop trigger if exists trg_application_days_stamp_release on application_days;
+
+CREATE TRIGGER trg_application_days_stamp_release BEFORE UPDATE ON public.application_days FOR EACH ROW EXECUTE FUNCTION stamp_application_day_release();
+
+drop trigger if exists trg_applications_role_belongs on applications;
+
+CREATE TRIGGER trg_applications_role_belongs BEFORE INSERT OR UPDATE OF outreach_role_id, outreach_id ON public.applications FOR EACH ROW EXECUTE FUNCTION assert_role_belongs_to_outreach();
+
+drop trigger if exists trg_applications_sync_role_slots on applications;
+
+CREATE TRIGGER trg_applications_sync_role_slots AFTER INSERT OR DELETE OR UPDATE OF status, outreach_role_id ON public.applications FOR EACH ROW EXECUTE FUNCTION sync_role_slots_filled();
+
+drop trigger if exists trg_outreach_days_refuse_committed_delete on outreach_days;
+
+CREATE TRIGGER trg_outreach_days_refuse_committed_delete BEFORE DELETE ON public.outreach_days FOR EACH ROW EXECUTE FUNCTION refuse_committed_day_delete();
+
+drop trigger if exists trg_outreach_days_sync_first on outreach_days;
+
+CREATE TRIGGER trg_outreach_days_sync_first AFTER INSERT OR DELETE OR UPDATE OF day ON public.outreach_days FOR EACH ROW EXECUTE FUNCTION sync_outreach_first_day();
+
+drop trigger if exists trg_outreach_images_cap on outreach_images;
+
+CREATE TRIGGER trg_outreach_images_cap BEFORE INSERT ON public.outreach_images FOR EACH ROW EXECUTE FUNCTION enforce_outreach_image_cap();
+
+drop trigger if exists trg_outreach_roles_sync_role_type on outreach_roles;
+
+CREATE TRIGGER trg_outreach_roles_sync_role_type AFTER INSERT OR DELETE OR UPDATE OF role_type ON public.outreach_roles FOR EACH ROW EXECUTE FUNCTION sync_outreach_role_type();
+
+drop trigger if exists trg_outreach_roles_sync_totals on outreach_roles;
+
+CREATE TRIGGER trg_outreach_roles_sync_totals AFTER INSERT OR DELETE OR UPDATE ON public.outreach_roles FOR EACH ROW EXECUTE FUNCTION sync_outreach_totals_from_roles();
+
+drop trigger if exists trg_outreaches_default_day on outreaches;
+
+CREATE TRIGGER trg_outreaches_default_day AFTER INSERT ON public.outreaches FOR EACH ROW EXECUTE FUNCTION create_default_outreach_day();
+
+drop trigger if exists trg_outreaches_no_uncancel on outreaches;
+
+CREATE TRIGGER trg_outreaches_no_uncancel BEFORE UPDATE OF status ON public.outreaches FOR EACH ROW EXECUTE FUNCTION refuse_uncancelling_outreach();
+
+drop trigger if exists trg_outreaches_refuse_used_delete on outreaches;
+
+CREATE TRIGGER trg_outreaches_refuse_used_delete BEFORE DELETE ON public.outreaches FOR EACH ROW EXECUTE FUNCTION refuse_delete_of_used_outreach();
+
+drop trigger if exists trg_outreaches_sync_single_day on outreaches;
+
+CREATE TRIGGER trg_outreaches_sync_single_day AFTER UPDATE OF date ON public.outreaches FOR EACH ROW EXECUTE FUNCTION sync_single_day_from_outreach();
+
+-- Table and column grants, rebuilt whole for every table a migration changed
+revoke all on application_days from anon, authenticated;
+
+grant delete, insert, references, select, trigger, truncate, update on application_days to anon;
+
+grant references, select, trigger, truncate on application_days to authenticated;
+
+grant insert (application_id, outreach_day_id) on application_days to authenticated;
+
+grant update (released_at) on application_days to authenticated;
+
+revoke all on outreach_days from anon, authenticated;
+
+grant delete, insert, references, select, trigger, truncate, update on outreach_days to anon;
+
+grant delete, references, select, trigger, truncate on outreach_days to authenticated;
+
+grant insert (day, end_time, outreach_id, start_time) on outreach_days to authenticated;
+
+grant update (day, end_time, start_time) on outreach_days to authenticated;
+
+revoke all on outreach_images from anon, authenticated;
+
+grant delete, insert, references, select, trigger, truncate, update on outreach_images to anon;
+
+grant delete, references, select, trigger, truncate on outreach_images to authenticated;
+
+grant insert (caption, outreach_id, position, url) on outreach_images to authenticated;
+
+grant update (caption, position) on outreach_images to authenticated;
+
+revoke all on outreach_roles from anon, authenticated;
+
+grant delete, insert, references, select, trigger, truncate, update on outreach_roles to anon;
+
+grant delete, references, select, trigger, truncate on outreach_roles to authenticated;
+
+grant insert (category, min_experience_level, outreach_id, required_skills, role_type, slots_total) on outreach_roles to authenticated;
+
+grant update (category, id, min_experience_level, required_skills, role_type, slots_total) on outreach_roles to authenticated;
+
+revoke all on vetted_sources from anon, authenticated;
+
+grant references, select, trigger, truncate on vetted_sources to authenticated;
+
+-- Who may call which function
+revoke execute on function application_role_is_clinical(p_outreach_id uuid, p_role_id uuid) from public, anon, authenticated;
+
+grant execute on function application_role_is_clinical(p_outreach_id uuid, p_role_id uuid) to authenticated;
+
+grant execute on function application_role_is_clinical(p_outreach_id uuid, p_role_id uuid) to anon;
+
+revoke execute on function apply_to_outreach(p_outreach_id uuid, p_type text, p_motivation text, p_outreach_role_id uuid, p_day_ids uuid[]) from public, anon, authenticated;
+
+grant execute on function apply_to_outreach(p_outreach_id uuid, p_type text, p_motivation text, p_outreach_role_id uuid, p_day_ids uuid[]) to authenticated;
+
+grant execute on function apply_to_outreach(p_outreach_id uuid, p_type text, p_motivation text, p_outreach_role_id uuid, p_day_ids uuid[]) to anon;
+
+revoke execute on function assert_day_belongs_to_outreach() from public, anon, authenticated;
+
+grant execute on function assert_day_belongs_to_outreach() to authenticated;
+
+grant execute on function assert_day_belongs_to_outreach() to anon;
+
+revoke execute on function assert_role_belongs_to_outreach() from public, anon, authenticated;
+
+grant execute on function assert_role_belongs_to_outreach() to authenticated;
+
+grant execute on function assert_role_belongs_to_outreach() to anon;
+
+revoke execute on function clear_withdrawn_application_days(p_application_id uuid) from public, anon, authenticated;
+
+grant execute on function clear_withdrawn_application_days(p_application_id uuid) to authenticated;
+
+revoke execute on function count_recent_late_releases(p_volunteer_id uuid, p_window_days integer) from public, anon, authenticated;
+
+grant execute on function count_recent_late_releases(p_volunteer_id uuid, p_window_days integer) to authenticated;
+
+grant execute on function count_recent_late_releases(p_volunteer_id uuid, p_window_days integer) to anon;
+
+revoke execute on function create_default_outreach_day() from public, anon, authenticated;
+
+grant execute on function create_default_outreach_day() to authenticated;
+
+grant execute on function create_default_outreach_day() to anon;
+
+revoke execute on function enforce_outreach_image_cap() from public, anon, authenticated;
+
+grant execute on function enforce_outreach_image_cap() to authenticated;
+
+grant execute on function enforce_outreach_image_cap() to anon;
+
+revoke execute on function outreaches_needing_resolution() from public, anon, authenticated;
+
+revoke execute on function refuse_committed_day_delete() from public, anon, authenticated;
+
+grant execute on function refuse_committed_day_delete() to authenticated;
+
+grant execute on function refuse_committed_day_delete() to anon;
+
+revoke execute on function refuse_delete_of_used_outreach() from public, anon, authenticated;
+
+grant execute on function refuse_delete_of_used_outreach() to authenticated;
+
+grant execute on function refuse_delete_of_used_outreach() to anon;
+
+revoke execute on function refuse_uncancelling_outreach() from public, anon, authenticated;
+
+grant execute on function refuse_uncancelling_outreach() to authenticated;
+
+grant execute on function refuse_uncancelling_outreach() to anon;
+
+revoke execute on function resolve_unsuccessful_applications(p_outreach_id uuid) from public, anon, authenticated;
+
+revoke execute on function save_outreach(p_outreach_id uuid, p_title text, p_description text, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_region text, p_district text, p_location_name text, p_required_skills text[], p_required_category text, p_role_type outreach_role_type, p_slots_total integer, p_flyer_url text, p_roles jsonb, p_days date[]) from public, anon, authenticated;
+
+grant execute on function save_outreach(p_outreach_id uuid, p_title text, p_description text, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_region text, p_district text, p_location_name text, p_required_skills text[], p_required_category text, p_role_type outreach_role_type, p_slots_total integer, p_flyer_url text, p_roles jsonb, p_days date[]) to authenticated;
+
+grant execute on function save_outreach(p_outreach_id uuid, p_title text, p_description text, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_region text, p_district text, p_location_name text, p_required_skills text[], p_required_category text, p_role_type outreach_role_type, p_slots_total integer, p_flyer_url text, p_roles jsonb, p_days date[]) to anon;
+
+revoke execute on function stamp_application_day_release() from public, anon, authenticated;
+
+grant execute on function stamp_application_day_release() to authenticated;
+
+grant execute on function stamp_application_day_release() to anon;
+
+revoke execute on function sync_outreach_first_day() from public, anon, authenticated;
+
+grant execute on function sync_outreach_first_day() to authenticated;
+
+grant execute on function sync_outreach_first_day() to anon;
+
+revoke execute on function sync_outreach_role_type() from public, anon, authenticated;
+
+grant execute on function sync_outreach_role_type() to authenticated;
+
+grant execute on function sync_outreach_role_type() to anon;
+
+revoke execute on function sync_outreach_totals_from_roles() from public, anon, authenticated;
+
+grant execute on function sync_outreach_totals_from_roles() to authenticated;
+
+grant execute on function sync_outreach_totals_from_roles() to anon;
+
+revoke execute on function sync_role_slots_filled() from public, anon, authenticated;
+
+grant execute on function sync_role_slots_filled() to authenticated;
+
+grant execute on function sync_role_slots_filled() to anon;
+
+revoke execute on function sync_single_day_from_outreach() from public, anon, authenticated;
+
+grant execute on function sync_single_day_from_outreach() to authenticated;
+
+grant execute on function sync_single_day_from_outreach() to anon;
+
+revoke execute on function vscore_day_ratio(p_volunteer_id uuid, p_outreach_id uuid) from public, anon, authenticated;
+
+grant execute on function vscore_day_ratio(p_volunteer_id uuid, p_outreach_id uuid) to authenticated;
+
+grant execute on function vscore_day_ratio(p_volunteer_id uuid, p_outreach_id uuid) to anon;
+
+revoke execute on function vscore_event_outcome(p_attended boolean, p_reliability integer, p_clinical integer) from public, anon, authenticated;
+
+grant execute on function vscore_event_outcome(p_attended boolean, p_reliability integer, p_clinical integer) to authenticated;
+
+grant execute on function vscore_event_outcome(p_attended boolean, p_reliability integer, p_clinical integer) to anon;
+
+revoke execute on function vscore_replay() from public, anon, authenticated;
+
+grant execute on function vscore_replay() to authenticated;
+
+grant execute on function vscore_replay() to anon;
+
