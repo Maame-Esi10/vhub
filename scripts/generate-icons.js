@@ -229,7 +229,11 @@ function flatten(size, fill, [r, g, b]) {
  *        getLogoSize() and expects the box it asks for to be mostly mark.
  *  0.54  launcher icon — iOS and most launchers round the corners off, so the
  *        mark needs real margin or it gets clipped.
- *  0.66  favicon — a 96px tab icon needs the mark bigger to stay recognisable.
+ *  0.94  favicon, on TRANSPARENCY — changed 2026-09-24 from 0.66 on white.
+ *        A browser draws a tab icon at 16 to 32px on its own tab-bar colour,
+ *        so a white square read as "the logo in a box" on every dark tab bar,
+ *        and 0.66 wasted a third of the few pixels there are. The mark is
+ *        effectively circular (see above), so 0.94 keeps it clear of the edge.
  *  0.55  Android adaptive icon — RAISED FROM 0.42 on 2026-09-23. Android
  *        guarantees the centre 66/108 (0.611) of an adaptive icon is visible
  *        under every launcher mask. Given the circularity above, the largest
@@ -248,7 +252,7 @@ function flatten(size, fill, [r, g, b]) {
 const OUTPUTS = [
   ['logo.png', build(512, 0.86, TRANSPARENT)],
   ['icon.png', build(1024, 0.54, WHITE)],
-  ['favicon.png', build(96, 0.66, WHITE)],
+  ['favicon.png', build(96, 0.94, TRANSPARENT)],
   ['android-icon-foreground.png', build(1024, 0.55, TRANSPARENT)],
   // Must stay in step with android.adaptiveIcon.backgroundColor in app.json.
   ['android-icon-background.png', solid(1024, WHITE)],
