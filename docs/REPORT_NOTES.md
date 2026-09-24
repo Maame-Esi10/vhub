@@ -7035,3 +7035,18 @@ fragment, which browsers never send to a server, so no crawler can see them.
 **Limitation:** the download button points at an EAS build link, which is not
 permanent. The APK needs a stable home (a GitHub release or a shared Drive
 file) before the page is shared widely.
+
+### The website, rebuilt (2026-09-24, same day)
+
+The first landing page was one column of identical boxes with no navigation,
+and the owner judged it too basic. It is now an eight-page site under
+`api/src/app/(site)/`: a sticky header with a phone menu that works without
+JavaScript, a home page with drawn illustrations of the real app (the feed
+card and its match pill, the match breakdown, the V-Score track and knob, the
+check-in code, the ranked roster), pages for volunteers, organisations,
+about, FAQ and download, and the privacy policy and terms imported from
+`constants/policy.ts` so the site and the app cannot disagree. The
+illustrations are HTML rather than screenshots so they stay sharp and cannot
+go stale against a changed screen. Inter is served through next/font, which
+ships with Next (no new dependency) and serves the font from this deployment.
+Verified by a production build and by screenshots at 390px and 1366px.
