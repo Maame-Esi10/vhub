@@ -39,6 +39,7 @@ import {
   useApplicationDays,
   useCancelApplication,
   useCreateApplication,
+  useFeedMatchScore,
   useMyApplicationForOutreach,
   useMyLateReleaseCount,
   useOutreach,
@@ -76,6 +77,7 @@ export default function OutreachDetail() {
   const volunteerId = user?.id;
 
   const outreachQuery = useOutreach(outreachId);
+  const feedMatchScore = useFeedMatchScore(outreachId);
   const myApplicationQuery = useMyApplicationForOutreach(volunteerId, outreachId);
   const createApplication = useCreateApplication();
   const cancelApplication = useCancelApplication();
@@ -342,7 +344,10 @@ export default function OutreachDetail() {
       <ScrollView contentContainerStyle={styles.content}>
         <FlyerBackground uri={outreach.flyer_url} style={styles.hero}>
           <View style={styles.heroContent}>
-            <MatchScoreBadge onDark />
+            {/* Only when the feed actually ranked it: from search or a
+                notification there is no score, and "NOT RANKED YET" would
+                report an outage that is not happening. */}
+            {feedMatchScore !== null ? <MatchScoreBadge onDark score={feedMatchScore} /> : null}
             <Text style={styles.heroOrg} numberOfLines={1}>
               {organisation?.org_name?.toUpperCase() ?? 'ORGANISATION'}
             </Text>
@@ -823,6 +828,7 @@ export default function OutreachDetail() {
       <FullApplicationSheet
         visible={fullFormVisible}
         outreachTitle={outreach.title}
+        matchScore={feedMatchScore}
         matchingSkills={matchingSkills}
         missingSkills={missingSkills}
         isPending={createApplication.isPending}

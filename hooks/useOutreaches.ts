@@ -325,6 +325,35 @@ export function useRankedFeed(filters: FeedFilters, options?: { enabled?: boolea
   });
 }
 
+/**
+ * The volunteer's match score for one outreach, READ FROM THE RANKED FEED
+ * ALREADY IN CACHE, or null when no feed in cache has ranked it.
+ *
+ * The detail screen and the Full Application sheet both drew a bare
+ * `MatchScoreBadge` with no score, a leftover from before matching went live,
+ * so every outreach read "NOT RANKED YET" even when the feed had just shown
+ * the volunteer its percentage. The score the volunteer tapped on is the one
+ * to show, so it is looked up rather than recomputed: `/api/match` has no
+ * volunteer-side "score this one outreach" mode short of applying, and a
+ * second number disagreeing with the feed card would be worse than none.
+ *
+ * Not reactive, deliberately: the feed is what navigated here, so its cache
+ * is already filled; arriving from search or a notification finds nothing
+ * and the caller shows no pill rather than a false "not ranked".
+ */
+export function useFeedMatchScore(outreachId: string | undefined): number | null {
+  const queryClient = useQueryClient();
+  if (!outreachId) return null;
+  const feeds = queryClient.getQueriesData<RankedFeed>({
+    queryKey: [...outreachKeys.all, 'ranked-feed'],
+  });
+  for (const [, feed] of feeds) {
+    const item = feed?.items.find((candidate) => candidate.outreach.id === outreachId);
+    if (item && typeof item.matchScore === 'number') return item.matchScore;
+  }
+  return null;
+}
+
 /** Five minutes: long enough that scrolling and tab-switching never re-rank, short enough that a newly published outreach shows up quickly. */
 const RANKED_FEED_STALE_TIME_MS = 5 * 60 * 1000;
 

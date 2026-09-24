@@ -6971,3 +6971,50 @@ a Postgres enum, and Postgres cannot drop one; rows written by the test push
 also still exist in the database and on the owner's phone. Its entry in
 `lib/notificationPresentation.ts` stays so those rows keep rendering as
 themselves instead of falling back to a generic card.
+
+## Found on the first standalone APK (2026-09-24)
+
+### "Your application was refused": every in-app application has been failing
+
+`apply_to_outreach()` (20260818) runs with the volunteer's own privileges and
+clears the committed days with a DELETE before writing new ones. On 2026-08-21
+`20260821_per_day_release.sql` revoked DELETE on `application_days`, correctly:
+a day commitment is evidence the V-Score is derived from, and must be released,
+never erased. Postgres checks that privilege whenever the statement runs, even
+when no row would match, so from that day every application made through the
+app failed with 42501, which the app words as "refused". It went unseen,
+probably because testing since then used the seed script, which inserts as the
+database owner.
+
+The proposed fix (`supabase/migrations/20260924_apply_without_delete_privilege.sql`,
+awaiting approval because it changes the schema) skips the delete on a first
+application, which has nothing to clear, and routes the re-application case
+through one narrow definer function that accepts only the caller's own
+withdrawn application with no attendance recorded. Rejected alternatives:
+granting DELETE back reopens the hole 20260821 closed; making
+`apply_to_outreach` a definer function would bypass `applications_insert_own`,
+which is the verification gate itself.
+
+**Known drift, recorded rather than fixed here:** `supabase/schema.sql` contains
+none of the multi-day objects (`outreach_days`, `application_days`,
+`apply_to_outreach`), so it no longer describes the whole database.
+
+### The match pill said "NOT RANKED YET" on every outreach page
+
+The outreach detail hero and the Full Application sheet drew a bare
+`MatchScoreBadge` left over from before matching went live, under copy saying
+ranking would run "when the matching engine goes live". Both now show the
+score the ranked feed already gave that outreach (`useFeedMatchScore`, read
+from the feed's cache rather than recomputed, so the two numbers cannot
+disagree). Reached without a feed score (from search or a notification) the
+pill is left out rather than claiming an outage.
+
+### `/api/keepalive`, for the uptime monitor
+
+Supabase's free tier pauses a project it judges idle, and it judges by what
+reaches the database. No unauthenticated route touched the database, so a
+monitor would have had to ping a static page and report "up" while the project
+slept. The route runs one HEAD count and returns 502 if the database does not
+answer, so the monitor reports the project down rather than up. The nightly
+cron already queries the database once a day; the monitor is a second
+safeguard and an outage alarm, not the only thing keeping the project awake.

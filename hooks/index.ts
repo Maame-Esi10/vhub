@@ -93,6 +93,7 @@ export {
   useOutreach,
   useOpenOutreaches,
   useRankedFeed,
+  useFeedMatchScore,
   useSearchOutreaches,
   MIN_SEARCH_LENGTH,
   usePublicOrganisationOutreaches,

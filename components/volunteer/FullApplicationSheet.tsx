@@ -22,6 +22,8 @@ export const MOTIVATION_LIMIT = 300;
 export interface FullApplicationSheetProps {
   visible: boolean;
   outreachTitle: string;
+  /** The score the feed showed for this outreach, or null when it was reached some other way. */
+  matchScore: number | null;
   /** The volunteer's own skills that the outreach asks for. Read-only. */
   matchingSkills: string[];
   /** Required skills the volunteer does not have — shown so the gap is honest. */
@@ -37,8 +39,10 @@ export interface FullApplicationSheetProps {
  *
  * Two deviations from that mockup, both because the underlying data doesn't
  * exist yet:
- *  - "92% MATCH / Clinical Qualification Match" uses the shared placeholder
- *    MatchScoreBadge — nothing scores an application before Phase 3.
+ *  - "92% MATCH" is the score the ranked feed gave this outreach, and is
+ *    left out when the sheet was reached without one. It used to be a bare
+ *    placeholder badge, so it read "NOT RANKED YET" long after matching went
+ *    live, above copy promising ranking "when the matching engine goes live".
  *  - The skill chips are read-only rather than an editable endorsement
  *    picker with "+ ADD". They are derived from the volunteer's saved
  *    skill_tags against the outreach's required_skills; a per-application
@@ -49,6 +53,7 @@ export interface FullApplicationSheetProps {
 export function FullApplicationSheet({
   visible,
   outreachTitle,
+  matchScore,
   matchingSkills,
   missingSkills,
   isPending,
@@ -88,11 +93,12 @@ export function FullApplicationSheet({
 
             <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
               <Text style={styles.sectionLabel}>CANDIDATE ANALYSIS</Text>
-              <MatchScoreBadge />
+              {matchScore !== null ? <MatchScoreBadge score={matchScore} /> : null}
               <Text style={styles.analysisTitle}>Clinical Qualification Match</Text>
               <Text style={styles.analysisBody}>
-                Ranking runs when the matching engine goes live. Until then the organisation reviews
-                your application on your saved profile and credentials.
+                {matchScore !== null
+                  ? 'How closely your saved profile fits what this outreach asks for. The organisation sees it beside your V-Score and credentials.'
+                  : 'Your match score is worked out from your saved profile as soon as you submit. The organisation sees it beside your V-Score and credentials.'}
               </Text>
 
               <View style={styles.divider} />
