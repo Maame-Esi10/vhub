@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import favicon from "@/assets/favicon.png";
 import appIcon from "@/assets/icon.png";
 
@@ -15,7 +15,9 @@ import appIcon from "@/assets/icon.png";
  * dependency): the font files are fetched once at build time and served from
  * this deployment, so a visitor's phone never makes a request to Google.
  */
-const inter = Inter({ subsets: ["latin"], display: "swap" });
+const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-body" });
+/** Headings only: heavier and rounder than Inter, so a headline has a voice of its own. */
+const display = Plus_Jakarta_Sans({ subsets: ["latin"], display: "swap", weight: ["600", "700", "800"], variable: "--font-display" });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://vhub-mu.vercel.app"),
@@ -52,7 +54,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className} style={{ margin: 0 }}>
+      <body className={`${inter.className} ${inter.variable} ${display.variable}`} style={{ margin: 0 }}>
         {children}
       </body>
     </html>

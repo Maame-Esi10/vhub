@@ -13,8 +13,8 @@ export default function Page() {
   return (
     <>
       <PageHero eyebrow="Terms" title="Terms of use" lead="What VHub is, and what volunteers and organisations promise each other when they use it." />
-      <section className="vh-section">
-        <div className="vh-container vh-prose">
+      <section className="section">
+        <div className="container prose prose--legal">
           {TERMS_SECTIONS.map((section) => (
             <div key={section.heading}>
               <h2>{section.heading}</h2>

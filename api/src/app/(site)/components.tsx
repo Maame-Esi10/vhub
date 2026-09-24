@@ -1,35 +1,33 @@
 import logo from "@/assets/logo.png";
 import { APP_NAME } from "@/constants/brand";
+import { DownloadQr, EcgLine, PeopleStack } from "./illustrations";
 import { ANDROID_DOWNLOAD_URL, NAV_LINKS } from "./site";
 
 /*
  * Shared pieces of the VHub website.
  *
  * NO DESIGN EXISTS FOR THE SITE in design-refs/, so it speaks the app's own
- * visual language: coral #FF6B6B and navy #12172B from constants/theme.ts,
- * white rounded cards, Inter. The illustrations below are drawn in HTML from
- * the app's real components (the feed card and its match pill, the V-Score
- * card's coral-to-navy track and knob, the check-in QR) rather than being
- * screenshots, so they stay sharp at every size and cannot go stale against a
- * screen that has since changed shape.
+ * language (coral #FF6B6B, navy #12172B, the heart-and-V mark and its ECG
+ * line) at a louder volume: a website has to stop somebody scrolling, which
+ * the app never has to do.
  *
- * Plain <a> rather than next/link throughout: the pages are static and small,
- * and a full navigation is what closes the mobile menu (a <details> element,
- * which needs no JavaScript at all).
+ * Plain <a> rather than next/link: the pages are static and small, and a full
+ * navigation is what closes the phone menu (a <details> element, which needs
+ * no JavaScript).
  */
 
 export function Logo({ inverted = false }: { inverted?: boolean }) {
   return (
-    <a href="/" className={`vh-logo${inverted ? " vh-logo--inverted" : ""}`} aria-label={`${APP_NAME} home`}>
-      <img src={logo.src} alt="" width={34} height={34} />
+    <a href="/" className={`logo${inverted ? " logo--inverted" : ""}`} aria-label={`${APP_NAME} home`}>
+      <img src={logo.src} alt="" width={36} height={36} />
       <span>{APP_NAME}</span>
     </a>
   );
 }
 
-export function DownloadButton({ label = "Download for Android", variant = "primary" }: { label?: string; variant?: "primary" | "light" }) {
+export function DownloadButton({ label = "Download for Android", variant = "primary" }: { label?: string; variant?: "primary" | "light" | "dark" }) {
   return (
-    <a className={`vh-btn vh-btn--${variant}`} href={ANDROID_DOWNLOAD_URL}>
+    <a className={`btn btn--${variant}`} href={ANDROID_DOWNLOAD_URL}>
       <AndroidIcon />
       {label}
     </a>
@@ -38,32 +36,33 @@ export function DownloadButton({ label = "Download for Android", variant = "prim
 
 export function SiteHeader() {
   return (
-    <header className="vh-header">
-      <div className="vh-header__inner">
+    <header className="header">
+      <div className="header__inner">
         <Logo />
-        <nav className="vh-nav" aria-label="Main">
+        <nav className="nav" aria-label="Main">
           {NAV_LINKS.map((link) => (
             <a key={link.href} href={link.href}>
               {link.label}
             </a>
           ))}
         </nav>
-        <a className="vh-btn vh-btn--primary vh-btn--small vh-header__cta" href="/download">
+        <a className="btn btn--primary btn--small header__cta" href="/download">
           Get the app
         </a>
-        <details className="vh-menu">
+        <details className="menu">
           <summary aria-label="Open menu">
             <span />
             <span />
             <span />
           </summary>
-          <nav className="vh-menu__panel" aria-label="Mobile">
+          <nav className="menu__panel" aria-label="Mobile">
             {NAV_LINKS.map((link) => (
               <a key={link.href} href={link.href}>
                 {link.label}
+                <span aria-hidden="true">→</span>
               </a>
             ))}
-            <a className="vh-btn vh-btn--primary" href="/download">
+            <a className="btn btn--primary" href="/download">
               Get the app
             </a>
           </nav>
@@ -76,13 +75,15 @@ export function SiteHeader() {
 export function SiteFooter() {
   const year = new Date().getFullYear();
   return (
-    <footer className="vh-footer">
-      <div className="vh-footer__inner">
-        <div className="vh-footer__brand">
+    <footer className="footer">
+      <EcgLine className="footer__ecg" />
+      <div className="footer__inner">
+        <div className="footer__brand">
           <Logo inverted />
           <p>Connecting health volunteers with medical outreach across Ghana.</p>
+          <DownloadButton variant="light" label="Get the app" />
         </div>
-        <div className="vh-footer__cols">
+        <div className="footer__cols">
           <div>
             <h4>Product</h4>
             <a href="/features">For volunteers</a>
@@ -101,42 +102,81 @@ export function SiteFooter() {
           </div>
         </div>
       </div>
-      <div className="vh-footer__base">
+      <div className="footer__base">
         <span>
           © {year} {APP_NAME}
         </span>
         <span>
-          Built with <span className="vh-heart" aria-label="love">♥</span> by Melissa
+          Built with <span className="heart" aria-label="love">♥</span> by Melissa
         </span>
       </div>
     </footer>
   );
 }
 
-/** A page's opening band, for every page but the home page. */
-export function PageHero({ eyebrow, title, lead }: { eyebrow: string; title: string; lead: string }) {
+/** Every page but the home page opens with this band. */
+export function PageHero({
+  eyebrow,
+  title,
+  lead,
+  visual,
+}: {
+  eyebrow: string;
+  title: React.ReactNode;
+  lead: string;
+  visual?: React.ReactNode;
+}) {
   return (
-    <section className="vh-pagehero">
-      <div className="vh-container">
-        <p className="vh-eyebrow">{eyebrow}</p>
-        <h1>{title}</h1>
-        <p className="vh-lead">{lead}</p>
+    <section className="pagehero">
+      <div className="aurora" aria-hidden="true">
+        <i />
+        <i />
+        <i />
       </div>
+      <div className="container pagehero__grid">
+        <div className="pagehero__copy">
+          <p className="eyebrow eyebrow--light">{eyebrow}</p>
+          <h1>{title}</h1>
+          <p className="lead lead--light">{lead}</p>
+        </div>
+        {visual ? <div className="pagehero__visual">{visual}</div> : null}
+      </div>
+      <EcgLine className="pagehero__ecg" />
     </section>
   );
 }
 
+export function SectionHeading({ eyebrow, title, lead, center }: { eyebrow: string; title: React.ReactNode; lead?: string; center?: boolean }) {
+  return (
+    <div className={`heading reveal${center ? " heading--center" : ""}`}>
+      <p className="eyebrow">{eyebrow}</p>
+      <h2>{title}</h2>
+      {lead ? <p className="lead">{lead}</p> : null}
+    </div>
+  );
+}
+
+/** The closing band on every page: the download, and a code to scan from a computer. */
 export function CtaBand({ title, body }: { title: string; body: string }) {
   return (
-    <section className="vh-section">
-      <div className="vh-container">
-        <div className="vh-cta">
-          <div>
+    <section className="section">
+      <div className="container">
+        <div className="cta reveal">
+          <div className="cta__glow" aria-hidden="true" />
+          <div className="cta__copy">
+            <PeopleStack size={40} />
             <h2>{title}</h2>
             <p>{body}</p>
+            <div className="actions">
+              <DownloadButton variant="light" />
+              <a className="btn btn--ghost" href="/faq">
+                Questions? Read the FAQ
+              </a>
+            </div>
           </div>
-          <div className="vh-cta__actions">
-            <DownloadButton variant="light" />
+          <div className="cta__qr">
+            <DownloadQr size={150} />
+            <p>On a computer? Scan with your phone.</p>
           </div>
         </div>
       </div>
@@ -144,153 +184,7 @@ export function CtaBand({ title, body }: { title: string; body: string }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Illustrations, drawn from the app's real components. The sample outreaches
-// are illustrative and say so in their alt text.
-// ---------------------------------------------------------------------------
-
-const SAMPLE_FEED = [
-  { org: "COMMUNITY HEALTH NETWORK", title: "Free eye screening", place: "Kumasi, Ashanti", date: "Sat 11 Oct", score: 94, tone: "coral" },
-  { org: "STUDENTS FOR HEALTH", title: "Blood pressure & diabetes check", place: "Madina, Greater Accra", date: "Sat 18 Oct", score: 87, tone: "navy" },
-  { org: "HOPE MEDICAL OUTREACH", title: "Maternal health day", place: "Tamale, Northern", date: "Sun 26 Oct", score: 72, tone: "sand" },
-];
-
-export function PhoneFeed() {
-  return (
-    <div className="vh-phone" role="img" aria-label="The VHub feed on a phone, showing sample outreaches ranked by match score">
-      <div className="vh-phone__notch" />
-      <div className="vh-phone__screen">
-        <div className="vh-phone__top">
-          <div>
-            <small>Good morning</small>
-            <strong>Outreaches for you</strong>
-          </div>
-          <span className="vh-phone__bell" />
-        </div>
-        <div className="vh-phone__chips">
-          <span className="is-on">All</span>
-          <span>Clinical</span>
-          <span>Support</span>
-        </div>
-        {SAMPLE_FEED.map((item) => (
-          <div key={item.title} className="vh-feedcard">
-            <div className={`vh-feedcard__banner vh-feedcard__banner--${item.tone}`}>
-              <span className="vh-pill">
-                <i />
-                {item.score}% MATCH
-              </span>
-            </div>
-            <div className="vh-feedcard__body">
-              <small>{item.org}</small>
-              <strong>{item.title}</strong>
-              <span>
-                {item.place} · {item.date}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function MatchIllustration() {
-  const rows = [
-    { label: "Skills", weight: 35, value: 1 },
-    { label: "Category", weight: 20, value: 1 },
-    { label: "Location", weight: 20, value: 0.5 },
-    { label: "Availability", weight: 15, value: 1 },
-    { label: "Experience", weight: 10, value: 0.6 },
-  ];
-  const total = Math.round(rows.reduce((sum, row) => sum + row.weight * row.value, 0));
-  return (
-    <div className="vh-illo" role="img" aria-label={`An example match score of ${total} percent, broken into its five parts`}>
-      <div className="vh-illo__head">
-        <span>Why this match</span>
-        <strong>{total}%</strong>
-      </div>
-      {rows.map((row) => (
-        <div key={row.label} className="vh-bar">
-          <span>{row.label}</span>
-          <div className="vh-bar__track">
-            <div className="vh-bar__fill" style={{ width: `${row.value * 100}%` }} />
-          </div>
-          <em>{Math.round(row.weight * row.value)}</em>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function VScoreIllustration() {
-  const score = 82;
-  return (
-    <div className="vh-illo" role="img" aria-label={`An example V-Score of ${score}, in the Trusted band`}>
-      <div className="vh-illo__head">
-        <span>Your V-Score</span>
-        <strong>{score}</strong>
-      </div>
-      <div className="vh-vscore__track">
-        <div className="vh-vscore__knob" style={{ left: `calc(${score}% - 11px)` }} />
-      </div>
-      <div className="vh-vscore__bands">
-        <span>At Risk</span>
-        <span>Developing</span>
-        <span>Active</span>
-        <span className="is-on">Trusted</span>
-        <span>Elite</span>
-      </div>
-    </div>
-  );
-}
-
-export function CheckinIllustration() {
-  // A fixed pattern that reads as a QR code; it encodes nothing.
-  const cells = "1110111010110101101011101100101011010111011101001011101101011010111011010";
-  return (
-    <div className="vh-illo vh-illo--center" role="img" aria-label="A check-in QR code for an outreach day">
-      <div className="vh-qr">
-        {cells.split("").slice(0, 49).map((cell, index) => (
-          <i key={index} className={cell === "1" ? "is-on" : undefined} />
-        ))}
-      </div>
-      <p className="vh-illo__caption">Scan at the venue to check in for today</p>
-    </div>
-  );
-}
-
-export function RosterIllustration() {
-  const people = [
-    { name: "Nurse · Experienced", score: 96, v: 88, state: "Accepted" },
-    { name: "Doctor · Intermediate", score: 91, v: 79, state: "Accepted" },
-    { name: "Student · Beginner", score: 84, v: 70, state: "Accepted" },
-    { name: "Midwife · Experienced", score: 80, v: 74, state: "Waitlisted" },
-  ];
-  return (
-    <div className="vh-illo" role="img" aria-label="An organisation's applicants, ranked, with the top three accepted and the next waitlisted">
-      <div className="vh-illo__head">
-        <span>Applicants · 3 places</span>
-        <strong className="vh-illo__action">Accept top 3</strong>
-      </div>
-      {people.map((person) => (
-        <div key={person.name} className="vh-roster">
-          <span className="vh-roster__avatar" />
-          <div>
-            <strong>{person.name}</strong>
-            <small>
-              {person.score}% match · V-Score {person.v}
-            </small>
-          </div>
-          <em className={person.state === "Accepted" ? "is-ok" : "is-wait"}>{person.state}</em>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Icons: inline SVG, so the site needs no icon library.
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------- icons
 
 type IconProps = { size?: number };
 
@@ -372,15 +266,29 @@ export const Icons = {
       <path d="m5 12 5 5 9-10" />
     </Svg>
   ),
+  search: (p: IconProps) => (
+    <Svg {...p}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </Svg>
+  ),
+  qr: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <path d="M14 14h3v3M21 14v7h-4M14 18v3" />
+    </Svg>
+  ),
 };
 
 export type IconName = keyof typeof Icons;
 
-export function Feature({ icon, title, body }: { icon: IconName; title: string; body: string }) {
+export function Feature({ icon, title, body, tone = "coral", delay = 0 }: { icon: IconName; title: string; body: string; tone?: "coral" | "navy" | "teal" | "violet" | "amber"; delay?: number }) {
   const Icon = Icons[icon];
   return (
-    <article className="vh-feature">
-      <span className="vh-feature__icon">
+    <article className={`feature feature--${tone} reveal`} style={{ transitionDelay: `${delay}s` }}>
+      <span className="feature__icon">
         <Icon />
       </span>
       <h3>{title}</h3>

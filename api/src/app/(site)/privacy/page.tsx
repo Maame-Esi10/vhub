@@ -13,8 +13,8 @@ export default function Page() {
   return (
     <>
       <PageHero eyebrow={`Last updated ${PRIVACY_UPDATED}`} title="Privacy policy" lead="What VHub knows about you, what it does with it, and what you can ask for. In plain language." />
-      <section className="vh-section">
-        <div className="vh-container vh-prose">
+      <section className="section">
+        <div className="container prose prose--legal">
           {PRIVACY_SECTIONS.map((section) => (
             <div key={section.heading}>
               <h2>{section.heading}</h2>

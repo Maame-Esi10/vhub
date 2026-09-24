@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CtaBand, PageHero } from "../components";
+import { FaqExplorer, type FaqGroup } from "../motion";
 
 export const metadata: Metadata = {
   title: "FAQ",
@@ -8,11 +9,12 @@ export const metadata: Metadata = {
 
 /**
  * EVERY ANSWER MUST BE TRUE OF THE CODE. The numbers here (70, the bands, the
- * five matching factors, the 24-hour line) are the app's own; if one changes,
- * this page is wrong until it is updated.
+ * five matching factors, the 24-hour line, 2 and 8 points) are the app's own;
+ * if one changes, this page is wrong until it is updated.
  */
-const GROUPS: { title: string; items: { q: string; a: string }[] }[] = [
+const GROUPS: FaqGroup[] = [
   {
+    id: "getting-started",
     title: "Getting started",
     items: [
       { q: "Is VHub free?", a: "Yes. VHub is free for volunteers and for organisations." },
@@ -23,6 +25,7 @@ const GROUPS: { title: string; items: { q: string; a: string }[] }[] = [
     ],
   },
   {
+    id: "taking-part",
     title: "Applying and taking part",
     items: [
       { q: "What is the difference between clinical and support roles?", a: "Clinical roles are hands-on care, such as blood pressure checks, screening or examinations. Support roles make the event run: registration, crowd flow, health talks, data entry. Clinical roles need a verified credential; support roles never do." },
@@ -33,6 +36,7 @@ const GROUPS: { title: string; items: { q: string; a: string }[] }[] = [
     ],
   },
   {
+    id: "matching",
     title: "Matching and your V-Score",
     items: [
       { q: "How is my match score worked out?", a: "From five things: your skills (the biggest part), your category, your location, your availability on the outreach's days, and your experience. The app shows you the breakdown for each outreach." },
@@ -43,6 +47,7 @@ const GROUPS: { title: string; items: { q: string; a: string }[] }[] = [
     ],
   },
   {
+    id: "organisations",
     title: "For organisations",
     items: [
       { q: "Why do organisations need to be verified?", a: "Volunteers give up their time for the events they see on VHub, so every organisation is checked before it can publish an outreach. You can prepare drafts while your verification is reviewed." },
@@ -51,6 +56,7 @@ const GROUPS: { title: string; items: { q: string; a: string }[] }[] = [
     ],
   },
   {
+    id: "privacy",
     title: "Privacy",
     items: [
       { q: "Who can see my phone number and email?", a: "No other user, until you apply to an outreach. Then that organisation can see them, because it needs to be able to reach you." },
@@ -63,20 +69,18 @@ const GROUPS: { title: string; items: { q: string; a: string }[] }[] = [
 export default function FaqPage() {
   return (
     <>
-      <PageHero eyebrow="FAQ" title="Questions, answered" lead="Everything you need to know about volunteering and organising on VHub." />
-      <section className="vh-section">
-        <div className="vh-container vh-faq">
-          {GROUPS.map((group) => (
-            <div key={group.title} className="vh-faq__group">
-              <h2>{group.title}</h2>
-              {group.items.map((item) => (
-                <details key={item.q} className="vh-faq__item">
-                  <summary>{item.q}</summary>
-                  <p>{item.a}</p>
-                </details>
-              ))}
-            </div>
-          ))}
+      <PageHero
+        eyebrow="FAQ"
+        title={
+          <>
+            Questions, <span className="shimmer">answered</span>
+          </>
+        }
+        lead="Everything you need to know about volunteering and organising on VHub. Search, or pick a topic."
+      />
+      <section className="section">
+        <div className="container">
+          <FaqExplorer groups={GROUPS} />
         </div>
       </section>
       <CtaBand title="Still curious?" body="The quickest way to see VHub is to try it." />

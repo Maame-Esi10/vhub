@@ -7110,3 +7110,26 @@ is not a project dependency.
 **Limitation:** the reference is the migration history, not a dump of the live
 database, so anything ever changed by hand in the Supabase dashboard is not
 reflected. Nothing suggests there is any.
+
+### The website revamp (2026-09-24, same day)
+
+The owner judged the rebuilt site too static: no movement, no illustration,
+gradient circles where people should be, and a plain FAQ. It is meant to
+attract volunteers and organisations, so it now has an animated hero (the
+feed arriving card by card, a confirmation dropping in, the logo's ECG line
+drawing itself), drawn people in a range of Ghanaian skin tones who recur
+across the site, a marquee of the app's real skills, count-up figures read
+from the app's constants, animated versions of the match breakdown, the
+V-Score knob, check-in and the applicant roster, a map of Ghana drawn as its
+sixteen regional capitals joined by the app's own region-neighbour table, and
+a FAQ with live search and animated answers.
+
+Three rules kept it honest and robust. Every figure is read from the app's
+constants rather than typed. Motion never carries content: it stops for anyone
+whose device asks for reduced motion, and nothing is hidden before it animates
+unless JavaScript has already started. And no new dependency was added: the
+illustrations are hand-written SVG, the heading font comes through next/font,
+and the scannable QR code was generated once with the `qrcode` package the app
+already carries. The Download button now points at the release APK on Google
+Drive through Drive's direct-download address, which skips the "too large to
+scan" page a 121 MB file otherwise shows.

@@ -8,14 +8,21 @@
 
 /**
  * Where every Download button points. THE ONE LINE TO CHANGE when a new
- * release APK is published.
+ * release APK is published: replace the id with the new Drive file's.
  *
- * An EAS build link is not a permanent home: it belongs to one build and is
- * not meant to be shared publicly. Until the release APK has a stable address
- * (a shared Drive file or a GitHub release), this is the latest build.
+ * The release APK (VHub-1.0.0.apk, 121 MB) lives on Google Drive, shared as
+ * "anyone with the link". This is Drive's DIRECT download address, not the
+ * share link: the share link opens Drive's preview page, and a file this size
+ * then shows "too large to scan for viruses" before it will download at all.
+ * `confirm=t` answers that page in advance, so the button starts the download.
+ * Checked 2026-09-24: it returns the file itself (application/octet-stream).
+ *
+ * If Google ever changes that behaviour, the fallback is
+ * https://drive.google.com/uc?export=download&id=<id>, which shows the warning
+ * page first; the Download page already tells people to tap Download anyway.
  */
 export const ANDROID_DOWNLOAD_URL =
-  "https://expo.dev/artifacts/eas/-7GdLBl8CjxWZhGOmTAvDRoBbbT2HGFt1py_vFTArao.apk";
+  "https://drive.usercontent.google.com/download?id=1icfnBSn41KuWiwdqox_oAoN2Qlu_gPAy&export=download&confirm=t";
 
 export const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -24,3 +31,7 @@ export const NAV_LINKS = [
   { href: "/about", label: "About" },
   { href: "/faq", label: "FAQ" },
 ] as const;
+
+/** The release on the Download page. Keep in step with app.json's version. */
+export const APP_VERSION = "1.0.0";
+export const APK_SIZE = "121 MB";
