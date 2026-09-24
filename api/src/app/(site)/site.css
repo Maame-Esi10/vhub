@@ -1934,9 +1934,18 @@ html {
 
 /* ------------------------------------------------------------------- FAQ */
 
+/* minmax(0, 1fr), not the default auto: the topic row below scrolls sideways
+   and is as wide as all its chips together, and an auto column grew to fit
+   it, pushing every question and its + icon off a phone's right edge. */
 .faq {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 32px;
+}
+
+.faq__side,
+.faq__list {
+  min-width: 0;
 }
 
 .faq__search {
@@ -2473,7 +2482,7 @@ html:not(.js) .faq__a {
   }
 
   .faq {
-    grid-template-columns: 300px 1fr;
+    grid-template-columns: 300px minmax(0, 1fr);
     gap: 64px;
   }
 
