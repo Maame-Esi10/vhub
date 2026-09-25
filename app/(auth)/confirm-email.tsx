@@ -51,7 +51,7 @@ export default function ConfirmEmail() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const logoSize = getLogoSize('small', width);
-  const { email: emailParam } = useLocalSearchParams<{ email?: string }>();
+  const { email: emailParam, role: roleParam } = useLocalSearchParams<{ email?: string; role?: string }>();
   const email = typeof emailParam === 'string' ? emailParam : '';
 
   const confirmSignUp = useConfirmSignUp();
@@ -77,11 +77,17 @@ export default function ConfirmEmail() {
           // To the ROOT, never a role home. The guard decides where this
           // person belongs - including a volunteer whose onboarding has not
           // started, who must land in the wizard rather than the tabs.
-          router.replace('/');
+          //
+          // The one exception is an organisation, whose onboarding IS
+          // verification (see app/(organisation)/verification.tsx). The guard
+          // leaves a user alone inside their own role group, so landing there
+          // directly is safe; `role` is only a hint from register, and a wrong
+          // one is corrected by the guard's own-group rule.
+          router.replace(roleParam === 'organisation' ? '/(organisation)/verification?welcome=1' : '/');
         },
       }
     );
-  }, [code, email, confirmSignUp, router]);
+  }, [code, email, roleParam, confirmSignUp, router]);
 
   const handleResend = useCallback(() => {
     setResent(false);

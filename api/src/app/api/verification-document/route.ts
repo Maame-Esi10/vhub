@@ -4,6 +4,7 @@ import { errorResponse, Errors } from "../../../server/httpErrors";
 import { enforceIpRateLimit } from "../../../server/rateLimit";
 import { getSupabaseAdmin } from "../../../server/supabaseAdmin";
 import { assetExists, destroyAsset, uploadTargetFor } from "../../../server/cloudinary";
+import { alertAdmins } from "../../../server/adminAlerts";
 
 export const runtime = "nodejs";
 
@@ -174,6 +175,18 @@ export async function POST(req: Request): Promise<Response> {
     if (existingId && existingId !== body.publicId) {
       await destroyAsset(existingId, resourceType, deliveryType);
     }
+
+    // Tell the admins there is something to read. Awaited so the function is
+    // not frozen mid-send; never throws, so the upload stays a success.
+    const { data: person } = await admin
+      .from("profiles")
+      .select("full_name")
+      .eq("id", caller.userId)
+      .maybeSingle();
+    await alertAdmins({
+      kind: "credential_document",
+      subjectName: (person?.full_name as string | undefined) ?? "A volunteer",
+    });
 
     return Response.json({ verificationStatus: "documents_pending" });
   } catch (err) {

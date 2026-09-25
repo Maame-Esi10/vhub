@@ -14,6 +14,7 @@ import { Button, OnboardingStepFooter, OnboardingStepHeader } from '@/components
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import type { VolunteerCategory } from '@/types/database';
 import { useOnboardingStore } from '@/stores/onboardingStore';
+import { hasSpecialtyStep, pruneSkills, pruneSpecialties } from '@/constants/skillEligibility';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -80,7 +81,15 @@ export default function OnboardingCategory() {
   function handleContinue() {
     if (!selected) return;
     setCategory(selected);
-    router.push('/(auth)/onboarding/specialties');
+    /*
+      A volunteer who comes back here and changes role loses whatever the new
+      role cannot claim. Pruned here, at the one place the role is set, so the
+      skills step never opens holding a skill it will not draw.
+    */
+    const store = useOnboardingStore.getState();
+    store.setSkillTags(pruneSkills(selected, store.skillTags));
+    store.setSpecialties(pruneSpecialties(selected, store.specialties));
+    router.push('/(auth)/onboarding/skills');
   }
 
   return (
@@ -88,14 +97,14 @@ export default function OnboardingCategory() {
       <ScrollView contentContainerStyle={styles.content}>
         <OnboardingStepHeader
           title="ONBOARDING"
-          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/skills'))}
+          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/welcome'))}
         />
 
         <Text style={styles.caption}>PROFESSIONAL BACKGROUND</Text>
         <Text style={styles.heading}>Tell us your background</Text>
         <Text style={styles.subtext}>
-          Select the role that best describes your professional expertise in the healthcare
-          industry.
+          Select the role you are qualified for today. It decides which skills you can list, and
+          VHub checks it against the document you upload to verify your identity.
         </Text>
 
         <View style={styles.cardList}>
@@ -132,7 +141,11 @@ export default function OnboardingCategory() {
           onPress={handleContinue}
           style={styles.continueButton}
         />
-        <OnboardingStepFooter step={2} total={5} section="Professional Background" />
+        <OnboardingStepFooter
+          step={1}
+          total={hasSpecialtyStep(selected) || !selected ? 5 : 4}
+          section="Professional Background"
+        />
       </ScrollView>
     </SafeAreaView>
   );

@@ -10,6 +10,7 @@ import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Button,
   ErrorAlert,
@@ -98,6 +99,24 @@ export default function OrganisationVerification() {
   // The floating tab bar is absolute and reserves no space, so the last
   // element needs this or it sits under the pill and cannot be tapped.
   const tabBarPadding = useTabBarContentPadding();
+  const router = useRouter();
+  /*
+    AN ORGANISATION'S ONBOARDING IS THIS SCREEN (owner, 2026-09-25:
+    "Organisations shouldn't have skills on their onboarding or the roles like
+    the volunteers... It is the identity verification part they need").
+
+    Skills, a professional role and weekly availability describe a PERSON who
+    turns up to work. None of it describes an organisation, and the volunteer
+    wizard was never shown to one. What an organisation must do before it is
+    useful is prove it is real, because an unverified organisation cannot
+    publish. Registration used to drop it on an empty dashboard with that
+    requirement one screen away under Profile; it now lands here, with a
+    welcome line and a way to postpone. `welcome=1` is set only by the two
+    signup paths (register and the email-code screen).
+  */
+  const { welcome } = useLocalSearchParams<{ welcome?: string }>();
+  const isWelcome = welcome === '1';
+  const backFallback = isWelcome ? '/(organisation)/dashboard' : '/(organisation)/profile';
   const profile = useAuthStore((state) => state.profile);
   const submissionQuery = useMyVerificationSubmission();
   const submit = useSubmitVerification();
@@ -206,6 +225,9 @@ export default function OrganisationVerification() {
           setDocuments([]);
           setAttempted(false);
           setToast('Submitted. VHub will review it and let you know.');
+          // First-run: the job of this screen is done, so carry on to the
+          // dashboard rather than leaving them on a form they have finished.
+          if (isWelcome) router.replace('/(organisation)/dashboard');
         },
       }
     );
@@ -214,7 +236,7 @@ export default function OrganisationVerification() {
   if (submissionQuery.isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Organisation Verification" fallback="/(organisation)/profile" />
+        <ScreenHeader title="Organisation Verification" fallback={backFallback} />
         <View style={styles.stateWrap}>
           <ListSkeleton rows={3} rowHeight={96} />
         </View>
@@ -225,7 +247,7 @@ export default function OrganisationVerification() {
   if (submissionQuery.isError) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Organisation Verification" fallback="/(organisation)/profile" />
+        <ScreenHeader title="Organisation Verification" fallback={backFallback} />
         <View style={styles.stateWrap}>
           <ErrorState
             message={
@@ -240,7 +262,7 @@ export default function OrganisationVerification() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Organisation Verification" fallback="/(organisation)/profile" />
+      <ScreenHeader title="Organisation Verification" fallback={backFallback} />
 
       {/*
         THE REASON FIELD WAS BEHIND THE KEYBOARD (owner-reported, 2026-09-22).
@@ -252,6 +274,25 @@ export default function OrganisationVerification() {
       */}
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_AVOID_BEHAVIOR}>
         <ScrollView contentContainerStyle={[styles.content, tabBarPadding]} showsVerticalScrollIndicator={false}>
+          {isWelcome && state === 'unverified' ? (
+            <View style={styles.welcomeCard}>
+              <Text style={styles.welcomeTitle}>Welcome to VHub</Text>
+              <Text style={styles.welcomeBody}>
+                One step left: verify your organisation. Volunteers only see outreaches from verified
+                organisations, so you can prepare drafts now but cannot publish until VHub approves
+                you. It usually takes a few minutes to fill in.
+              </Text>
+              <Button
+                title="Do This Later"
+                variant="outline"
+                onPress={() => router.replace('/(organisation)/dashboard')}
+                style={styles.welcomeLater}
+              />
+              <Text style={styles.welcomeHint}>
+                You can come back to it any time from Profile, Organisation Verification.
+              </Text>
+            </View>
+          ) : null}
           <View style={[styles.statusCard, { borderColor: presentation.tint }]}>
             <MaterialCommunityIcons name={presentation.icon} size={28} color={presentation.tint} />
             <View style={styles.statusText}>
@@ -501,6 +542,37 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.base },
   stateWrap: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  welcomeCard: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceSubtle,
+    marginTop: spacing.base,
+  },
+  welcomeTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 20,
+    color: colors.textPrimary,
+  },
+  welcomeBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textPrimary,
+    marginTop: spacing.sm,
+  },
+  welcomeLater: {
+    marginTop: spacing.lg,
+  },
+  welcomeHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
   statusCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',

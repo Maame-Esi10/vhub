@@ -13,6 +13,7 @@ import { Button, ErrorAlert, OnboardingStepFooter, OnboardingStepHeader } from '
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
+import { hasSpecialtyStep } from '@/constants/skillEligibility';
 import { useCompleteOnboarding } from '@/hooks';
 // Direct import, not the hooks barrel: this reaches expo-document-picker, a
 // NATIVE module, and the barrel is imported by essentially every screen.
@@ -63,6 +64,9 @@ export default function VerifyIdentity() {
   const user = useAuthStore((state) => state.user);
   const volunteerProfile = useAuthStore((state) => state.volunteerProfile);
   const onboarding = useOnboardingStore();
+  // The store is reset once the wizard saves, so fall back to the saved role
+  // for the step count rather than letting it jump while the screen closes.
+  const onboardingCategory = onboarding.category ?? volunteerProfile?.category ?? null;
   const completeOnboarding = useCompleteOnboarding();
 
   const [confirmed, setConfirmed] = useState(false);
@@ -329,7 +333,11 @@ export default function VerifyIdentity() {
           <Text style={styles.completeLaterText}>Skip for now</Text>
         </Pressable>
 
-        <OnboardingStepFooter step={5} total={5} section="Identity Assurance" />
+        <OnboardingStepFooter
+          step={hasSpecialtyStep(onboardingCategory) ? 5 : 4}
+          total={hasSpecialtyStep(onboardingCategory) ? 5 : 4}
+          section="Identity Assurance"
+        />
       </ScrollView>
     </SafeAreaView>
   );

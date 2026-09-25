@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
-import { resolveDispute } from '@/lib/api-client';
+import { announceDisputeFiled, resolveDispute } from '@/lib/api-client';
 import { adminActionKeys } from '@/hooks/useAdminActions';
 import type { Dispute, DisputeType } from '@/types/database';
 
@@ -77,7 +77,14 @@ export function useRaiseDispute() {
             : error.message || 'Could not raise this dispute.'
         );
       }
-      return data as Dispute;
+      /*
+        THE ADMINS ARE EMAILED (owner, 2026-09-25). Not awaited and its
+        failure swallowed: the dispute is filed the moment the insert
+        succeeds, and a missed email must never tell the volunteer it was not.
+      */
+      const filed = data as Dispute;
+      announceDisputeFiled(filed.id).catch(() => undefined);
+      return filed;
     },
     onSuccess: () => {
       if (userId) void queryClient.invalidateQueries({ queryKey: disputeKeys.mine(userId) });

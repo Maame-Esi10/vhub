@@ -140,11 +140,15 @@ export default function Register() {
         // finishing registration meant leaving the app, and everything that
         // happened out there was invisible to it. confirm-email.tsx takes the
         // six-digit code instead and never leaves VHub.
-        router.push({ pathname: '/(auth)/confirm-email', params: { email: email.trim() } });
+        router.push({ pathname: '/(auth)/confirm-email', params: { email: email.trim(), role } });
         return;
       }
 
-      router.replace(result.role === 'volunteer' ? '/(auth)/onboarding' : '/(organisation)/dashboard');
+      // An organisation's first stop is verification, not the dashboard:
+      // see the note at the top of app/(organisation)/verification.tsx.
+      router.replace(
+        result.role === 'volunteer' ? '/(auth)/onboarding' : '/(organisation)/verification?welcome=1'
+      );
     } catch {
       // Error surfaced via signUp.error below.
     }

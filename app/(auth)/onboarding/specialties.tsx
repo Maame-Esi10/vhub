@@ -7,11 +7,11 @@ import {
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, Input, OnboardingStepFooter, OnboardingStepHeader } from '@/components/ui';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
-import { MEDICAL_SPECIALTIES } from '@/constants/specialties';
+import { SPECIALTY_LIMIT, eligibleSpecialties } from '@/constants/skillEligibility';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 
 export default function OnboardingSpecialties() {
@@ -20,23 +20,37 @@ export default function OnboardingSpecialties() {
   const initialSpecialties = useOnboardingStore((state) => state.specialties);
   const [selected, setSelected] = useState<Set<string>>(new Set(initialSpecialties));
   const [query, setQuery] = useState('');
+  const [hitLimit, setHitLimit] = useState(false);
+  const category = useOnboardingStore((state) => state.category);
+  /*
+    A SPECIALTY IS A TRAINING PATH, SO ONLY ROLES THAT TRAIN IN ONE SEE THIS
+    STEP (owner, 2026-09-25: "A first aider can't select skills like
+    cardiologist"). Everyone else skips from skills straight to availability;
+    the redirect below covers anyone who lands here anyway.
+  */
+  const options = useMemo(() => eligibleSpecialties(category), [category]);
 
   const filtered = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return MEDICAL_SPECIALTIES;
-    return MEDICAL_SPECIALTIES.filter((specialty) => specialty.toLowerCase().includes(trimmed));
-  }, [query]);
+    if (!trimmed) return options;
+    return options.filter((specialty) => specialty.toLowerCase().includes(trimmed));
+  }, [query, options]);
 
   function toggle(specialty: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(specialty)) {
-        next.delete(specialty);
-      } else {
-        next.add(specialty);
-      }
-      return next;
-    });
+    if (selected.has(specialty)) {
+      const next = new Set(selected);
+      next.delete(specialty);
+      setSelected(next);
+      setHitLimit(false);
+      return;
+    }
+    if (selected.size >= SPECIALTY_LIMIT) {
+      setHitLimit(true);
+      return;
+    }
+    const next = new Set(selected);
+    next.add(specialty);
+    setSelected(next);
   }
 
   function proceed(next: string[]) {
@@ -44,12 +58,14 @@ export default function OnboardingSpecialties() {
     router.push('/(auth)/onboarding/availability');
   }
 
+  if (options.length === 0) return <Redirect href="/(auth)/onboarding/availability" />;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <OnboardingStepHeader
           title="EXPERT ONBOARDING"
-          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/category'))}
+          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/skills'))}
           trailing={
             <Pressable onPress={() => proceed([])} accessibilityRole="button" accessibilityLabel="Skip this step">
               <Text style={styles.skip}>SKIP</Text>
@@ -61,6 +77,15 @@ export default function OnboardingSpecialties() {
           <Text style={styles.heading}>Precision Preferences</Text>
         </View>
         <Text style={styles.caption}>CLINICAL SPECIALTY SELECTION</Text>
+        <Text style={styles.limitNote}>
+          Optional. Choose up to {SPECIALTY_LIMIT} you have trained in ({selected.size} of{' '}
+          {SPECIALTY_LIMIT} chosen).
+        </Text>
+        {hitLimit ? (
+          <Text style={styles.limitError}>
+            You have chosen {SPECIALTY_LIMIT}, the most allowed. Remove one to add another.
+          </Text>
+        ) : null}
 
         <Input
           placeholder="Search clinical specialties..."
@@ -116,6 +141,20 @@ export default function OnboardingSpecialties() {
 }
 
 const styles = StyleSheet.create({
+  limitNote: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  limitError: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.danger,
+    marginTop: spacing.xs,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

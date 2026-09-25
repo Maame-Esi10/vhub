@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Button,
@@ -13,23 +13,43 @@ import {
 } from '@/components/ui';
 import { SkillPicker, type SkillGroup } from '@/components/onboarding/SkillPicker';
 import { colors, fontFamily, spacing } from '@/constants/theme';
-import { SKILL_CATEGORIES, companionSkills } from '@/constants/skills';
+import { companionSkills } from '@/constants/skills';
+import {
+  SKILL_LIMIT,
+  canClaimSkill,
+  hasSpecialtyStep,
+  skillCategoriesFor,
+} from '@/constants/skillEligibility';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { SkillSuggestBox } from '@/components/skills/SkillSuggestBox';
 import type { SkillSuggestion } from '@/hooks/useSuggestSkills';
 
-const GROUPS: SkillGroup[] = SKILL_CATEGORIES.map((category) => ({
-  title: category.name,
-  icon: category.icon,
-  data: category.skills,
-}));
-
 export default function OnboardingSkills() {
   const router = useRouter();
+  const category = useOnboardingStore((state) => state.category);
+  /*
+    ONLY THE SKILLS THIS ROLE CAN CLAIM. The role is chosen on the step before,
+    so a first aider never sees physical examination or antenatal care at all.
+    Hiding rather than greying out: a long list of things you may not pick is
+    noise on a screen that is already the longest in the app.
+  */
+  const GROUPS: SkillGroup[] = useMemo(
+    () =>
+      skillCategoriesFor(category).map((group) => ({
+        title: group.name,
+        icon: group.icon,
+        data: group.skills,
+      })),
+    [category]
+  );
   const setSkillTags = useOnboardingStore((state) => state.setSkillTags);
   const initialSkillTags = useOnboardingStore((state) => state.skillTags);
   const [selected, setSelected] = useState<Set<string>>(new Set(initialSkillTags));
   const [query, setQuery] = useState('');
+  // Set by pressing Continue with nothing chosen, or by tapping one skill past
+  // the limit. Inline field validation, not a popup: it is about this list.
+  const [showRequired, setShowRequired] = useState(false);
+  const [hitLimit, setHitLimit] = useState(false);
   /*
     THE SUGGESTION AND WHAT KIND IT IS ARE ONE PIECE OF STATE.
 
@@ -72,7 +92,9 @@ export default function OnboardingSkills() {
       a new array on every render, so as a dependency it changed every time and
       the memo never memoised anything.
     */
-    const suggested = suggestion?.skills ?? [];
+    // Gemini and the companion table know nothing about roles, so both are
+    // narrowed here: a suggestion the volunteer cannot tick is worse than none.
+    const suggested = (suggestion?.skills ?? []).filter((skill) => canClaimSkill(category, skill));
     const shortlist = trimmed
       ? suggested.filter((skill) => skill.toLowerCase().includes(trimmed))
       : suggested;
@@ -90,7 +112,10 @@ export default function OnboardingSkills() {
       ticked so far.
     */
     const companions = companionSkills(Array.from(selected)).filter(
-      (skill) => !shortlist.includes(skill) && (!trimmed || skill.toLowerCase().includes(trimmed))
+      (skill) =>
+        canClaimSkill(category, skill) &&
+        !shortlist.includes(skill) &&
+        (!trimmed || skill.toLowerCase().includes(trimmed))
     );
 
     const extras: SkillGroup[] = [];
@@ -134,7 +159,7 @@ export default function OnboardingSkills() {
 
     if (extras.length === 0) return base;
     return [...extras, ...base];
-  }, [query, suggestion, selected]);
+  }, [query, suggestion, selected, GROUPS, category]);
 
   const matchCount = useMemo(
     () => groups.reduce((sum, group) => sum + group.data.length, 0),
@@ -142,31 +167,87 @@ export default function OnboardingSkills() {
   );
 
   function toggleSkill(skill: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(skill)) next.delete(skill);
-      else next.add(skill);
-      return next;
-    });
+    if (selected.has(skill)) {
+      const next = new Set(selected);
+      next.delete(skill);
+      setSelected(next);
+      setHitLimit(false);
+      return;
+    }
+    // At the limit a new tap does nothing except say why; nothing already
+    // chosen is dropped to make room behind the volunteer's back.
+    if (selected.size >= SKILL_LIMIT) {
+      setHitLimit(true);
+      return;
+    }
+    const next = new Set(selected);
+    next.add(skill);
+    setSelected(next);
+    setShowRequired(false);
   }
 
   function handleContinue() {
+    /*
+      AT LEAST ONE SKILL (owner, 2026-09-25: "how can volunteers move on
+      without selecting a skill"). A profile with no skills scores 0 on the
+      largest part of every clinical match, so the feed it produces is empty
+      of the work the volunteer came for. Refused inline, under the
+      "required" line that sits above the search.
+    */
+    if (selected.size === 0) {
+      setShowRequired(true);
+      return;
+    }
     setSkillTags(Array.from(selected));
-    router.push('/(auth)/onboarding/category');
+    router.push(
+      hasSpecialtyStep(category) ? '/(auth)/onboarding/specialties' : '/(auth)/onboarding/availability'
+    );
   }
+
+  const specialtyStep = hasSpecialtyStep(category);
+
+  // The role is chosen first now; arriving here without one (a cold start
+  // that lost the wizard's memory) goes back to choose it.
+  if (!category) return <Redirect href="/(auth)/onboarding/category" />;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <OnboardingStepHeader
           title="ONBOARDING"
-          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/welcome'))}
+          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/category'))}
         />
 
         <Text style={styles.heading}>My Expertise</Text>
         <Text style={styles.subtext}>
-          Pick everything you can offer, clinical or support. You can change this any time.
+          Pick the skills you would actually do at an outreach, clinical or support. You only see
+          the ones your role can offer.
         </Text>
+
+        {/*
+          REQUIRED, SAID ABOVE THE SEARCH (owner, 2026-09-25). The count shows
+          the limit too, so nobody discovers the ceiling by hitting it.
+        */}
+        <View style={styles.requiredRow}>
+          <Text style={styles.requiredLabel}>
+            Select your skills<Text style={styles.requiredMark}> *</Text>
+          </Text>
+          <Text style={[styles.requiredCount, selected.size >= SKILL_LIMIT && styles.requiredCountFull]}>
+            {selected.size} of {SKILL_LIMIT} chosen
+          </Text>
+        </View>
+        <Text style={styles.requiredHint}>
+          Choose at least 1 and at most {SKILL_LIMIT}. Pick the ones you do best: these are what
+          outreaches are matched against.
+        </Text>
+        {showRequired ? (
+          <Text style={styles.requiredError}>Select at least one skill to continue.</Text>
+        ) : null}
+        {hitLimit ? (
+          <Text style={styles.requiredError}>
+            You have chosen {SKILL_LIMIT}, the most allowed. Remove one to add another.
+          </Text>
+        ) : null}
 
         <Input
           placeholder="Search skills..."
@@ -196,14 +277,22 @@ export default function OnboardingSkills() {
           */}
           {!query.trim() ? (
             <>
-              <RoleTypeExplainer audience="volunteer" />
-              <View style={styles.explainerGap} />
+              {/*
+                GEMINI FIRST (owner, 2026-09-25: "The Gemini box is also not
+                there, like on the org"). It sat below the clinical/support
+                explainer, which is taller than a phone screen at a large font,
+                so it was out of sight. It now opens the list, as it does on
+                Create Outreach.
+              */}
               <SkillSuggestBox
                 editable
-                label="Describe what you do"
+                label="Describe what you do, and Gemini will suggest skills"
                 placeholder="e.g. I take blood pressure at community clinics"
                 onSuggestions={setSuggestion}
               />
+              <View style={styles.explainerGap} />
+              <RoleTypeExplainer audience="volunteer" />
+              <View style={styles.explainerGap} />
             </>
           ) : null}
 
@@ -245,7 +334,7 @@ export default function OnboardingSkills() {
           onPress={handleContinue}
           style={styles.continueButton}
         />
-        <OnboardingStepFooter step={1} total={5} section="Skill Configuration" />
+        <OnboardingStepFooter step={2} total={specialtyStep ? 5 : 4} section="Skill Configuration" />
       </View>
     </SafeAreaView>
   );
@@ -290,6 +379,46 @@ const styles = StyleSheet.create({
   },
   search: {
     marginBottom: spacing.base,
+  },
+  requiredRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    alignContent: 'center',
+    justifyContent: 'space-between',
+    columnGap: spacing.md,
+    rowGap: spacing.xs,
+  },
+  requiredLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  requiredMark: {
+    color: colors.danger,
+  },
+  requiredCount: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: colors.primary,
+  },
+  requiredCountFull: {
+    color: colors.danger,
+  },
+  requiredHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  requiredError: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.danger,
+    marginBottom: spacing.md,
   },
   list: {
     flex: 1,

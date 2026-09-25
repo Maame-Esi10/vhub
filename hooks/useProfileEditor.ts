@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { changeVolunteerCategory } from '@/lib/api-client';
 import type { ExperienceLevel, OrganisationProfile, VolunteerCategory } from '@/types/database';
 
 export const profileEditorKeys = {
@@ -45,6 +46,19 @@ export function useUpdateVolunteerProfile() {
 
   return useMutation({
     mutationFn: async (params: UpdateVolunteerProfileParams) => {
+      /*
+        A ROLE CHANGE GOES THROUGH THE SERVER FIRST (owner, 2026-09-25:
+        "someone who changes the role needs to be reverified"). The endpoint
+        writes the new role AND withdraws verification in one step, because
+        the approved document was evidence for the old role. It runs before
+        the ordinary save so that a failure leaves the old role and the old
+        status together, never the new role with the old tick.
+      */
+      const currentCategory = useAuthStore.getState().volunteerProfile?.category ?? null;
+      if (params.category && params.category !== currentCategory) {
+        await changeVolunteerCategory(params.category);
+      }
+
       const { data: updatedProfile, error: profileError } = await supabase
         .from('profiles')
         .update({

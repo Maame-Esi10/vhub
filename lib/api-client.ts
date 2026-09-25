@@ -2,7 +2,13 @@ import type { Layer1MatchResult } from '@/lib/matching/layer1';
 import type { Facility } from '@/lib/facilityMatch';
 import { supabase } from '@/lib/supabase';
 import type { VScoreBand } from '@/lib/vscore';
-import type { ApplicationStatus, Outreach, OutreachRoleType } from '@/types/database';
+import type {
+  ApplicationStatus,
+  Outreach,
+  OutreachRoleType,
+  VerificationStatus,
+  VolunteerCategory,
+} from '@/types/database';
 
 /**
  * Typed fetch wrapper around the serverless API in `api/` (deployed on
@@ -56,6 +62,8 @@ export const API_ROUTES = {
   skillSuggest: '/api/skill-suggest',
   mailHealth: '/api/mail-health',
   facilityLookup: '/api/facility-lookup',
+  volunteerCategory: '/api/volunteer-category',
+  disputeFiled: '/api/dispute-filed',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -1192,6 +1200,38 @@ export function deleteVerificationDocument(
     { action: 'delete' },
     options
   );
+}
+
+export interface ChangeVolunteerCategoryResponse {
+  category: VolunteerCategory;
+  verificationStatus: VerificationStatus;
+  /** True when the change cost the volunteer their verification or pending review. */
+  reverificationRequired: boolean;
+}
+
+/**
+ * Changes the volunteer's professional role. A server operation, never a
+ * column write, because a role change also withdraws verification: the
+ * document an admin approved was evidence for the OLD role. See
+ * api/src/app/api/volunteer-category/route.ts.
+ */
+export function changeVolunteerCategory(
+  category: VolunteerCategory,
+  options?: RequestOptions
+): Promise<ChangeVolunteerCategoryResponse> {
+  return apiPost<ChangeVolunteerCategoryResponse>(API_ROUTES.volunteerCategory, { category }, options);
+}
+
+/**
+ * Tells the API a dispute was just filed so the admins are emailed. The
+ * dispute itself is a plain client insert; this only raises the alert, and
+ * its failure never un-files anything.
+ */
+export function announceDisputeFiled(
+  disputeId: string,
+  options?: RequestOptions
+): Promise<{ alerted: boolean }> {
+  return apiPost<{ alerted: boolean }>(API_ROUTES.disputeFiled, { disputeId }, options);
 }
 
 export interface CancelEmailChangeResponse {

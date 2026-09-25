@@ -14,6 +14,7 @@ import { Button, OnboardingStepFooter, OnboardingStepHeader } from '@/components
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { GHANA_REGIONS } from '@/constants/ghana-locations';
 import { useOnboardingStore } from '@/stores/onboardingStore';
+import { hasSpecialtyStep } from '@/constants/skillEligibility';
 
 const DAYS = [
   { token: 'mon', label: 'M' },
@@ -33,6 +34,7 @@ const SLOTS = [
 
 export default function OnboardingAvailability() {
   const router = useRouter();
+  const category = useOnboardingStore((state) => state.category);
   const initialRegion = useOnboardingStore((state) => state.region);
   const initialDistrict = useOnboardingStore((state) => state.district);
   const initialSlots = useOnboardingStore((state) => state.availabilitySlots);
@@ -78,7 +80,9 @@ export default function OnboardingAvailability() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <OnboardingStepHeader
           title="ONBOARDING"
-          onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/specialties'))}
+          onBack={() => (router.canGoBack() ? router.back() : router.replace(
+                  hasSpecialtyStep(category) ? '/(auth)/onboarding/specialties' : '/(auth)/onboarding/skills'
+                ))}
         />
 
         <Text style={styles.heading}>Precision Preferences</Text>
@@ -157,7 +161,11 @@ export default function OnboardingAvailability() {
           onPress={handleContinue}
           style={styles.continueButton}
         />
-        <OnboardingStepFooter step={4} total={5} section="Availability and Region" />
+        <OnboardingStepFooter
+          step={hasSpecialtyStep(category) ? 4 : 3}
+          total={hasSpecialtyStep(category) ? 5 : 4}
+          section="Availability and Region"
+        />
       </ScrollView>
 
       <Modal

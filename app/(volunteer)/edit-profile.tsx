@@ -25,8 +25,15 @@ import {
 } from '@/components/ui';
 import { EXPERIENCE_LEVELS, VOLUNTEER_CATEGORIES } from '@/constants/categories';
 import { GHANA_REGION_NAMES, getDistrictsForRegion } from '@/constants/ghana-locations';
-import { skillSectionsFor } from '@/constants/skills';
-import { MEDICAL_SPECIALTIES } from '@/constants/specialties';
+import { ALL_SKILLS, isRetiredSkill } from '@/constants/skills';
+import {
+  SKILL_LIMIT,
+  SPECIALTY_LIMIT,
+  canClaimSkill,
+  eligibleSpecialties,
+  pruneSpecialties,
+  skillCategoriesFor,
+} from '@/constants/skillEligibility';
 import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 import { useUpdateVolunteerProfile } from '@/hooks/useProfileEditor';
 // Direct import, not the hooks barrel: this hook reaches the native picker
@@ -38,8 +45,6 @@ import { humanErrorOrNull } from '@/lib/errorMessage';
 import { useTabBarContentPadding } from '@/components/ui/tabBarOptions';
 
 
-
-const SPECIALTY_SECTIONS = [{ title: 'Medical Specialties', data: [...MEDICAL_SPECIALTIES] }];
 
 const BIO_MAX = 400;
 
@@ -75,15 +80,65 @@ export default function EditVolunteerProfile() {
   const [district, setDistrict] = useState<string | null>(profile?.district ?? null);
   const [specialties, setSpecialties] = useState<string[]>(volunteerProfile?.specialties ?? []);
   const [skillTags, setSkillTags] = useState<string[]>(volunteerProfile?.skill_tags ?? []);
-  const skillSections = useMemo(
-    () =>
-      skillSectionsFor(skillTags).map((category) => ({
-        title: category.name,
-        icon: category.icon,
-        data: category.skills,
-      })),
-    [skillTags]
+  /*
+    Live skills this role cannot claim (constants/skillEligibility.ts). Held
+    ones come from before the rule existed, or from a role just changed on
+    this screen. They are drawn in their own section so the volunteer can see
+    them, and dropped on save: keeping them would let the matcher keep
+    scoring a first aider on physical examination.
+
+    RETIRED skills are a different case and are left alone, exactly as
+    before: they are no longer offered to anybody, not refused to this role.
+  */
+  const ineligibleHeld = useMemo(
+    () => skillTags.filter((skill) => ALL_SKILLS.includes(skill) && !canClaimSkill(category, skill)),
+    [skillTags, category]
   );
+  const skillSections = useMemo(() => {
+    const sections = skillCategoriesFor(category).map((group) => ({
+      title: group.name,
+      icon: group.icon,
+      data: group.skills,
+    }));
+    const retiredHeld = skillTags.filter(isRetiredSkill);
+    if (retiredHeld.length > 0) {
+      sections.push({ title: 'No longer offered', icon: 'archive-outline', data: retiredHeld });
+    }
+    if (ineligibleHeld.length > 0) {
+      sections.push({ title: 'Not open to your role', icon: 'block-helper', data: ineligibleHeld });
+    }
+    return sections;
+  }, [category, skillTags, ineligibleHeld]);
+  const specialtySections = useMemo(() => {
+    const allowed = eligibleSpecialties(category);
+    return allowed.length > 0 ? [{ title: 'Medical Specialties', data: [...allowed] }] : [];
+  }, [category]);
+  const [skillsError, setSkillsError] = useState<string | null>(null);
+  // A role picked on this screen that would cost the volunteer their
+  // verification, waiting on their say-so in a dialog.
+  const [pendingCategory, setPendingCategory] = useState<VolunteerCategory | null>(null);
+  const verificationAtStake =
+    volunteerProfile?.verification_status === 'verified' ||
+    volunteerProfile?.verification_status === 'documents_pending' ||
+    !!volunteerProfile?.credential_document_id;
+
+  function applyCategory(next: VolunteerCategory) {
+    setCategory(next);
+    // Specialties are dropped at once: the picker cannot draw one the role
+    // does not have, so it could never be removed later.
+    setSpecialties((prev) => pruneSpecialties(next, prev));
+  }
+
+  function handleSelectCategory(next: VolunteerCategory) {
+    if (next === category) return;
+    // Asked only when moving AWAY from the saved role. Changing your mind
+    // back to it costs nothing, and the save is what actually withdraws.
+    if (verificationAtStake && next !== volunteerProfile?.category) {
+      setPendingCategory(next);
+      return;
+    }
+    applyCategory(next);
+  }
   const [availability, setAvailability] = useState<string[]>(
     volunteerProfile?.availability_slots ?? []
   );
@@ -136,6 +191,19 @@ export default function EditVolunteerProfile() {
     }
     setNameError(null);
 
+    const savedSkills = skillTags.filter((skill) => !ineligibleHeld.includes(skill));
+    if (savedSkills.length === 0) {
+      setSkillsError('Choose at least one skill your role can offer.');
+      return;
+    }
+    if (savedSkills.length > SKILL_LIMIT) {
+      setSkillsError(
+        `You can list at most ${SKILL_LIMIT} skills. Remove ${savedSkills.length - SKILL_LIMIT} to save.`
+      );
+      return;
+    }
+    setSkillsError(null);
+
     if (!user) return;
 
     try {
@@ -146,8 +214,8 @@ export default function EditVolunteerProfile() {
         district,
         category,
         experienceLevel,
-        skillTags,
-        specialties,
+        skillTags: savedSkills,
+        specialties: pruneSpecialties(category, specialties),
         availabilitySlots: availability,
         bio: bio.trim() || null,
       });
@@ -260,8 +328,13 @@ export default function EditVolunteerProfile() {
               placeholder="Select your category"
               value={category}
               options={VOLUNTEER_CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
-              onSelect={(value) => setCategory(value as VolunteerCategory)}
+              onSelect={(value) => handleSelectCategory(value as VolunteerCategory)}
             />
+            <Text style={styles.helper}>
+              {verificationAtStake
+                ? 'Changing your role withdraws your verification. You would upload a document for the new role and wait for it to be approved again.'
+                : 'Your role decides which skills you can list. Verification checks it against your document.'}
+            </Text>
             <View style={styles.fieldGap} />
             {/*
               Experience is the one matching input with no onboarding step, so
@@ -308,15 +381,23 @@ export default function EditVolunteerProfile() {
             />
           </EditSectionCard>
 
-          <EditSectionCard icon="check-decagram" title="CLINICAL EXPERTISE">
-            <MultiSelectField
-              label="Specialties"
-              placeholder="Add your specialties"
-              selected={specialties}
-              sections={SPECIALTY_SECTIONS}
-              onChange={setSpecialties}
-            />
-          </EditSectionCard>
+          {/*
+            Only roles that train in a specialty see this card (doctor, nurse,
+            midwife). For everyone else there is nothing they could pick.
+          */}
+          {specialtySections.length > 0 ? (
+            <EditSectionCard icon="check-decagram" title="CLINICAL EXPERTISE">
+              <MultiSelectField
+                label="Specialties"
+                placeholder="Add your specialties"
+                selected={specialties}
+                sections={specialtySections}
+                onChange={setSpecialties}
+                max={SPECIALTY_LIMIT}
+                searchPlaceholder="Search specialties..."
+              />
+            </EditSectionCard>
+          ) : null}
 
           <EditSectionCard icon="lightning-bolt-outline" title="SKILLS">
             <MultiSelectField
@@ -331,11 +412,25 @@ export default function EditVolunteerProfile() {
                 was toggled.
               */
               sections={skillSections}
-              onChange={setSkillTags}
+              onChange={(next) => {
+                setSkillTags(next);
+                setSkillsError(null);
+              }}
+              max={SKILL_LIMIT}
+              required
+              error={skillsError ?? undefined}
             />
             <Text style={styles.helper}>
-              These are matched against each outreach&apos;s required skills, so keep them current.
+              Between 1 and {SKILL_LIMIT}, from the skills your role can offer. These are matched
+              against each outreach&apos;s required skills, so keep them current.
             </Text>
+            {ineligibleHeld.length > 0 ? (
+              <Text style={styles.warning}>
+                {ineligibleHeld.length === 1
+                  ? '1 skill you hold is not open to your role and will be removed when you save.'
+                  : `${ineligibleHeld.length} skills you hold are not open to your role and will be removed when you save.`}
+              </Text>
+            ) : null}
           </EditSectionCard>
 
           <EditSectionCard icon="calendar-blank-outline" title="WEEKLY AVAILABILITY">
@@ -379,6 +474,25 @@ export default function EditVolunteerProfile() {
       />
 
       <ConfirmDialog
+        visible={pendingCategory !== null}
+        icon="shield-alert-outline"
+        tone="destructive"
+        title="Change your role?"
+        message={
+          volunteerProfile?.verification_status === 'verified'
+            ? 'You are verified for your current role. When you save, your verification is withdrawn and your document is removed. Upload a document for the new role and it goes back into review. Your V-Score and history stay as they are.'
+            : 'Your document was for your current role. When you save, it is removed and you will need to upload one for the new role. Your V-Score and history stay as they are.'
+        }
+        confirmLabel="Change Role"
+        cancelLabel="Keep Current Role"
+        onConfirm={() => {
+          if (pendingCategory) applyCategory(pendingCategory);
+          setPendingCategory(null);
+        }}
+        onCancel={() => setPendingCategory(null)}
+      />
+
+      <ConfirmDialog
         visible={photoNotice}
         icon="alert-circle-outline"
         title="Photo not updated"
@@ -416,6 +530,13 @@ function sameSet(a: string[], b: string[]) {
 }
 
 const styles = StyleSheet.create({
+  warning: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.danger,
+    marginTop: spacing.sm,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -29,6 +29,15 @@ export interface MultiSelectFieldProps {
   error?: string;
   /** Renders a red asterisk beside the label. */
   required?: boolean;
+  /**
+   * The most items that can be selected. At the limit a tap on a new item
+   * adds nothing and the picker says why; removing always works, so a list
+   * that is already over the limit (chosen before the limit existed) can be
+   * brought under it.
+   */
+  max?: number;
+  /** Placeholder for the search box inside the picker. */
+  searchPlaceholder?: string;
 }
 
 /**
@@ -49,8 +58,11 @@ export function MultiSelectField({
   onChange,
   error,
   required,
+  max,
+  searchPlaceholder = 'Search skills...',
 }: MultiSelectFieldProps) {
   const [open, setOpen] = useState(false);
+  const [hitLimit, setHitLimit] = useState(false);
   const [query, setQuery] = useState('');
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const searching = query.trim().length > 0;
@@ -70,7 +82,12 @@ export function MultiSelectField({
     const next = new Set(selectedSet);
     if (next.has(item)) {
       next.delete(item);
+      setHitLimit(false);
     } else {
+      if (max !== undefined && next.size >= max) {
+        setHitLimit(true);
+        return;
+      }
       next.add(item);
     }
     onChange(Array.from(next));
@@ -93,7 +110,11 @@ export function MultiSelectField({
         style={[styles.field, !!error && styles.fieldError]}
       >
         <Text style={[styles.value, selected.length === 0 && styles.placeholder]}>
-          {selected.length > 0 ? `${selected.length} selected` : placeholder}
+          {selected.length > 0
+            ? max !== undefined
+              ? `${selected.length} of ${max} selected`
+              : `${selected.length} selected`
+            : placeholder}
         </Text>
         <MaterialCommunityIcons name="chevron-down" size={20} color={colors.textSecondary} />
       </Pressable>
@@ -132,18 +153,24 @@ export function MultiSelectField({
               </Pressable>
             </View>
             <Input
-              placeholder="Search skills..."
+              placeholder={searchPlaceholder}
               value={query}
               onChangeText={setQuery}
               leadingIcon={<MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />}
               containerStyle={styles.search}
             />
             <Text style={styles.pickerMeta}>
-              {selected.length} selected
+              {max !== undefined ? `${selected.length} of ${max} selected` : `${selected.length} selected`}
               {query.trim()
                 ? ` · ${filteredSections.reduce((sum, section) => sum + section.data.length, 0)} match "${query.trim()}"`
                 : ''}
             </Text>
+
+            {hitLimit && max !== undefined ? (
+              <Text style={styles.limitError}>
+                You have chosen {max}, the most allowed. Remove one to add another.
+              </Text>
+            ) : null}
 
             <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
               {filteredSections.length === 0 ? (
@@ -167,6 +194,13 @@ export function MultiSelectField({
 }
 
 const styles = StyleSheet.create({
+  limitError: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.danger,
+    marginBottom: spacing.sm,
+  },
   // The asterisk carries the "you must fill this in" signal, so the message
   // below the field no longer has to explain that it is required and can be one
   // short line about what is wrong.

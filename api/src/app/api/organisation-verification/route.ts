@@ -7,6 +7,7 @@ import { assertAdmin, recordAdminAction } from "../../../server/adminAudit";
 import { assetExists, uploadTargetFor } from "../../../server/cloudinary";
 import { notifyUsers } from "../../../server/notify";
 import { sendOrganisationVerificationEmail } from "../../../server/email";
+import { alertAdmins } from "../../../server/adminAlerts";
 
 export const runtime = "nodejs";
 
@@ -181,6 +182,19 @@ export async function POST(req: Request): Promise<Response> {
         }))
       );
       if (docError) throw Errors.internal("Could not save your documents.");
+
+      // Awaited, not fired and forgotten: a serverless function can be frozen
+      // the moment it returns, taking an unsent email with it. alertAdmins
+      // never throws, so a mail failure cannot fail this submission.
+      const { data: org } = await admin
+        .from("organisation_profiles")
+        .select("org_name")
+        .eq("id", caller.userId)
+        .maybeSingle();
+      await alertAdmins({
+        kind: "organisation_verification",
+        subjectName: (org?.org_name as string | undefined) ?? "An organisation",
+      });
 
       return Response.json({ verificationState: "documents_submitted" });
     }

@@ -7187,3 +7187,24 @@ Also corrected: six user-facing texts still sent people to "Settings", which
 became part of Profile on 2026-09-22 (the credential-rejection push, the
 organisation-rejection email, onboarding completion, the onboarding identity
 screen, the organisation's email-change note and the privacy policy).
+
+## Onboarding, role and skill rules, admin alerts (2026-09-25)
+
+Owner-reported round, all built in one pass.
+
+### The role comes first, and it limits the skills
+The volunteer wizard used to ask for skills BEFORE the role, so nothing could stop a first aider ticking physical examination or a Cardiology specialty. It now runs role, skills, specialties (only for doctor, nurse, midwife), availability, identity. `constants/skillEligibility.ts` names, per skill, the roles that can plausibly do that work at a community outreach in Ghana. It is per skill rather than per skill group because groups mix levels ("Clinical Assessment" holds blood pressure measurement, which a first aider does, beside physical examination, which they do not). It is a claim filter, not a credential check. The matcher is untouched: it reads `skill_tags` as before.
+
+**Limitation:** `other` is a catch-all, so an allied professional (optometrist, lab scientist, physiotherapist) who picks it cannot claim the clinical skills of their own field. A proper fix is a new `allied_health` category, which is an enum change and was not made.
+
+### At least one skill, at most fifteen; at most three specialties
+Skills are 35 of the 100 match points and the score is matched / REQUIRED, so ticking everything could only raise a volunteer's score. Fifteen is enough for a broad clinician's core work plus some support skills; ten was judged too tight for a doctor, twenty still loose enough to game. At the limit a new tap adds nothing and says why; removing always works. Enforced in the app (wizard and Edit Profile). **Not enforced in the database yet** (a CHECK constraint is proposed and waiting on approval), so a crafted direct API call could still exceed it.
+
+### A role change withdraws verification
+Verification means an admin read one document against one claimed role. `category` was a plain client-writable column, so a volunteer verified as a student could become a "Doctor" and keep the tick. Edit Profile now routes a role change through `/api/volunteer-category`, which writes the new role and, if the volunteer was verified, pending, or holding a document, drops them to `unverified` and removes the old document, in one server operation. No penalty: moving from student to doctor is progress. **Limitation until the proposed trigger is approved:** a crafted direct write to `volunteer_profiles.category` still bypasses this, because the column stays client-writable (onboarding needs it).
+
+### An organisation's onboarding is verification
+Skills, role and availability describe a person. After signing up, an organisation now lands on Organisation Verification with a welcome card and a "Do This Later" button, instead of an empty dashboard with the requirement buried under Profile.
+
+### Admins are emailed when something waits for them
+Every admin queue was pull-only, so an organisation could wait days on a queue nobody knew had anything in it. `server/adminAlerts.ts` emails every non-closed admin (`profiles.role = 'admin'`) when an organisation submits verification, a volunteer uploads a credential document, or a volunteer raises a dispute. Disputes are a client insert, so the app calls `/api/dispute-filed` afterwards; that endpoint only announces a fresh, open dispute the caller raised, once per instance. Plain text, no link, never a document. Same Gmail allowance as every other VHub email.
