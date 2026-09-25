@@ -129,13 +129,13 @@ async function apiSeries(name, condition) {
   save(data);
 }
 
-function deviceSeries(name, values) {
+function deviceSeries(name, values, note = process.env.PERF_NOTE || env.PERF_NOTE || '') {
   const runs = values.map(Number).filter((n) => Number.isFinite(n)).map((ms) => ({ ms }));
-  if (runs.length < 10) throw new Error('Record at least 10 timings.');
+  if (runs.length < 1) throw new Error('Record at least one timing.');
   const data = load();
   data.series.push({
     kind: 'device', name, at: new Date().toISOString(),
-    device: env.PERF_DEVICE ?? 'not stated', network: env.PERF_NETWORK ?? 'not stated', runs,
+    device: env.PERF_DEVICE || 'not stated', network: env.PERF_NETWORK || 'not stated', note, runs,
   });
   save(data);
 }
@@ -161,11 +161,18 @@ function report() {
       L.push(`**Observation, not a timed measurement (${o.at.slice(0, 10)}, ${o.device}):** ${o.text}`);
     }
   } else {
-    L.push('| Measurement | Device | Network | Date | Runs | Min (ms) | Median (ms) | Max (ms) |');
-    L.push('|---|---|---|---|---|---|---|---|');
+    L.push("Timed with the phone's screen recorder: the time is read from the recording's own clock, from the tap on the app icon to the first frame of the named screen, so it is accurate to about one second.");
+    L.push('');
+    L.push('| Measurement | Device | Network | Date | Runs | Time (s) | What it includes |');
+    L.push('|---|---|---|---|---|---|---|');
     for (const s of device) {
       const t = stat(s.runs);
-      L.push(`| ${s.name} | ${s.device} | ${s.network} | ${s.at.slice(0, 10)} | ${t.n} | ${t.min} | ${t.median} | ${t.max} |`);
+      const time = t.n === 1 ? `${t.min / 1000}` : `min ${t.min / 1000}, median ${t.median / 1000}, max ${t.max / 1000}`;
+      L.push(`| ${s.name} | ${s.device} | ${s.network} | ${s.at.slice(0, 10)} | ${t.n} | ${time} | ${s.note || ''} |`);
+    }
+    if (device.some((s) => s.runs.length < 10)) {
+      L.push('');
+      L.push('Fewer than ten runs were recorded, so no minimum, median and maximum are given for a single run.');
     }
   }
   L.push('');

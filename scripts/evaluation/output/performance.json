@@ -1,12 +1,30 @@
 {
   "series": [
     {
-      "kind": "observation",
-      "name": "feed_load",
-      "text": "The developer observed the Home feed of the release APK appearing in about 4 to 7 seconds after opening the app. This was not timed with repeated runs.",
-      "at": "2026-09-25T07:35:46.380Z",
+      "kind": "device",
+      "name": "Open the app to the Home feed (signed in)",
+      "at": "2026-09-25T07:39:31.322Z",
       "device": "Samsung Galaxy A07 (SM-A075F/DS), Android 16",
-      "runs": []
+      "network": "not stated",
+      "note": "Signed in. Includes the splash, which is held for at least 1.5 s by design (MIN_SPLASH_DISPLAY_MS).",
+      "runs": [
+        {
+          "ms": 4000
+        }
+      ]
+    },
+    {
+      "kind": "device",
+      "name": "Open the app to the welcome carousel (signed out)",
+      "at": "2026-09-25T07:39:31.423Z",
+      "device": "Samsung Galaxy A07 (SM-A075F/DS), Android 16",
+      "network": "not stated",
+      "note": "Signed out. Includes the introductory splash, which is held for at least 3.2 s by design so a new user can read it (MIN_INTRO_SPLASH_DISPLAY_MS).",
+      "runs": [
+        {
+          "ms": 9000
+        }
+      ]
     }
   ]
 }

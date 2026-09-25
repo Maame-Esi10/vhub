@@ -1,8 +1,13 @@
 ### 5.1 On the Android release build
 
-No timed measurements (ten or more runs with minimum, median and maximum) were carried out on the device.
+Timed with the phone's screen recorder: the time is read from the recording's own clock, from the tap on the app icon to the first frame of the named screen, so it is accurate to about one second.
 
-**Observation, not a timed measurement (2026-09-25, Samsung Galaxy A07 (SM-A075F/DS), Android 16):** The developer observed the Home feed of the release APK appearing in about 4 to 7 seconds after opening the app. This was not timed with repeated runs.
+| Measurement | Device | Network | Date | Runs | Time (s) | What it includes |
+|---|---|---|---|---|---|---|
+| Open the app to the Home feed (signed in) | Samsung Galaxy A07 (SM-A075F/DS), Android 16 | not stated | 2026-09-25 | 1 | 4 | Signed in. Includes the splash, which is held for at least 1.5 s by design (MIN_SPLASH_DISPLAY_MS). |
+| Open the app to the welcome carousel (signed out) | Samsung Galaxy A07 (SM-A075F/DS), Android 16 | not stated | 2026-09-25 | 1 | 9 | Signed out. Includes the introductory splash, which is held for at least 3.2 s by design so a new user can read it (MIN_INTRO_SPLASH_DISPLAY_MS). |
+
+Fewer than ten runs were recorded, so no minimum, median and maximum are given for a single run.
 
 ### 5.2 Matching engine timings from the evaluation runs
 
