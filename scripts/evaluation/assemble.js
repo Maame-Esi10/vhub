@@ -15,7 +15,7 @@ const OUT_DIR = path.join(__dirname, 'output');
 const TARGET = path.join(__dirname, '..', '..', 'docs', 'evaluation-results.md');
 
 const SECTIONS = [
-  ['# 1. Layer comparison (research question 2)', ['00-relevance.md', '01-layers.md']],
+  ['# 1. Layer comparison (research question 2)', ['00-relevance.md', '01-layers.md', '01b-o2-rerun.md']],
   ['# 2. Forced failure (research question 3)', ['02-failure.md']],
   ['# 3. V-Score simulation (research question 4)', ['03-vscore.md']],
   ['# 4. Functional testing', ['04-functional.md']],
