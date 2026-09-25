@@ -14,7 +14,26 @@
   empty result that would look like "no data".
 */
 
+import { randomUUID } from 'crypto';
+
 type Row = Record<string, unknown>;
+
+/*
+  Column defaults the real schema applies on insert and the evaluated code
+  relies on. Without `voided_at: null` a new penalty row would have no
+  voided_at at all, and the replay's `voided_at !== null` test would treat
+  every penalty as reversed.
+*/
+const COLUMN_DEFAULTS: Record<string, Row> = {
+  score_events: { voided_at: null },
+  event_reviews: { remark_chips: [], notes: null },
+};
+
+let clock = Date.parse('2026-10-01T08:00:00Z');
+function nextTimestamp(): string {
+  clock += 1000;
+  return new Date(clock).toISOString();
+}
 type Filter = (row: Row) => boolean;
 
 export interface FakeDb {
@@ -29,6 +48,7 @@ class Query implements PromiseLike<{ data: unknown; error: null }> {
   private op: 'select' | 'update' | 'upsert' | 'insert' = 'select';
   private payload: Row | Row[] | null = null;
   private onConflict: string[] = [];
+  private ignoreDuplicates = false;
   private selectCols = '*';
   private mode: 'many' | 'maybeSingle' | 'single' = 'many';
   private returnRows = false;
@@ -72,10 +92,11 @@ class Query implements PromiseLike<{ data: unknown; error: null }> {
     this.payload = values;
     return this;
   }
-  upsert(values: Row | Row[], options?: { onConflict?: string }) {
+  upsert(values: Row | Row[], options?: { onConflict?: string; ignoreDuplicates?: boolean }) {
     this.op = 'upsert';
     this.payload = values;
     this.onConflict = (options?.onConflict ?? 'id').split(',').map((c) => c.trim());
+    this.ignoreDuplicates = options?.ignoreDuplicates === true;
     return this;
   }
   insert(values: Row | Row[]) {
@@ -125,9 +146,17 @@ class Query implements PromiseLike<{ data: unknown; error: null }> {
           this.op === 'upsert'
             ? this.rows().find((row) => this.onConflict.every((c) => row[c] === values[c]))
             : undefined;
-        if (existing) Object.assign(existing, values);
-        else this.rows().push({ ...values });
-        result.push({ ...(existing ?? values) });
+        if (existing) {
+          if (!this.ignoreDuplicates) Object.assign(existing, values);
+          result.push({ ...existing });
+        } else {
+          // What the real columns' defaults do: a new row gets an id and a
+          // created_at. The clock only moves forward, one second per row, so
+          // filing order is unambiguous (the V-Score replay sorts on it).
+          const row = { id: randomUUID(), created_at: nextTimestamp(), ...(COLUMN_DEFAULTS[this.table] ?? {}), ...values };
+          this.rows().push(row);
+          result.push({ ...row });
+        }
       }
     }
 

@@ -1,3 +1,4 @@
+/* global __dirname */
 /*
   Jest configuration for the evaluation ONLY. The evaluation files end in
   .eval.ts, so the normal `npx jest` never runs them: they call Gemini, take

@@ -1,3 +1,4 @@
+/* global __dirname */
 /*
   Builds docs/evaluation-results.md from the files the evaluation runs write
   into scripts/evaluation/output/. Nothing in the results file is typed by

@@ -132,6 +132,11 @@ export interface EvalOutreach {
   slots_total: number;
 }
 
+/** The route validates outreach ids as UUIDs; each test outreach has a fixed one. */
+export function outreachUuid(id: string): string {
+  return `00000000-0000-4000-8000-0000000000${id.replace('O', '').padStart(2, '0')}`;
+}
+
 export const OUTREACHES: EvalOutreach[] = [
   { id: 'O1', title: 'Blood screening day', category: 'nurse', slots_total: 4,
     required_skills: ['Venipuncture', 'Blood glucose testing', 'Blood pressure measurement'] },
@@ -169,7 +174,7 @@ function pool(
   o: string,
   roles: { match: VolunteerCategory; related: VolunteerCategory; wrong: VolunteerCategory },
   req: [string, string, string],
-  alt: [string[], string[], string[]],
+  alt: [[string, string], [string, string], [string, string]],
   nearMiss: string[]
 ): EvalVolunteer[] {
   const [a, b, c] = req;
@@ -186,8 +191,8 @@ function pool(
     v(2, 'exact', roles.match, [a, b, c, 'Health education']),
     v(3, 'exact, related role', roles.related, [a, b, c]),
     v(4, 'reworded: all three', roles.match, [altA[0], altB[0], altC[0]]),
-    v(5, 'reworded: two of three', roles.match, [altA[1] ?? altA[0], altB[1] ?? altB[0], c]),
-    v(6, 'reworded: one of three', roles.related, [a, b, altC[1] ?? altC[0]]),
+    v(5, 'reworded: two of three', roles.match, [altA[1], altB[1], c]),
+    v(6, 'reworded: one of three', roles.related, [a, b, altC[1]]),
     v(7, 'partial: two of three', roles.match, [a, b, 'Record keeping']),
     v(8, 'partial: one, reworded', roles.match, [altA[0], 'Data entry']),
     v(9, 'unrelated', roles.match, ['Crowd and queue management', 'Logistics and setup']),
@@ -252,7 +257,7 @@ export function databaseRows() {
   const organisationId = 'ORG';
   return {
     outreaches: OUTREACHES.map((o) => ({
-      id: o.id,
+      id: outreachUuid(o.id),
       organisation_id: organisationId,
       title: o.title,
       required_skills: o.required_skills,
@@ -269,7 +274,7 @@ export function databaseRows() {
     })),
     outreach_days: OUTREACHES.map((o) => ({
       id: `${o.id}-D1`,
-      outreach_id: o.id,
+      outreach_id: outreachUuid(o.id),
       day: OUTREACH_DATE,
       start_time: null,
       end_time: null,
@@ -287,7 +292,7 @@ export function databaseRows() {
     applications: OUTREACHES.flatMap((o) =>
       VOLUNTEERS.map((v) => ({
         id: `${o.id}:${v.id}`,
-        outreach_id: o.id,
+        outreach_id: outreachUuid(o.id),
         volunteer_id: v.id,
         status: 'pending',
         outreach_role_id: null,
