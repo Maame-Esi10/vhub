@@ -151,10 +151,15 @@ function report() {
   const L = [];
   const device = data.series.filter((s) => s.kind === 'device');
   const api = data.series.filter((s) => s.kind === 'api');
-  L.push('### 5.1 Measured on the Android release build');
+  const observations = data.series.filter((s) => s.kind === 'observation');
+  L.push('### 5.1 On the Android release build');
   L.push('');
   if (device.length === 0) {
-    L.push('_Not yet measured._ No phone timings have been recorded.');
+    L.push('No timed measurements (ten or more runs with minimum, median and maximum) were carried out on the device.');
+    for (const o of observations) {
+      L.push('');
+      L.push(`**Observation, not a timed measurement (${o.at.slice(0, 10)}, ${o.device}):** ${o.text}`);
+    }
   } else {
     L.push('| Measurement | Device | Network | Date | Runs | Min (ms) | Median (ms) | Max (ms) |');
     L.push('|---|---|---|---|---|---|---|---|');
@@ -164,6 +169,7 @@ function report() {
     }
   }
   L.push('');
+  if (api.length > 0) {
   L.push('### 5.2 API timings, measured from a computer over the network');
   L.push('');
   L.push('These time the whole matching request (network and server) against the live API. They were measured by `scripts/evaluation/perf.mjs` from a computer, **not on the phone**.');
@@ -181,6 +187,31 @@ function report() {
     }
   }
   L.push('');
+  }
+  // 5.3 Supplementary: engine timings recorded by the layer comparison run
+  // (output/layers.json). Read from that file, never typed in.
+  const layersFile = path.join(here, 'output', 'layers.json');
+  if (fs.existsSync(layersFile)) {
+    const layers = JSON.parse(fs.readFileSync(layersFile, 'utf8'));
+    const cachedOnly = (layers.runs.C ?? []).filter((r) => r.geminiCalls.length === 0);
+    const rows = [
+      ['Layer 1 only (Gemini off)', layers.runs.A],
+      ['Layer 1 + Layer 2, empty cache (cold)', layers.runs.B],
+      ['Layer 1 + Layer 2, second run, all requests', layers.runs.C],
+      ['Layer 1 + Layer 2, requests answered wholly from the cache (warm)', cachedOnly],
+    ].filter(([, runs]) => runs && runs.length);
+    L.push('### 5.2 Matching engine timings from the evaluation runs');
+    L.push('');
+    L.push(`Recorded by \`scripts/evaluation/layers.eval.ts\` on ${layers.ranAt.slice(0, 10)} with model \`${layers.model}\`: the real \`/api/match\` handler (\`score_applicants\`) ranking 72 applicants for one outreach, on the development computer, with real Gemini calls over its internet connection and an in-memory database. These are server-side processing times, not times measured on the phone and not through Vercel. One request per outreach, so fewer than ten per condition.`);
+    L.push('');
+    L.push('| Condition | Requests | Min (ms) | Median (ms) | Max (ms) | Gemini calls per request | layer2Applied |');
+    L.push('|---|---|---|---|---|---|---|');
+    for (const [label, runs] of rows) {
+      const t = stat(runs);
+      L.push(`| ${label} | ${t.n} | ${t.min} | ${t.median} | ${t.max} | ${runs.map((r) => r.geminiCalls.length).join(', ')} | ${runs.map((r) => String(r.layer2Applied)).join(', ')} |`);
+    }
+    L.push('');
+  }
   fs.writeFileSync(path.join(here, 'output', '05-performance.md'), L.join('\n'));
   console.log('wrote output/05-performance.md');
 }
@@ -190,4 +221,10 @@ if (cmd === 'rank_feed' && ['warm', 'cold', 'disabled'].includes(arg)) await api
 else if (cmd === 'score_applicants') await apiSeries('score_applicants');
 else if (cmd === 'device' && arg) deviceSeries(arg, rest);
 else if (cmd === 'report') report();
+else if (cmd === 'observe' && arg) {
+  // An informal observation, recorded as one and never shown as a timing.
+  const data = load();
+  data.series.push({ kind: 'observation', name: arg, text: rest.join(' '), at: new Date().toISOString(), device: env.PERF_DEVICE || 'device not stated', runs: [] });
+  save(data);
+}
 else console.log('usage: see the comment at the top of scripts/evaluation/perf.mjs');

@@ -1,0 +1,12 @@
+{
+  "series": [
+    {
+      "kind": "observation",
+      "name": "feed_load",
+      "text": "The developer observed the Home feed of the release APK appearing in about 4 to 7 seconds after opening the app. This was not timed with repeated runs.",
+      "at": "2026-09-25T07:35:46.380Z",
+      "device": "Samsung Galaxy A07 (SM-A075F/DS), Android 16",
+      "runs": []
+    }
+  ]
+}
