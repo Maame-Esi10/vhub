@@ -4,7 +4,9 @@ import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { createProfileRowsFromMetadata } from '@/lib/profileRows';
-import { humanError } from '@/lib/errorMessage';
+import { humanError, isConnectivityError } from '@/lib/errorMessage';
+import { onlineManager } from '@tanstack/react-query';
+import { clearProfileCache, loadProfileCache, saveProfileCache } from '@/lib/profileCache';
 import { isAuthUserMetadata, type AuthUserMetadata } from '@/lib/auth-metadata';
 import { ROLE_GROUP, ROLE_GROUPS, ROLE_HOME } from '@/lib/roleRoutes';
 import { writeReturningUser } from '@/lib/launchState';
@@ -230,6 +232,21 @@ export function useAuthGuard() {
   // session both can race to bootstrap the same user's profile rows,
   // double-inserting against the profiles.id unique constraint.
   const inFlightUserId = useRef<string | null>(null);
+  /*
+    OFFLINE AT LAUNCH (owner-reported 2026-09-25). `staleProfile` is set when
+    the profile in the store came from lib/profileCache because the phone was
+    offline, or when there was no saved copy at all; the connectivity effect
+    below reloads it the moment the connection returns. `offlineWithoutProfile`
+    is the second case, which parks the user on the offline screen instead of
+    signing them out. `reloadProfile` lets that effect reach the loader, which
+    is defined inside the session effect.
+  */
+  const staleProfile = useRef(false);
+  const [offlineWithoutProfile, setOfflineWithoutProfile] = useState(false);
+  // The same flag for the loader, which is created once and would otherwise
+  // only ever see the initial `false`.
+  const offlineWithoutProfileRef = useRef(false);
+  const reloadProfile = useRef<((u: User) => Promise<void>) | null>(null);
 
   useEffect(() => {
     async function loadProfileForUser(sessionUser: User) {
@@ -245,6 +262,16 @@ export function useAuthGuard() {
         if (outcome.status === 'found' || outcome.status === 'bootstrapped') {
           setProfile(outcome.profile);
           setVolunteerProfile(outcome.volunteerProfile);
+          // Saved for the next launch without signal (lib/profileCache.ts).
+          void saveProfileCache(outcome.profile, outcome.volunteerProfile);
+          staleProfile.current = false;
+          if (offlineWithoutProfileRef.current) {
+            // Back online after a launch with nothing saved: leave the
+            // offline screen for this person's home.
+            offlineWithoutProfileRef.current = false;
+            setOfflineWithoutProfile(false);
+            router.replace('/');
+          }
         } else if (outcome.status === 'not_found') {
           // Authenticated, but no profile row exists and there's no
           // user_metadata to bootstrap from — there is no safe in-app state
@@ -258,6 +285,7 @@ export function useAuthGuard() {
           setAuthError(
             'Your account is missing its profile and we could not rebuild it. Please register again, or contact support if this keeps happening.'
           );
+          void clearProfileCache();
           try {
             await supabase.auth.signOut();
           } catch {
@@ -294,7 +322,29 @@ export function useAuthGuard() {
           // support report answerable, and console output is for developers.
           console.warn('[auth] profile load failed:', outcome.cause);
 
-          if (!hadProfile) {
+          /*
+            (c) OFFLINE AT LAUNCH, which looked exactly like (a) and was
+                treated like it: a cold start has no profile in the store yet,
+                so a launch with no signal signed a signed-in user out and sent
+                them to welcome (owner-reported 2026-09-25). The session itself
+                came from SecureStore and was perfectly good; only the network
+                was missing. Now the profile saved at the last successful load
+                is used, the session is kept, and the connectivity effect
+                reloads it when the signal returns. With nothing saved, the
+                user waits on the offline screen, still signed in.
+          */
+          const offline = isConnectivityError(outcome.cause) || !onlineManager.isOnline();
+          if (!hadProfile && offline) {
+            staleProfile.current = true;
+            const cached = await loadProfileCache(sessionUser.id);
+            if (cached) {
+              setProfile(cached.profile);
+              setVolunteerProfile(cached.volunteerProfile);
+            } else {
+              offlineWithoutProfileRef.current = true;
+              setOfflineWithoutProfile(true);
+            }
+          } else if (!hadProfile) {
             setAuthError(
               humanError(
                 outcome.cause,
@@ -318,6 +368,8 @@ export function useAuthGuard() {
         setProfileLoading(false);
       }
     }
+
+    reloadProfile.current = loadProfileForUser;
 
     supabase.auth.getSession().then(async ({ data }) => {
       const sessionUser = data.session?.user ?? null;
@@ -361,6 +413,9 @@ export function useAuthGuard() {
       } else {
         setProfile(null);
         setVolunteerProfile(null);
+        // Signed out by any route (the button, a revoked session, account
+        // closure): the saved profile goes with the session.
+        if (event === 'SIGNED_OUT') void clearProfileCache();
       }
 
       if (!initialized.current) {
@@ -372,6 +427,17 @@ export function useAuthGuard() {
     return () => subscription.subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When the connection returns, replace a profile that came from the
+  // offline cache (or was missing) with a fresh one.
+  useEffect(
+    () =>
+      onlineManager.subscribe((online) => {
+        const sessionUser = useAuthStore.getState().user;
+        if (online && staleProfile.current && sessionUser) void reloadProfile.current?.(sessionUser);
+      }),
+    []
+  );
 
   useEffect(() => {
     if (loading || profileLoading) return;
@@ -407,6 +473,9 @@ export function useAuthGuard() {
     // branch signs the user out, which re-triggers this effect with
     // user === null shortly after.
     if (!profile) {
+      // Signed in, offline, and nothing saved to open with: the offline
+      // screen, not a blank wait and not a sign-out.
+      if (offlineWithoutProfile && !atOffline) router.replace('/offline');
       return;
     }
 
@@ -505,7 +574,7 @@ export function useAuthGuard() {
     if (groupSegment && ROLE_GROUPS.has(groupSegment) && groupSegment !== ROLE_GROUP[profile.role]) {
       router.replace(homeRoute);
     }
-  }, [user, profile, volunteerProfile, loading, profileLoading, segments, router]);
+  }, [user, profile, volunteerProfile, loading, profileLoading, offlineWithoutProfile, segments, router]);
 
   return { loading };
 }

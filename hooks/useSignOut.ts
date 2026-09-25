@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { unregisterPushNotifications } from '@/lib/push';
+import { clearProfileCache } from '@/lib/profileCache';
 
 /**
  * Signs out of Supabase and clears authStore synchronously so useAuthGuard's
@@ -25,7 +26,9 @@ export function useSignOut() {
       await supabase.auth.signOut();
     } finally {
       // Clear local state regardless of network outcome so the user is
-      // never stuck signed-in on-device after requesting sign-out.
+      // never stuck signed-in on-device after requesting sign-out. The
+      // profile saved for offline launches goes too (lib/profileCache.ts).
+      void clearProfileCache();
       reset();
       setSigningOut(false);
     }

@@ -1364,6 +1364,19 @@ This section is compiled from the project's own records of device testing, not f
 
 A journey counts as tested only if a record shows it was carried out on a device. A journey whose last device run found a defect that was then fixed, with no recorded re-run afterwards, is listed as **needs re-test**, not as passed.
 
+## 4.0 Release v1.0.1 round (2026-09-25)
+
+Reported by the owner on 2026-09-25 after installing release v1.0.1 from the GitHub download link. Phone model and Android version: not stated.
+
+| Journey | Result | Defect found | Status of the defect |
+|---|---|---|---|
+| Onboarding as an Allied Health Professional, with Gemini skill suggestions | Passed functionally: describing the work as a dietitian returned four suggestions including nutrition counselling and malnutrition screening | The skills screen's top section did not scroll, and the keyboard covered the Gemini box; the Gemini box sat between the search field and the skills it filters | Fixed in code the same day (one scrolling column: explainer, Gemini, required skills, search, skills; keyboard handling added). Needs a new build and a re-test |
+| Registration and the six-digit code | **Failed:** the code for a new account never arrived | Not yet diagnosed. A confirmed account already on that address would produce exactly this (Supabase sends nothing and still reports success); the app now says so instead of waiting. Unconfirmed until the address is checked | Open |
+| Forgot password and its code | Passed: the code arrived | None | |
+| Admin alert email | Passed: the admin received the email | None | |
+| Credential review (admin reviews and accepts a volunteer's document) | Passed | None | |
+| Offline behaviour (opening the app with no internet) | **Failed:** the app went to the welcome carousel | Opening the app offline signed the user out, because a failed profile load at launch was treated as a failed sign-in | Fixed in code the same day (the last loaded profile is kept in encrypted storage and used offline; with nothing saved, the offline screen is shown). Needs a new build and a re-test |
+
 ## 4.1 Journeys with a recorded device test
 
 | Journey | Date | Device | Result | Defects found (all fixed in code afterwards) | Source |
@@ -1380,10 +1393,7 @@ A journey counts as tested only if a record shows it was carried out on a device
 
 | Journey | Last recorded device run | Defect found | Source |
 |---|---|---|---|
-| Registration and the six-digit code | 2026-09-14 and 2026-09-21 | Signing in after registering did nothing (2026-09-14); after the code, a new volunteer was sent to the welcome screen instead of onboarding (2026-09-21) | `docs/architecture/verification-and-auth.md`, "LOGIN IS NOT A RESTING PLACE (fixed 2026-09-14)"; fix list of 2026-09-21 |
-| Onboarding | 2026-09-21 | Step 5 showed a non-functional upload card; the ending was restructured. The wizard was reordered again on 2026-09-25 (role first, skill limits), which has not been on a device | fix list of 2026-09-21; this session |
 | Creating and publishing an outreach | 2026-09-21 and 2026-09-22 | Saving a draft navigated into Manage Event; publishing from the dashboard gave no confirmation | fix lists of 2026-09-21 and 2026-09-22 |
-| Credential review | 2026-09-22 | As in the admin round above | as above |
 | Accepting applicants (single decision) | 2026-08-21 | Deciding an applicant sent an email but no push; the applicant card offered every action whatever the status; no confirmation after a decision | `docs/REPORT_NOTES.md`, "Device round 2 (2026-08-21)" |
 
 ## 4.3 Journeys with no recorded device test
@@ -1394,7 +1404,6 @@ These have unit or integration coverage in the code but no record of having been
 - Accept top N
 - Withdrawal that triggers waitlist promotion, with the promotion email and push
 - Post-event review
-- Offline behaviour
 
 To complete this section, run each journey in 4.2 and 4.3 on the release APK and record the date, the phone model and Android version (Settings, About phone), the result and any defect.
 

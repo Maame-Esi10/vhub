@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, StyleSheet, View } from 'react-native';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useRouter } from 'expo-router';
@@ -218,115 +219,116 @@ export default function OnboardingSkills() {
           onBack={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding/category'))}
         />
 
-        <Text style={styles.heading}>My Expertise</Text>
-        <Text style={styles.subtext}>
-          Pick the skills you would actually do at an outreach, clinical or support. You only see
-          the ones your role can offer.
-        </Text>
-
         {/*
-          REQUIRED, SAID ABOVE THE SEARCH (owner, 2026-09-25). The count shows
-          the limit too, so nobody discovers the ceiling by hitting it.
+          ONE SCROLLING COLUMN, IN READING ORDER (owner, 2026-09-25: "why would
+          you make the top of the expertise not scrollable... the keyboard is
+          blocking the suggest skills box").
+
+          The required line had been added to a FIXED header above a short
+          scrolling list, with no keyboard handling on the screen. The fixed
+          part grew, the list shrank to a sliver, and opening the keyboard for
+          the Gemini box covered what was left. Now only the back row and the
+          Continue button are fixed; everything else scrolls, and the
+          KeyboardAvoidingView lifts it clear of the keyboard.
+
+          The order is hers: what clinical and support mean, then Gemini, then
+          the required skill selection with its search directly above the
+          skills it searches. The Gemini box no longer sits between the search
+          field and the list it filters.
         */}
-        <View style={styles.requiredRow}>
-          <Text style={styles.requiredLabel}>
-            Select your skills<Text style={styles.requiredMark}> *</Text>
-          </Text>
-          <Text style={[styles.requiredCount, selected.size >= SKILL_LIMIT && styles.requiredCountFull]}>
-            {selected.size} of {SKILL_LIMIT} chosen
-          </Text>
-        </View>
-        <Text style={styles.requiredHint}>
-          Choose at least 1 and at most {SKILL_LIMIT}. Pick the ones you do best: these are what
-          outreaches are matched against.
-        </Text>
-        {showRequired ? (
-          <Text style={styles.requiredError}>Select at least one skill to continue.</Text>
-        ) : null}
-        {hitLimit ? (
-          <Text style={styles.requiredError}>
-            You have chosen {SKILL_LIMIT}, the most allowed. Remove one to add another.
-          </Text>
-        ) : null}
-
-        <Input
-          placeholder="Search skills..."
-          value={query}
-          onChangeText={setQuery}
-          leadingIcon={
-            <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
-          }
-          containerStyle={styles.search}
-        />
-
-        <ScrollView
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/*
-            BOTH OF THESE SCROLL AWAY. They belong above the list in reading
-            order, and putting them in the fixed header instead would leave a
-            seventy-five-entry picker about a third of a screen tall.
-
-            The explainer comes FIRST and before anything is chosen, because
-            its job is to stop a volunteer reading "support" as "not for me" and
-            ticking only clinical skills -- which is the decision this screen is
-            about to ask them to make.
-          */}
-          {!query.trim() ? (
-            <>
-              {/*
-                GEMINI FIRST (owner, 2026-09-25: "The Gemini box is also not
-                there, like on the org"). It sat below the clinical/support
-                explainer, which is taller than a phone screen at a large font,
-                so it was out of sight. It now opens the list, as it does on
-                Create Outreach.
-              */}
-              <SkillSuggestBox
-                editable
-                label="Describe what you do, and Gemini will suggest skills"
-                placeholder="e.g. I take blood pressure at community clinics"
-                onSuggestions={setSuggestion}
-              />
-              <View style={styles.explainerGap} />
-              <RoleTypeExplainer audience="volunteer" />
-              <View style={styles.explainerGap} />
-            </>
-          ) : null}
-
-          {query.trim() && groups.length === 0 ? (
-            <Text style={styles.noMatches}>
-              Nothing matches &quot;{query.trim()}&quot;. Try a shorter word.
+        <KeyboardAvoidingView style={styles.list} behavior={KEYBOARD_AVOID_BEHAVIOR}>
+          <ScrollView
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.heading}>My Expertise</Text>
+            <Text style={styles.subtext}>
+              Pick the skills you would actually do at an outreach, clinical or support. You only
+              see the ones your role can offer.
             </Text>
-          ) : (
-            <>
-              {query.trim() ? (
-                <Text style={styles.matchCount}>
-                  {matchCount === 1
-                    ? `1 skill matches "${query.trim()}"`
-                    : `${matchCount} skills match "${query.trim()}"`}
-                </Text>
-              ) : null}
-              {/*
-                ONBOARDING ONLY. The outreach skill picker still uses
-                CategoryChecklist and is deliberately untouched — see the
-                comment at the top of SkillPicker for why the same list wants a
-                different shape when you are being asked what you can do rather
-                than searching for something you already have in mind.
-              */}
-              <SkillPicker
-                groups={groups}
-                selected={selected}
-                onToggle={toggleSkill}
-                activeGroup={activeGroup}
-                onChangeGroup={setActiveGroup}
-                query={query}
-              />
-            </>
-          )}
-        </ScrollView>
+
+            {/*
+              The explainer comes before anything is chosen: its job is to stop
+              a volunteer reading "support" as "not for me" and ticking only
+              clinical skills, which is the decision this screen asks for.
+            */}
+            <RoleTypeExplainer audience="volunteer" />
+            <View style={styles.explainerGap} />
+
+            <SkillSuggestBox
+              editable
+              label="Describe what you do, and Gemini will suggest skills"
+              placeholder="e.g. I take blood pressure at community clinics"
+              onSuggestions={setSuggestion}
+            />
+            <View style={styles.explainerGap} />
+
+            {/*
+              REQUIRED, SAID ABOVE THE SEARCH (owner, 2026-09-25). The count
+              shows the limit too, so nobody discovers the ceiling by hitting it.
+            */}
+            <View style={styles.requiredRow}>
+              <Text style={styles.requiredLabel}>
+                Select your skills<Text style={styles.requiredMark}> *</Text>
+              </Text>
+              <Text style={[styles.requiredCount, selected.size >= SKILL_LIMIT && styles.requiredCountFull]}>
+                {selected.size} of {SKILL_LIMIT} chosen
+              </Text>
+            </View>
+            <Text style={styles.requiredHint}>
+              Choose at least 1 and at most {SKILL_LIMIT}. Pick the ones you do best: these are what
+              outreaches are matched against.
+            </Text>
+            {showRequired ? (
+              <Text style={styles.requiredError}>Select at least one skill to continue.</Text>
+            ) : null}
+            {hitLimit ? (
+              <Text style={styles.requiredError}>
+                You have chosen {SKILL_LIMIT}, the most allowed. Remove one to add another.
+              </Text>
+            ) : null}
+
+            <Input
+              placeholder="Search skills..."
+              value={query}
+              onChangeText={setQuery}
+              leadingIcon={
+                <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
+              }
+              containerStyle={styles.search}
+            />
+
+            {query.trim() && groups.length === 0 ? (
+              <Text style={styles.noMatches}>
+                Nothing matches &quot;{query.trim()}&quot;. Try a shorter word.
+              </Text>
+            ) : (
+              <>
+                {query.trim() ? (
+                  <Text style={styles.matchCount}>
+                    {matchCount === 1
+                      ? `1 skill matches "${query.trim()}"`
+                      : `${matchCount} skills match "${query.trim()}"`}
+                  </Text>
+                ) : null}
+                {/*
+                  ONBOARDING ONLY. The outreach skill picker still uses
+                  CategoryChecklist; see the comment at the top of SkillPicker.
+                */}
+                <SkillPicker
+                  groups={groups}
+                  selected={selected}
+                  onToggle={toggleSkill}
+                  activeGroup={activeGroup}
+                  onChangeGroup={setActiveGroup}
+                  query={query}
+                />
+              </>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
 
         <Button
           title="Continue"

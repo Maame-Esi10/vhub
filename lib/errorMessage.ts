@@ -203,3 +203,26 @@ export function humanErrorOrNull(error: unknown, fallback?: string): string | nu
   if (error === null || error === undefined) return null;
   return humanError(error, fallback);
 }
+
+/*
+  The sentences humanError uses for "the network, not the request, failed".
+  Listed once here so isConnectivityError reads the same table humanError
+  does rather than keeping a second copy of the patterns.
+*/
+const CONNECTIVITY_SENTENCES: ReadonlySet<string> = new Set([
+  'No connection. Check your internet and try again.',
+  'Cannot reach VHub right now. Try again in a moment.',
+  'The connection dropped. Try again.',
+  'That took too long. Check your connection and try again.',
+  'That took too long and was stopped. Try again.',
+]);
+
+/**
+ * True when an error means the phone could not reach the server at all (no
+ * signal, DNS failure, dropped or timed-out connection), as opposed to the
+ * server answering with a refusal. useAuthGuard uses it to tell "offline at
+ * launch" from "sign-in genuinely failed".
+ */
+export function isConnectivityError(error: unknown): boolean {
+  return CONNECTIVITY_SENTENCES.has(humanError(error, ''));
+}

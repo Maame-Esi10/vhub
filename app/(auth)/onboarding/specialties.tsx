@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
   Pressable,
   StyleSheet,
   View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
+import { KEYBOARD_AVOID_BEHAVIOR } from '@/constants/keyboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -95,8 +97,11 @@ export default function OnboardingSpecialties() {
           containerStyle={styles.search}
         />
 
+        {/* The list lifts clear of the keyboard while the search is open. */}
+        <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_AVOID_BEHAVIOR}>
         <FlatList
           data={filtered}
+          keyboardShouldPersistTaps="handled"
           keyExtractor={(item) => item}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
@@ -127,6 +132,7 @@ export default function OnboardingSpecialties() {
             );
           }}
         />
+        </KeyboardAvoidingView>
 
         <Button
           title="Confirm Selections"
@@ -188,6 +194,7 @@ const styles = StyleSheet.create({
   search: {
     marginBottom: spacing.sm,
   },
+  flex: { flex: 1 },
   listContent: {
     paddingBottom: spacing.base,
   },

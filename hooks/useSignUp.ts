@@ -67,6 +67,23 @@ export function useSignUp() {
           throw error;
         }
 
+        /*
+          THE ADDRESS ALREADY HAS AN ACCOUNT (owner-reported 2026-09-25: "the
+          6 digit for the new account never arrived").
+
+          For an address that already belongs to a confirmed account, Supabase
+          sends NO email and still answers success, so a stranger cannot use
+          the sign-up form to learn who is registered. It marks the case with
+          an empty `identities` list. The app did not look, so it moved to the
+          code screen and waited for a code that was never going to be sent.
+          An existing account is now said plainly, with the two ways forward.
+        */
+        if (data.user && !data.session && data.user.identities?.length === 0) {
+          throw new Error(
+            'An account with this email address already exists. Log in instead, or use Forgot password if you do not remember the password.'
+          );
+        }
+
         if (!data.session || !data.user) {
           // Email confirmation required — no authenticated session yet, so
           // RLS-guarded profile inserts would fail. useAuthGuard bootstraps
