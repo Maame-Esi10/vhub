@@ -7208,3 +7208,9 @@ Skills, role and availability describe a person. After signing up, an organisati
 
 ### Admins are emailed when something waits for them
 Every admin queue was pull-only, so an organisation could wait days on a queue nobody knew had anything in it. `server/adminAlerts.ts` emails every non-closed admin (`profiles.role = 'admin'`) when an organisation submits verification, a volunteer uploads a credential document, or a volunteer raises a dispute. Disputes are a client insert, so the app calls `/api/dispute-filed` afterwards; that endpoint only announces a fresh, open dispute the caller raised, once per instance. Plain text, no link, never a document. Same Gmail allowance as every other VHub email.
+
+## Layer 2 asked Gemini about only the first 60 pairs (found by the evaluation, fixed 2026-09-25)
+
+The Chapter Five evaluation (`scripts/evaluation/`) found that `checkSkillEquivalences` sends at most 60 pairs per call, and `/api/match` called it once per request with every uncached pair. A request needing more than 60 judgements had the rest silently treated as "not equivalent", while the response still reported `layer2Applied: true`. Each test outreach needed 173 to 176 pairs, so about two thirds were never asked. In normal use the cache would have filled in over repeated requests, which is why nothing looked wrong.
+
+**Fix (owner-approved):** `checkSkillEquivalencesBatched` splits the pairs into batches of 60 and sends them in parallel, at most 5 per request (300 pairs). Parallel rather than sequential because each call may take up to the 8-second timeout and Vercel's free tier stops a function at 10 seconds. Batches that succeed are cached even if another fails, and `layer2Applied` is now false whenever any pair was left unanswered. Verified by the forced-failure evaluation: a normal run of one outreach makes 3 calls and reports true; one failed batch out of three returns the complete Layer 1 ranking and reports false.

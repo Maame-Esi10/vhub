@@ -30,10 +30,29 @@ const { POST } = require('../../api/src/app/api/match/route') as { POST: (req: R
 
 const OUT = path.join(__dirname, 'output', '02-failure.md');
 
-type Behaviour = (init?: RequestInit) => Promise<Response>;
+type Behaviour = (init: RequestInit | undefined, callNumber: number) => Promise<Response>;
 
 const geminiBody = (answer: string) =>
   JSON.stringify({ candidates: [{ content: { parts: [{ text: answer }] } }] });
+
+/** A correct Gemini answer: one boolean per pair asked, all set to `value`. */
+function answerAll(init: RequestInit | undefined, value: boolean): Response {
+  const prompt = String(JSON.parse(String(init?.body)).contents[0].parts[0].text);
+  const asked = [...prompt.matchAll(/^\d+\. required=/gm)].length;
+  return new Response(geminiBody(JSON.stringify({ matches: Array(asked).fill(value) })), { status: 200 });
+}
+
+/*
+  THE CONTROL: Gemini answers every pair, correctly shaped. Not a failure; it
+  shows the batching sends every pair (about 175 for O1, so three calls of up
+  to 60) and reports layer2Applied true. Every answer is "not equivalent", so
+  the scores, and therefore the ranking, stay identical to Layer 1.
+*/
+const CONTROL: { name: string; how: string; behaviour: Behaviour } = {
+  name: 'Control: no failure',
+  how: 'every Gemini request answers correctly, every pair "not equivalent"',
+  behaviour: async (init) => answerAll(init, false),
+};
 
 const CASES: { name: string; how: string; behaviour: Behaviour }[] = [
   {
@@ -65,6 +84,14 @@ const CASES: { name: string; how: string; behaviour: Behaviour }[] = [
     name: 'Malformed JSON',
     how: 'HTTP 200, but the model\'s answer is not valid JSON',
     behaviour: async () => new Response(geminiBody('{"matches": [true, false,'), { status: 200 }),
+  },
+  {
+    name: 'One of the batches fails (HTTP 500), the others answer',
+    how: 'the first Gemini request answers 500; every other request answers correctly (every pair "not equivalent")',
+    behaviour: async (init, callNumber) => {
+      if (callNumber === 1) return new Response('{"error":{"code":500}}', { status: 500 });
+      return answerAll(init, false);
+    },
   },
   {
     name: 'Matches list of the wrong length',
@@ -115,13 +142,13 @@ test('forced Layer 2 failures', async () => {
     const applicants = databaseRows().volunteer_profiles.length;
 
     process.env.GEMINI_API_KEY = 'evaluation-dummy-key';
-    for (const c of CASES) {
+    for (const c of [CONTROL, ...CASES]) {
       let geminiCalls = 0;
       globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
         if (!url.includes('generativelanguage.googleapis.com')) return original(input, init);
         geminiCalls += 1;
-        return c.behaviour(init);
+        return c.behaviour(init, geminiCalls);
       }) as typeof fetch;
 
       const outcome = await score();
@@ -136,6 +163,8 @@ test('forced Layer 2 failures', async () => {
 
     const L: string[] = [];
     L.push(`Run on ${new Date().toISOString().slice(0, 10)} by \`scripts/evaluation/failure.eval.ts\`. The real \`/api/match\` route (\`score_applicants\`, outreach O1, ${applicants} applicants) was called first with no Gemini key, giving the Layer 1 baseline (HTTP ${baseline.status}, ${baseline.ranking.length} results, layer2Applied = ${baseline.layer2Applied}, ${baseline.ms} ms). It was then called once per failure below, with a key set and the request to Google answered by a stand-in that fails in that way. The cache was empty each time, so every run had to ask Gemini. "Identical" compares every volunteer's position and match score with the baseline.`);
+    L.push('');
+    L.push('The first row is a control with no failure: it shows how many Gemini requests a normal run of this outreach makes (every pair is sent, in batches of up to 60 run in parallel) and that it reports layer2Applied = true. Its answers are all "not equivalent", so its ranking is also identical to Layer 1.');
     L.push('');
     L.push('| Failure | How it was produced | Gemini requests attempted | Engine returned | Ranking complete | Identical to Layer 1 | layer2Applied | Request time (ms) |');
     L.push('|---|---|---|---|---|---|---|---|');

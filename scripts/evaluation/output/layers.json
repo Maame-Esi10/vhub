@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-09-25T02:46:27.464Z",
+  "ranAt": "2026-09-25T03:03:33.453Z",
   "model": "gemini-2.5-flash",
   "runs": {
     "A": [
@@ -368,7 +368,7 @@
           }
         ],
         "layer2Applied": false,
-        "ms": 37,
+        "ms": 25,
         "pairsNeeded": 173,
         "cacheHits": 0,
         "geminiCalls": []
@@ -738,7 +738,7 @@
           }
         ],
         "layer2Applied": false,
-        "ms": 8,
+        "ms": 7,
         "pairsNeeded": 173,
         "cacheHits": 0,
         "geminiCalls": []
@@ -1478,7 +1478,7 @@
           }
         ],
         "layer2Applied": false,
-        "ms": 5,
+        "ms": 7,
         "pairsNeeded": 176,
         "cacheHits": 0,
         "geminiCalls": []
@@ -1848,7 +1848,7 @@
           }
         ],
         "layer2Applied": false,
-        "ms": 7,
+        "ms": 30,
         "pairsNeeded": 173,
         "cacheHits": 0,
         "geminiCalls": []
@@ -2218,7 +2218,7 @@
           }
         ],
         "layer2Applied": false,
-        "ms": 5,
+        "ms": 6,
         "pairsNeeded": 176,
         "cacheHits": 0,
         "geminiCalls": []

@@ -17,7 +17,7 @@ import {
   fetchRolesByOutreach,
   toOutreachInput,
 } from "../../../server/outreachInput";
-import { checkSkillEquivalences, type SkillPair } from "../../../server/gemini";
+import { checkSkillEquivalencesBatched, type SkillPair } from "../../../server/gemini";
 import {
   dedupePairs,
   lookupSkillCache,
@@ -754,18 +754,20 @@ async function computeLayer2Equivalences(
   const uncached = distinctPairs.filter((p) => !cacheMap.has(`${p.skillA}::${p.skillB}`));
   if (uncached.length > 0) {
     const geminiPairs: SkillPair[] = uncached.map((p) => ({ skillA: p.skillA, skillB: p.skillB }));
-    const geminiResults = await checkSkillEquivalences(geminiPairs);
-    if (geminiResults) {
-      for (const r of geminiResults) cacheMap.set(`${r.skillA}::${r.skillB}`, r.isMatch);
-      await upsertSkillCacheResults(
-        admin,
-        geminiResults.map((r) => ({ skillA: r.skillA, skillB: r.skillB, isMatch: r.isMatch }))
-      );
-    } else {
-      // Layer 2 unavailable (no key, quota, timeout, bad shape). Those pairs
-      // stay absent from cacheMap, i.e. "no equivalence found" below.
-      applied = false;
-    }
+    // Batched: every uncached pair is asked, not just the first 60. See
+    // checkSkillEquivalencesBatched for the finding that made this necessary.
+    const { results: geminiResults, complete } = await checkSkillEquivalencesBatched(geminiPairs);
+    for (const r of geminiResults) cacheMap.set(`${r.skillA}::${r.skillB}`, r.isMatch);
+    // Whatever WAS answered is cached, even when some batch failed, so the
+    // next request only asks for what is still missing.
+    await upsertSkillCacheResults(
+      admin,
+      geminiResults.map((r) => ({ skillA: r.skillA, skillB: r.skillB, isMatch: r.isMatch }))
+    );
+    // Any pair left unanswered (no key, quota, timeout, bad shape, or past
+    // the batch limit) stays absent from cacheMap, i.e. "no equivalence found"
+    // below, and the response says Layer 2 was not fully applied.
+    if (!complete) applied = false;
   }
 
   for (const pair of pending) {

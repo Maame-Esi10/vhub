@@ -139,6 +139,65 @@ export async function checkSkillEquivalences(
   }
 }
 
+/**
+ * The most batches one request may send. 5 x 60 = 300 pairs, sent at the
+ * same time, so a request still finishes inside the 8-second Gemini timeout
+ * (and Vercel's 10-second ceiling) however many batches it needs.
+ */
+const MAX_BATCHES_PER_REQUEST = 5;
+
+export interface BatchedEquivalenceResult {
+  /** Every pair Gemini answered, from every batch that succeeded. */
+  results: SkillPairResult[];
+  /**
+   * True only when EVERY pair asked for was answered. False when a batch
+   * failed or pairs were left over past the batch limit.
+   */
+  complete: boolean;
+  /** How many Gemini calls were made. */
+  calls: number;
+}
+
+/**
+ * Asks Gemini about ANY number of pairs, in batches of 60 sent in parallel.
+ *
+ * WHY THIS EXISTS (evaluation finding, owner-approved fix 2026-09-25).
+ * `checkSkillEquivalences` sends at most 60 pairs. Its only caller used to
+ * hand it every uncached pair in one go, so a request needing 175 judgements
+ * had 60 answered and 115 silently treated as "not equivalent", while the
+ * response still said layer2Applied: true. The Chapter Five evaluation
+ * measured it: each test outreach needed 173 to 176 pairs.
+ *
+ * WHY PARALLEL, NOT ONE AFTER ANOTHER. Each call may take up to the 8-second
+ * timeout, and Vercel stops a free-tier function at 10 seconds; three calls in
+ * a row could not finish. In parallel the request takes as long as its
+ * slowest batch.
+ *
+ * NEVER THROWS, and a failed batch only loses its own pairs: the batches that
+ * succeeded are still returned (and cached by the caller), and `complete`
+ * turns false so the caller reports Layer 2 as not fully applied.
+ */
+export async function checkSkillEquivalencesBatched(
+  pairs: readonly SkillPair[]
+): Promise<BatchedEquivalenceResult> {
+  if (pairs.length === 0) return { results: [], complete: true, calls: 0 };
+
+  const batches: SkillPair[][] = [];
+  for (let i = 0; i < pairs.length && batches.length < MAX_BATCHES_PER_REQUEST; i += MAX_PAIRS_PER_CALL) {
+    batches.push(pairs.slice(i, i + MAX_PAIRS_PER_CALL));
+  }
+  const asked = batches.reduce((n, batch) => n + batch.length, 0);
+
+  const answers = await Promise.all(batches.map((batch) => checkSkillEquivalences(batch)));
+  const results = answers.flatMap((answer) => answer ?? []);
+
+  return {
+    results,
+    complete: asked === pairs.length && answers.every((answer) => answer !== null),
+    calls: batches.length,
+  };
+}
+
 function buildPrompt(pairs: readonly SkillPair[]): string {
   const list = pairs
     .map((pair, i) => `${i}. required="${pair.skillA}" vs volunteer="${pair.skillB}"`)
