@@ -264,7 +264,7 @@ export default function EditOrganisationProfile() {
                 label="Organisation Name"
                 value={orgName}
                 onChangeText={setOrgName}
-                placeholder="e.g. Ghana Health Outreach Foundation"
+                placeholder="e.g. Hope Health Trust"
                 autoCapitalize="words"
                 error={errors.orgName}
               />
@@ -296,7 +296,7 @@ export default function EditOrganisationProfile() {
                 label="Contact Name"
                 value={fullName}
                 onChangeText={setFullName}
-                placeholder="Who volunteers will hear from"
+                placeholder="Full name"
                 autoCapitalize="words"
                 error={errors.fullName}
               />
@@ -305,7 +305,7 @@ export default function EditOrganisationProfile() {
                 label="Contact Email"
                 value={contactEmail}
                 onChangeText={setContactEmail}
-                placeholder="enquiries@yourorganisation.org"
+                placeholder="info@yourorg.org"
                 autoCapitalize="none"
                 keyboardType="email-address"
                 error={errors.contactEmail}

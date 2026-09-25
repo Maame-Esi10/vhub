@@ -146,6 +146,8 @@ export default function CreateOutreach() {
     message: string;
     actionLabel?: string;
     onAction?: () => void;
+    dismissLabel?: string;
+    onDismiss?: () => void;
   } | null>(null);
 
   /*
@@ -495,6 +497,17 @@ export default function CreateOutreach() {
               params: { id: outreach.id, created: outreach.id },
             });
           };
+          /*
+            THE OTHER BUTTON GOES HOME, NOT "STAY HERE" (owner, 2026-09-25:
+            "shouldn't the two options be manage or go home? why would you
+            choose to stay at the create event screen"). The wizard has already
+            been reset, so staying meant looking at an empty form that nobody
+            had asked for.
+          */
+          const goHome = () => {
+            setOutcome(null);
+            router.replace('/(organisation)/dashboard');
+          };
 
           setOutcome(
             status === 'draft'
@@ -504,6 +517,8 @@ export default function CreateOutreach() {
                   message: `${outreach.title} is saved. Nobody can see it yet. You will find it under Drafts on your dashboard, and you can finish and publish it from the Manage Event screen.`,
                   actionLabel: 'Open Manage Event',
                   onAction: openManageEvent,
+                  dismissLabel: 'Go to Home',
+                  onDismiss: goHome,
                 }
               : {
                   tone: 'success',
@@ -511,6 +526,8 @@ export default function CreateOutreach() {
                   message: `${outreach.title} is now open and volunteers can apply. You can track applicants and edit the details from the Manage Event screen.`,
                   actionLabel: 'Open Manage Event',
                   onAction: openManageEvent,
+                  dismissLabel: 'Go to Home',
+                  onDismiss: goHome,
                 }
           );
         },
@@ -591,7 +608,7 @@ export default function CreateOutreach() {
                 <Input
                   label="Campaign Title"
                   required
-                  placeholder="e.g. Community Health Screening 2024"
+                  placeholder="e.g. Eye screening day"
                   value={state.title}
                   onChangeText={(text) => update('title', text)}
                   error={errors.title}
@@ -805,6 +822,43 @@ export default function CreateOutreach() {
                 than the controls around it. A heading and a line of purpose
                 give it the weight its 35 match points already have.
               */}
+              {/*
+                ORDER (owner, 2026-09-25): WHO the outreach needs first, with
+                the clinical/support explanation at the top of the role builder;
+                then Gemini; then the required skills. The role type decides
+                whether skills are required at all, so it has to be answered
+                before the skills are asked for, and Gemini sits above the
+                selector it feeds rather than below it. It matches the
+                volunteer's skills step: explanation, Gemini, skills.
+              */}
+              {/*
+                ONE LIST, NO MODE. This was a toggle between "Any volunteers"
+                and "Specific roles", each with its own controls — the
+                database's two storage shapes surfaced as a choice the
+                organisation had to make before they could describe anything.
+                Needing one kind of volunteer is the one-role case, not a
+                different mode. `toStoragePayload` decides which shape to write.
+              */}
+              <RoleBuilder roles={state.roles} onChange={(roles) => update('roles', roles)} />
+              {errors.roles ? <Text style={styles.fieldError}>{errors.roles}</Text> : null}
+              <View style={styles.sectionGap} />
+              <SkillSuggestBox
+                label="Not sure which skills to pick?"
+                // TITLE AND DESCRIPTION, not description alone (owner, 2026-09-15:
+                // "my outreach title was Mental Health Awareness and it returned
+                // nothing"). The title is the most concentrated statement of what
+                // an event is, and an organisation reasonably expects it to count.
+                //
+                // EDITABLE, seeded from those two (owner, 2026-09-21). A title is
+                // often three words and a topic rather than a description of the
+                // work, which is very little for a model to reason from. The form's
+                // text is now a starting draft the organisation can add to.
+                editable
+                placeholder="Describe the day in your own words. What will volunteers actually be doing?"
+                sourceText={[state.title, state.description].filter(Boolean).join('. ')}
+                onSuggestions={setSuggestion}
+              />
+              <View style={styles.sectionGap} />
               <Text style={styles.skillsHeading}>Required Skills</Text>
               <Text style={styles.skillsLead}>
                 {clinical
@@ -836,45 +890,7 @@ export default function CreateOutreach() {
                 />
               </View>
 
-              {/*
-                THE HELPER GOES UNDER THE CONTROL IT HELPS WITH (owner,
-                2026-09-21: the skill selector "is barely noticeable sitting
-                under the Gemini box").
 
-                The heading was already here, added in September, but it sat
-                above the suggestion box rather than above the selector -- so
-                the most important control on the step was separated from the
-                words naming it by an entire other component, and read as an
-                afterthought to the suggestions. Heading, then the control,
-                then the aid.
-              */}
-              <SkillSuggestBox
-                label="Not sure which skills to pick?"
-                // TITLE AND DESCRIPTION, not description alone (owner, 2026-09-15:
-                // "my outreach title was Mental Health Awareness and it returned
-                // nothing"). The title is the most concentrated statement of what
-                // an event is, and an organisation reasonably expects it to count.
-                //
-                // EDITABLE, seeded from those two (owner, 2026-09-21). A title is
-                // often three words and a topic rather than a description of the
-                // work, which is very little for a model to reason from. The form's
-                // text is now a starting draft the organisation can add to.
-                editable
-                placeholder="Describe the day in your own words. What will volunteers actually be doing?"
-                sourceText={[state.title, state.description].filter(Boolean).join('. ')}
-                onSuggestions={setSuggestion}
-              />
-
-              {/*
-                ONE LIST, NO MODE. This was a toggle between "Any volunteers"
-                and "Specific roles", each with its own controls — the
-                database's two storage shapes surfaced as a choice the
-                organisation had to make before they could describe anything.
-                Needing one kind of volunteer is the one-role case, not a
-                different mode. `toStoragePayload` decides which shape to write.
-              */}
-              <RoleBuilder roles={state.roles} onChange={(roles) => update('roles', roles)} />
-              {errors.roles ? <Text style={styles.fieldError}>{errors.roles}</Text> : null}
             </View>
           ) : null}
 
@@ -937,14 +953,15 @@ export default function CreateOutreach() {
         message={outcome?.message}
         actionLabel={outcome?.actionLabel}
         onAction={outcome?.onAction}
-        dismissLabel={outcome?.actionLabel ? 'Stay here' : 'Got it'}
-        onDismiss={() => setOutcome(null)}
+        dismissLabel={outcome?.dismissLabel ?? 'Got it'}
+        onDismiss={outcome?.onDismiss ?? (() => setOutcome(null))}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  sectionGap: { height: spacing.xl },
   skillsHeading: {
     fontFamily: fontFamily.bold,
     fontSize: 18,

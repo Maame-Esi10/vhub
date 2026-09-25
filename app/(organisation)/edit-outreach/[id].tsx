@@ -649,7 +649,7 @@ export default function EditOutreach() {
             <Input
               label="Campaign Title"
               required
-              placeholder="e.g. Community Health Screening 2024"
+              placeholder="e.g. Eye screening day"
               value={state.title}
               onChangeText={(text) => update('title', text)}
               error={errors.title}

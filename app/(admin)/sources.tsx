@@ -198,7 +198,7 @@ export default function AdminSources() {
                 label="Kind of body"
                 value={sourceType}
                 onChangeText={setSourceType}
-                placeholder="Ministry, teaching hospital, NGO umbrella…"
+                placeholder="e.g. Ministry"
               />
               <Input
                 label="Why it is trusted"

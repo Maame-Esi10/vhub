@@ -29,6 +29,20 @@ export interface RoleDraft {
   /** Null means any level. A FLOOR, not an exact match. */
   minExperienceLevel: ExperienceLevel | null;
   slotsTotal: number;
+  /**
+   * `false` until the organisation taps a profession ("Any profession"
+   * included) / a role type. Absent means chosen, which is every role loaded
+   * from an existing outreach.
+   *
+   * WHY (owner, 2026-09-25: "I didn't select any skills or volunteer
+   * profession but I was able to go to preview. HOW??? What roles are they
+   * accepting? The core essence of the app"). A new outreach used to start as
+   * one SUPPORT role for ANY profession, pre-selected, and support skills are
+   * optional, so an organisation could publish without ever saying who it
+   * wanted. Both answers are now asked for, not assumed.
+   */
+  professionChosen?: boolean;
+  roleTypeChosen?: boolean;
 }
 
 /**
@@ -127,6 +141,8 @@ export const INITIAL_ROLE: RoleDraft = {
   roleType: 'support',
   minExperienceLevel: null,
   slotsTotal: 5,
+  professionChosen: false,
+  roleTypeChosen: false,
 };
 
 export const INITIAL_WIZARD_STATE: OutreachWizardState = {
@@ -408,6 +424,14 @@ export function summariseStepErrors(errors: WizardFieldError, step: number): str
 export function validateRoles(roles: readonly RoleDraft[]): string | null {
   if (roles.length === 0) {
     return 'Say how many volunteers you need.';
+  }
+
+  if (roles.some((role) => role.professionChosen === false)) {
+    return 'Choose who each role is for: a profession, or Any profession.';
+  }
+
+  if (roles.some((role) => role.roleTypeChosen === false)) {
+    return 'Choose clinical or support for each role.';
   }
 
   if (roles.some((role) => !Number.isInteger(role.slotsTotal) || role.slotsTotal < 1)) {

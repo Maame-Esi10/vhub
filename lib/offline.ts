@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import NetInfo from '@react-native-community/netinfo';
-import { onlineManager, type Query } from '@tanstack/react-query';
+import { AppState } from 'react-native';
+import { focusManager, onlineManager, type Query } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 
@@ -37,6 +38,23 @@ export function configureOnlineManager(): void {
       setOnline(!!state.isConnected && state.isInternetReachable !== false);
     })
   );
+}
+
+/**
+ * Tells React Query when the app comes back to the front, so stale queries
+ * refetch then (owner-reported 2026-09-25: an approval "only reflects after the
+ * org or volunteer signs out and in"). React Query's refetch-on-focus is wired
+ * to the browser's window focus by default, which does not exist in React
+ * Native, so without this nothing ever refetched on return to the app.
+ *
+ * Called once at module scope from app/_layout.tsx, next to
+ * configureOnlineManager.
+ */
+export function configureFocusManager(): void {
+  focusManager.setEventListener((handleFocus) => {
+    const subscription = AppState.addEventListener('change', (state) => handleFocus(state === 'active'));
+    return () => subscription.remove();
+  });
 }
 
 /** Subscribes a component to connectivity changes. */

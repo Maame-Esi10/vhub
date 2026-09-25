@@ -169,7 +169,7 @@ export default function Login() {
               </Pressable>
             </View>
             <Input
-              placeholder="Enter your password"
+              placeholder="Your password"
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}

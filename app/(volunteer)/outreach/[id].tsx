@@ -404,6 +404,28 @@ export default function OutreachDetail() {
                   ? 'All slots filled'
                   : `${slotsLeft} of ${outreach.slots_total} slots open`,
               },
+              /*
+                WHO THEY NEED (owner, 2026-09-25: "What roles are they
+                accepting? The core essence of the app"). A single-role
+                outreach never said which profession it wanted: only the
+                multi-role picker named roles, so a volunteer had to guess
+                whether "Clinical role" meant them.
+              */
+              {
+                icon: 'account-search-outline' as const,
+                label: 'WHO THEY NEED',
+                value: usesRoles
+                  ? roles
+                      .map(
+                        (role) =>
+                          `${role.slots_total} ${
+                            VOLUNTEER_CATEGORIES.find((c) => c.value === role.category)?.label ?? role.category
+                          }`
+                      )
+                      .join(', ')
+                  : (VOLUNTEER_CATEGORIES.find((c) => c.value === outreach.required_category)?.label ??
+                    'Any profession'),
+              },
               ...(outreach.role_type
                 ? [
                     {

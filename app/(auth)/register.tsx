@@ -478,7 +478,7 @@ export default function Register() {
 
                   <Input
                     label="Website"
-                    placeholder="https://yourorganisation.org (optional)"
+                    placeholder="Optional"
                     value={website}
                     onChangeText={setWebsite}
                     keyboardType="url"

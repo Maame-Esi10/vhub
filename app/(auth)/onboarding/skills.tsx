@@ -158,7 +158,12 @@ export default function OnboardingSkills() {
       });
     }
 
-    if (extras.length === 0) return base;
+    /*
+      A SEARCH SHOWS SKILLS, NOT SUGGESTIONS (owner, 2026-09-25: "why are the
+      skill pills in the search?"). While something is typed, the suggestion
+      groups are left out and only the skills matching the words appear.
+    */
+    if (extras.length === 0 || trimmed) return base;
     return [...extras, ...base];
   }, [query, suggestion, selected, GROUPS, category]);
 

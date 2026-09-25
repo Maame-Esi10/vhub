@@ -90,7 +90,7 @@ export default function OnboardingSpecialties() {
         ) : null}
 
         <Input
-          placeholder="Search clinical specialties..."
+          placeholder="Search specialties..."
           value={query}
           onChangeText={setQuery}
           leadingIcon={<MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />}

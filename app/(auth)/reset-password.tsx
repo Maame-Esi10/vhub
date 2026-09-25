@@ -161,6 +161,8 @@ export default function ResetPassword() {
               ? `If ${email} has a VHub account, we have sent it a code. Enter it below and choose a new password.`
               : 'Enter the code from your email and choose a new password.'}
           </Text>
+          {/* Same line as the sign-up code screen, deliberately. */}
+          <Text style={styles.spamHint}>It often lands in Spam or Junk. If it is not in your inbox within a minute, look there.</Text>
 
           <View style={styles.form}>
             <Input
@@ -358,6 +360,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  spamHint: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textPrimary,
     marginTop: spacing.sm,
   },
   form: {

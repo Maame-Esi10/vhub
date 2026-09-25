@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useRouter, useSegments } from 'expo-router';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
@@ -426,6 +428,30 @@ export function useAuthGuard() {
 
     return () => subscription.subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /*
+    THE PROFILE REFRESHES WHILE THE APP IS IN USE (owner-reported
+    2026-09-25: after an admin approved a document, "unless the org or
+    volunteer signs out and signs in, the changes don't reflect"). The profile,
+    and with it the volunteer's verification status, was read once at sign-in
+    and never again. It now reloads when the app returns to the front, and
+    when a notification arrives while it is open, which is exactly what an
+    approval sends. The loader dedupes concurrent calls itself.
+  */
+  useEffect(() => {
+    const reload = () => {
+      const { user: sessionUser, profile: loaded } = useAuthStore.getState();
+      if (sessionUser && loaded) void reloadProfile.current?.(sessionUser);
+    };
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') reload();
+    });
+    const received = Notifications.addNotificationReceivedListener(reload);
+    return () => {
+      appState.remove();
+      received.remove();
+    };
   }, []);
 
   // When the connection returns, replace a profile that came from the

@@ -73,17 +73,22 @@ export default function ConfirmEmail() {
     confirmSignUp.mutate(
       { email, code },
       {
-        onSuccess: () => {
+        onSuccess: (confirmedRole) => {
           // To the ROOT, never a role home. The guard decides where this
           // person belongs - including a volunteer whose onboarding has not
           // started, who must land in the wizard rather than the tabs.
           //
-          // The one exception is an organisation, whose onboarding IS
-          // verification (see app/(organisation)/verification.tsx). The guard
-          // leaves a user alone inside their own role group, so landing there
-          // directly is safe; `role` is only a hint from register, and a wrong
-          // one is corrected by the guard's own-group rule.
-          router.replace(roleParam === 'organisation' ? '/(organisation)/verification?welcome=1' : '/');
+          // The one exception is a NEW organisation, whose onboarding IS
+          // verification (see app/(organisation)/verification.tsx). The role
+          // comes from the account this code just confirmed, so it is right
+          // whichever screen led here: Register passed it as a parameter, but
+          // the login screen's route here never did, and that is how a new
+          // organisation reached the dashboard directly (2026-09-25). The
+          // parameter stays as a fallback. The guard leaves a user alone
+          // inside their own role group, so landing there directly is safe.
+          const isNewOrganisation =
+            confirmedRole === 'organisation' || (confirmedRole === null && roleParam === 'organisation');
+          router.replace(isNewOrganisation ? '/(organisation)/verification?welcome=1' : '/');
         },
       }
     );
@@ -141,7 +146,9 @@ export default function ConfirmEmail() {
           {/* The confirmation email is the most spam-prone message VHub
               sends: it goes to somebody who has never heard from the sender.
               Same wording as the reset-password screen, deliberately. */}
-          <Text style={styles.hint}>Nothing arrived? Check your spam folder first.</Text>
+          {/* Made prominent 2026-09-25: the owner's own code went to Spam and the
+              old grey line was missed. */}
+          <Text style={styles.hint}>It often lands in Spam or Junk. If it is not in your inbox within a minute, look there.</Text>
 
           <View style={styles.form}>
             <Input
@@ -260,10 +267,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   hint: {
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.textSecondary,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textPrimary,
     textAlign: 'center',
     marginTop: spacing.sm,
   },

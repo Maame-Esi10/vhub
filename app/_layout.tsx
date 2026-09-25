@@ -12,9 +12,11 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
+import * as Notifications from 'expo-notifications';
 import { useAuthGuard, usePushRegistration } from '@/hooks';
 import { configureNotificationHandler } from '@/lib/push';
 import {
+  configureFocusManager,
   configureOnlineManager,
   queryPersister,
   shouldPersistQuery,
@@ -44,6 +46,7 @@ const queryClient = new QueryClient({
 });
 
 configureOnlineManager();
+configureFocusManager();
 
 /*
   Minimum time the JS splash stays up, even if fonts and the session resolve
@@ -84,6 +87,16 @@ function RootNavigator() {
   const { loading: authLoading } = useAuthGuard();
   // No-op until a signed-in user with a profile row exists; see the hook.
   usePushRegistration();
+  // A notification arriving while the app is open usually means something
+  // changed on the server (an approval, a decision), so on-screen data is
+  // refetched then rather than at the next sign-in (owner-reported
+  // 2026-09-25). useAuthGuard reloads the profile on the same signal.
+  useEffect(() => {
+    const received = Notifications.addNotificationReceivedListener(() => {
+      void queryClient.invalidateQueries();
+    });
+    return () => received.remove();
+  }, []);
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,

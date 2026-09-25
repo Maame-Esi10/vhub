@@ -342,15 +342,18 @@ export default function OrganisationVerification() {
                 required
                 value={contactPerson}
                 onChangeText={setContactPerson}
-                placeholder="Full name of the person responsible"
+                placeholder="Full name"
                 error={attempted ? (errors.contactPerson ?? undefined) : undefined}
               />
+              {/* The explanation lives here, not in the placeholder: a placeholder is one
+                  line and was cut off at a large system font (owner, 2026-09-25). */}
+              <Text style={styles.fieldHint}>The person responsible, whom VHub can contact about this verification.</Text>
               <Input
                 label="Official email"
                 required
                 value={officialEmail}
                 onChangeText={setOfficialEmail}
-                placeholder="name@yourorganisation.org"
+                placeholder="you@yourorg.org"
                 autoCapitalize="none"
                 keyboardType="email-address"
                 error={attempted ? (errors.officialEmail ?? undefined) : undefined}
@@ -389,13 +392,13 @@ export default function OrganisationVerification() {
                     label={index === 0 ? 'Registered with' : undefined}
                     value={row.label}
                     onChangeText={(value) => updateRegistration(index, { label: value })}
-                    placeholder="e.g. Registrar-General"
+                    placeholder="e.g. RGD"
                   />
                   <Input
                     label={index === 0 ? 'Number' : undefined}
                     value={row.number}
                     onChangeText={(value) => updateRegistration(index, { number: value })}
-                    placeholder="e.g. CG123456789"
+                    placeholder="e.g. CG12345"
                   />
                   {registrations.length > 1 ? (
                     <Pressable

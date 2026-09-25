@@ -71,7 +71,14 @@ export function RoleBuilder({ roles, onChange, filledByKey }: RoleBuilderProps) 
     // profession, which is the field they came here to set.
     onChange([
       ...roles,
-      { category: null, roleType: 'support', minExperienceLevel: null, slotsTotal: 2 },
+      {
+        category: null,
+        roleType: 'support',
+        minExperienceLevel: null,
+        slotsTotal: 2,
+        professionChosen: false,
+        roleTypeChosen: false,
+      },
     ]);
   }
 
@@ -133,8 +140,10 @@ export function RoleBuilder({ roles, onChange, filledByKey }: RoleBuilderProps) 
               {!multiple ? (
                 <Chip
                   label="Any profession"
-                  selected={role.category === null}
-                  onPress={() => updateRole(index, { category: null, minExperienceLevel: null })}
+                  selected={role.professionChosen !== false && role.category === null}
+                  onPress={() =>
+                    updateRole(index, { category: null, minExperienceLevel: null, professionChosen: true })
+                  }
                 />
               ) : null}
               {VOLUNTEER_CATEGORIES.map((option) => (
@@ -145,6 +154,7 @@ export function RoleBuilder({ roles, onChange, filledByKey }: RoleBuilderProps) 
                   onPress={() =>
                     updateRole(index, {
                       category: option.value as VolunteerCategory,
+                      professionChosen: true,
                     })
                   }
                 />
@@ -157,8 +167,10 @@ export function RoleBuilder({ roles, onChange, filledByKey }: RoleBuilderProps) 
                 <Chip
                   key={option.value}
                   label={option.label}
-                  selected={role.roleType === option.value}
-                  onPress={() => updateRole(index, { roleType: option.value as OutreachRoleType })}
+                  selected={role.roleTypeChosen !== false && role.roleType === option.value}
+                  onPress={() =>
+                    updateRole(index, { roleType: option.value as OutreachRoleType, roleTypeChosen: true })
+                  }
                 />
               ))}
             </View>

@@ -1,4 +1,5 @@
 import {
+  INITIAL_ROLE,
   INITIAL_WIZARD_STATE,
   daysChanged,
   firstDay,
@@ -509,11 +510,23 @@ describe('every field a published outreach needs is guarded', () => {
       startTime: '09:00',
       endTime: '15:00',
       requiredSkills: ['Vital Signs'],
+      roles: [{ category: 'nurse', roleType: 'clinical', minExperienceLevel: null, slotsTotal: 5 }],
     });
   }
 
   it('passes when everything is filled in', () => {
     expect(hasWizardErrors(validateWizard(complete()))).toBe(false);
+  });
+
+  // Owner, 2026-09-25: an outreach could be published without the organisation
+  // ever choosing who it wanted, because the first role came pre-selected.
+  it('refuses the untouched first role: profession and role type must be chosen', () => {
+    const untouched = { ...complete(), roles: [INITIAL_ROLE] };
+    expect(validateWizard(untouched).roles).toBe('Choose who each role is for: a profession, or Any profession.');
+    const professionOnly = { ...complete(), roles: [{ ...INITIAL_ROLE, professionChosen: true }] };
+    expect(validateWizard(professionOnly).roles).toBe('Choose clinical or support for each role.');
+    const both = { ...complete(), roles: [{ ...INITIAL_ROLE, professionChosen: true, roleTypeChosen: true }] };
+    expect(validateWizard(both).roles).toBeUndefined();
   });
 
   // Each of these was UNGUARDED before 2026-08-21: the wizard let an outreach

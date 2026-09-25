@@ -4,15 +4,18 @@ A journey counts as tested only if a record shows it was carried out on a device
 
 ## 4.0 Release v1.0.1 round (2026-09-25)
 
-Reported by the owner on 2026-09-25 after installing release v1.0.1 from the GitHub download link. Phone model and Android version: not stated.
+Reported by the owner on 2026-09-25 after installing release v1.0.1 from the GitHub download link. **Device: Samsung Galaxy A07, model SM-A075F/DS, Android 16**, with a large system font size.
 
 | Journey | Result | Defect found | Status of the defect |
 |---|---|---|---|
 | Onboarding as an Allied Health Professional, with Gemini skill suggestions | Passed functionally: describing the work as a dietitian returned four suggestions including nutrition counselling and malnutrition screening | The skills screen's top section did not scroll, and the keyboard covered the Gemini box; the Gemini box sat between the search field and the skills it filters | Fixed in code the same day (one scrolling column: explainer, Gemini, required skills, search, skills; keyboard handling added). Needs a new build and a re-test |
-| Registration and the six-digit code | **Failed:** the code for a new account never arrived | Not yet diagnosed. A confirmed account already on that address would produce exactly this (Supabase sends nothing and still reports success); the app now says so instead of waiting. Unconfirmed until the address is checked | Open |
+| Registration and the six-digit code | **Passed, with a finding:** the code arrived, but in the Spam folder, so it looked as if it had not been sent. The account showed "Waiting for verification" in Supabase until the code was entered | The spam advice on the code screen was a small grey line and was missed; after the code, a new organisation went straight to the dashboard instead of its verification step, because the login screen's route to the code screen did not carry the role | Fixed in code: the spam line is now prominent (and added to password reset); the role is read from the confirmed account. Needs a new build and a re-test |
 | Forgot password and its code | Passed: the code arrived | None | |
 | Admin alert email | Passed: the admin received the email | None | |
 | Credential review (admin reviews and accepts a volunteer's document) | Passed | None | |
+| Create and publish an outreach | **Passed functionally, with defects** | The outreach could reach Preview with no profession and no skills chosen (the first role was pre-set to a support role for any profession, and support roles do not require skills); after publishing, the second button was "Stay here" on an empty form; a single-role outreach did not tell volunteers which profession it wanted | Fixed in code: profession and clinical or support must now be chosen; the buttons are "Open Manage Event" and "Go to Home"; the volunteer's outreach page shows "Who they need". Needs a new build and a re-test |
+| Large system font | **Defect:** the login password placeholder and two organisation verification placeholders were cut off | A placeholder is a single line; long ones do not fit at a large font | Fixed in code: 12 long placeholders shortened across 8 screens, explanations moved to wrapping lines under the fields. Needs a re-test |
+| An approval reaching the organisation or volunteer | **Defect:** the approved document still showed "waiting review" until the person signed out and in | The profile was read once at sign-in and never refreshed; screens did not refetch when the app returned to the front | Fixed in code: refresh on returning to the app and on any notification received. Needs a re-test |
 | Offline behaviour (opening the app with no internet) | **Failed:** the app went to the welcome carousel | Opening the app offline signed the user out, because a failed profile load at launch was treated as a failed sign-in | Fixed in code the same day (the last loaded profile is kept in encrypted storage and used offline; with nothing saved, the offline screen is shown). Needs a new build and a re-test |
 
 ## 4.1 Journeys with a recorded device test

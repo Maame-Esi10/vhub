@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { isAuthUserMetadata } from '@/lib/auth-metadata';
 import { createProfileRowsFromMetadata } from '@/lib/profileRows';
+import type { Profile } from '@/types/database';
 
 export interface ConfirmSignUpParams {
   email: string;
@@ -50,7 +51,15 @@ export function useConfirmSignUp() {
   const setAuthBootstrapping = useAuthStore((state) => state.setAuthBootstrapping);
 
   return useMutation({
-    mutationFn: async ({ email, code }: ConfirmSignUpParams): Promise<void> => {
+    /*
+      Resolves to the role of an account set up by THIS confirmation, or null
+      when it was already set up. confirm-email uses it to send a new
+      organisation to its verification step (owner, 2026-09-25: after the code
+      "I came to the home screen straight away"). The role used to arrive as a
+      navigation parameter from Register, which the login screen's route to
+      this screen never carried.
+    */
+    mutationFn: async ({ email, code }: ConfirmSignUpParams): Promise<Profile['role'] | null> => {
       // Set BEFORE verifyOtp, for the same reason useSignUp sets it before
       // signUp: the SDK can emit SIGNED_IN as part of saving the session, and
       // useAuthGuard's own profile fetch would then race the writes below.
@@ -89,7 +98,7 @@ export function useConfirmSignUp() {
         if (existing) {
           // Already set up — a second confirmation, or a link tapped first.
           // Nothing to create; let the guard route them.
-          return;
+          return null;
         }
 
         if (!isAuthUserMetadata(user.user_metadata)) {
@@ -106,6 +115,7 @@ export function useConfirmSignUp() {
 
         setProfile(profile);
         setVolunteerProfile(volunteerProfile);
+        return profile.role;
       } finally {
         setAuthBootstrapping(false);
       }
