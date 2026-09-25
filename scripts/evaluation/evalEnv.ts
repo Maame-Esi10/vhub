@@ -23,7 +23,13 @@ export function loadGeminiKey(): string | null {
 export interface GeminiCall {
   pairs: { a: string; b: string }[];
   status: number | 'error';
-  matches: boolean[] | null;
+  /**
+   * Gemini's answer for each pair asked, in the order asked. null for a pair
+   * whose answer was missing or failed the engine's check (wrong id, or the
+   * copied terms did not match the pair). null overall when the response
+   * could not be read at all.
+   */
+  matches: (boolean | null)[] | null;
   ms: number;
 }
 
@@ -52,8 +58,26 @@ export function recordGeminiCalls(): { calls: GeminiCall[]; restore: () => void 
       try {
         const payload = JSON.parse(text) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
         const answer = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
-        const parsed = JSON.parse(answer) as { matches?: unknown };
-        if (Array.isArray(parsed.matches)) call.matches = parsed.matches.map((x) => x === true);
+        const parsed = JSON.parse(answer) as { results?: unknown };
+        if (Array.isArray(parsed.results)) {
+          // The same check the engine applies (verifyAnswers in gemini.ts),
+          // repeated here only so the report can count what was dropped.
+          const same = (x: unknown, y: string) => typeof x === 'string' && x.trim().toLowerCase() === y;
+          const out: (boolean | null)[] = pairs.map(() => null);
+          const seen = new Set<number>();
+          for (const r of parsed.results as Record<string, unknown>[]) {
+            const id = r?.id;
+            if (typeof id !== 'number' || !Number.isInteger(id) || id < 0 || id >= pairs.length) continue;
+            if (seen.has(id)) {
+              out[id] = null;
+              continue;
+            }
+            seen.add(id);
+            const pair = pairs[id]!;
+            if (typeof r.match === 'boolean' && same(r.required, pair.a) && same(r.volunteer, pair.b)) out[id] = r.match;
+          }
+          call.matches = out;
+        }
       } catch {
         // Recorded as matches: null; the engine makes its own decision.
       }

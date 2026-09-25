@@ -11,6 +11,13 @@ export interface SkillPairResult extends SkillPair {
   isMatch: boolean;
 }
 
+/** One call's answer: the pairs Gemini answered in a way that could be checked. */
+export interface SkillPairAnswer {
+  results: SkillPairResult[];
+  /** False when any pair asked for came back missing or failed the check. */
+  complete: boolean;
+}
+
 /**
  * WHY THINKING IS TURNED OFF, AND WHY THE TIMEOUT MOVED (2026-09-21).
  *
@@ -61,8 +68,13 @@ function joinTextParts(
     .trim();
   return text.length > 0 ? text : null;
 }
-/** Hard cap on pairs sent in a single Gemini call -- keeps prompts small and the ~1,500/day free-tier quota healthy. */
-const MAX_PAIRS_PER_CALL = 60;
+/**
+ * Pairs per Gemini call. 30, down from 60 (2026-09-25): since every answer
+ * copies its pair back (see verifyAnswers), a 60-pair answer is three times
+ * longer and was measured at 5.1 to 13.2 s against the 8 s timeout; 30 pairs
+ * measured about 3.3 s on every try.
+ */
+const MAX_PAIRS_PER_CALL = 30;
 
 /**
  * Asks Gemini Flash whether each (required-skill, volunteer-skill) pair is a
@@ -80,8 +92,8 @@ const MAX_PAIRS_PER_CALL = 60;
  */
 export async function checkSkillEquivalences(
   pairs: readonly SkillPair[]
-): Promise<SkillPairResult[] | null> {
-  if (pairs.length === 0) return [];
+): Promise<SkillPairAnswer | null> {
+  if (pairs.length === 0) return { results: [], complete: true };
 
   const apiKey = env.geminiApiKey;
   if (!apiKey) return null; // Layer 2 not configured for this deployment.
@@ -123,13 +135,9 @@ export async function checkSkillEquivalences(
     const text = joinTextParts(payload.candidates);
     if (!text) return null;
 
-    const parsed = JSON.parse(text) as { matches?: unknown };
-    const matches = parsed.matches;
-    if (!Array.isArray(matches) || matches.length !== capped.length) {
-      return null;
-    }
-
-    return capped.map((pair, i) => ({ ...pair, isMatch: matches[i] === true }));
+    const parsed = JSON.parse(text) as { results?: unknown };
+    if (!Array.isArray(parsed.results)) return null;
+    return verifyAnswers(capped, parsed.results);
   } catch {
     // Network failure, AbortError (timeout), JSON.parse failure -- anything.
     return null;
@@ -139,11 +147,11 @@ export async function checkSkillEquivalences(
 }
 
 /**
- * The most batches one request may send. 5 x 60 = 300 pairs, sent at the
+ * The most batches one request may send. 10 x 30 = 300 pairs, sent at the
  * same time, so a request still finishes inside the 8-second Gemini timeout
  * (and Vercel's 10-second ceiling) however many batches it needs.
  */
-const MAX_BATCHES_PER_REQUEST = 5;
+const MAX_BATCHES_PER_REQUEST = 10;
 
 export interface BatchedEquivalenceResult {
   /** Every pair Gemini answered, from every batch that succeeded. */
@@ -158,7 +166,7 @@ export interface BatchedEquivalenceResult {
 }
 
 /**
- * Asks Gemini about ANY number of pairs, in batches of 60 sent in parallel.
+ * Asks Gemini about up to 300 pairs, in batches of 30 sent in parallel.
  *
  * WHY THIS EXISTS (evaluation finding, owner-approved fix 2026-09-25).
  * `checkSkillEquivalences` sends at most 60 pairs. Its only caller used to
@@ -188,13 +196,52 @@ export async function checkSkillEquivalencesBatched(
   const asked = batches.reduce((n, batch) => n + batch.length, 0);
 
   const answers = await Promise.all(batches.map((batch) => checkSkillEquivalences(batch)));
-  const results = answers.flatMap((answer) => answer ?? []);
+  const results = answers.flatMap((answer) => answer?.results ?? []);
 
   return {
     results,
-    complete: asked === pairs.length && answers.every((answer) => answer !== null),
+    complete: asked === pairs.length && answers.every((answer) => answer !== null && answer.complete),
     calls: batches.length,
   };
+}
+
+/**
+ * Keeps only the answers that provably belong to the pair they claim.
+ *
+ * WHY (evaluation finding, owner-approved fix 2026-09-25). The answer used to
+ * be a bare list of booleans, matched to the pairs by position. The Chapter
+ * Five evaluation found 24 wrong "equivalent" answers out of 802, 13 of them
+ * CPR against unrelated skills that sat next to each other in the list: the
+ * signature of answers drifting onto the wrong pair, which a bare list cannot
+ * reveal. Each answer now carries the pair's number AND both terms copied
+ * back, and is used only if all three agree with what was asked. A drifted or
+ * garbled answer is dropped rather than applied to somebody else's skills;
+ * that pair counts as unanswered (not cached, `complete` false), so the next
+ * request asks again.
+ */
+function verifyAnswers(asked: readonly SkillPair[], answers: readonly unknown[]): SkillPairAnswer {
+  const same = (a: unknown, b: string) => typeof a === "string" && a.trim().toLowerCase() === b;
+  const byId = new Map<number, boolean>();
+  const seen = new Set<number>();
+  for (const answer of answers) {
+    if (typeof answer !== "object" || answer === null) continue;
+    const { id, required, volunteer, match } = answer as Record<string, unknown>;
+    if (typeof id !== "number" || !Number.isInteger(id) || id < 0 || id >= asked.length) continue;
+    // A second answer for the same id means the list cannot be trusted for it.
+    if (seen.has(id)) {
+      byId.delete(id);
+      continue;
+    }
+    seen.add(id);
+    const pair = asked[id]!;
+    if (typeof match === "boolean" && same(required, pair.skillA) && same(volunteer, pair.skillB)) {
+      byId.set(id, match);
+    }
+  }
+  const results = asked.flatMap((pair, i) =>
+    byId.has(i) ? [{ ...pair, isMatch: byId.get(i) === true }] : []
+  );
+  return { results, complete: results.length === asked.length };
 }
 
 function buildPrompt(pairs: readonly SkillPair[]): string {
@@ -208,8 +255,10 @@ function buildPrompt(pairs: readonly SkillPair[]): string {
     '"venipuncture" and "wound care" are NOT the same skill).',
     "",
     `For each of the ${pairs.length} numbered pairs below, decide true (equivalent) or false (not equivalent).`,
+    "Judge every pair on its own; the pairs are unrelated to each other.",
     "Respond with STRICT JSON ONLY, no prose, of the exact shape:",
-    `{"matches": [<boolean>, ...]} with exactly ${pairs.length} booleans, in the same order as the pairs.`,
+    '{"results": [{"id": <pair number>, "required": "<required term, copied exactly>", "volunteer": "<volunteer term, copied exactly>", "match": <boolean>}, ...]}',
+    `with exactly one object for each of the ${pairs.length} pairs.`,
     "",
     list,
   ].join("\n");

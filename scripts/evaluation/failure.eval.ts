@@ -35,11 +35,20 @@ type Behaviour = (init: RequestInit | undefined, callNumber: number) => Promise<
 const geminiBody = (answer: string) =>
   JSON.stringify({ candidates: [{ content: { parts: [{ text: answer }] } }] });
 
-/** A correct Gemini answer: one boolean per pair asked, all set to `value`. */
-function answerAll(init: RequestInit | undefined, value: boolean): Response {
+/** The pairs a Gemini request asked about, read from its prompt. */
+function askedPairs(init: RequestInit | undefined): { id: number; required: string; volunteer: string }[] {
   const prompt = String(JSON.parse(String(init?.body)).contents[0].parts[0].text);
-  const asked = [...prompt.matchAll(/^\d+\. required=/gm)].length;
-  return new Response(geminiBody(JSON.stringify({ matches: Array(asked).fill(value) })), { status: 200 });
+  return [...prompt.matchAll(/^(\d+)\. required="(.*)" vs volunteer="(.*)"$/gm)].map((m) => ({
+    id: Number(m[1]),
+    required: m[2] ?? '',
+    volunteer: m[3] ?? '',
+  }));
+}
+
+/** A correctly shaped Gemini answer: every pair named, every match set to `value`. */
+function answerAll(init: RequestInit | undefined, value: boolean): Response {
+  const results = askedPairs(init).map((p) => ({ ...p, match: value }));
+  return new Response(geminiBody(JSON.stringify({ results })), { status: 200 });
 }
 
 /*
@@ -94,14 +103,23 @@ const CASES: { name: string; how: string; behaviour: Behaviour }[] = [
     },
   },
   {
-    name: 'Matches list of the wrong length',
-    how: 'HTTP 200 and valid JSON, but one boolean fewer than the pairs asked',
+    name: 'Answer list of the wrong length',
+    how: 'HTTP 200 and valid JSON, but the answer for one pair is missing (all the others say "equivalent")',
     behaviour: async (init) => {
-      const prompt = String(JSON.parse(String(init?.body)).contents[0].parts[0].text);
-      const asked = [...prompt.matchAll(/^\d+\. required=/gm)].length;
-      return new Response(geminiBody(JSON.stringify({ matches: Array(Math.max(0, asked - 1)).fill(true) })), {
-        status: 200,
+      const results = askedPairs(init).slice(1).map((p) => ({ ...p, match: true }));
+      return new Response(geminiBody(JSON.stringify({ results })), { status: 200 });
+    },
+  },
+  {
+    name: 'Answers attached to the wrong pairs',
+    how: 'HTTP 200 and valid JSON, one answer per pair, every answer "equivalent", but each carries the terms of the next pair (shifted by one)',
+    behaviour: async (init) => {
+      const pairs = askedPairs(init);
+      const results = pairs.map((p, i) => {
+        const next = pairs[(i + 1) % pairs.length]!;
+        return { id: p.id, required: next.required, volunteer: next.volunteer, match: true };
       });
+      return new Response(geminiBody(JSON.stringify({ results })), { status: 200 });
     },
   },
 ];
@@ -169,6 +187,8 @@ test('forced Layer 2 failures', async () => {
     L.push('| Failure | How it was produced | Gemini requests attempted | Engine returned | Ranking complete | Identical to Layer 1 | layer2Applied | Request time (ms) |');
     L.push('|---|---|---|---|---|---|---|---|');
     L.push(...rows);
+    L.push('');
+    L.push('**Why "Answer list of the wrong length" is not identical to Layer 1.** Since the answer-format fix, every answer names its pair and is checked, so one missing answer no longer discards the whole batch: the other answers, each proven to belong to its pair, are used, and only the missing pair falls back. The stand-in answered "equivalent" for all of them, so those volunteers scored higher; the ranking is still complete, and layer2Applied = false reports that the batch was incomplete. Under the original format (a bare list matched by position) a list one entry short was rejected entirely, because a shorter list cannot say which pair lost its answer.');
     L.push('');
     fs.mkdirSync(path.dirname(OUT), { recursive: true });
     fs.writeFileSync(OUT, L.join('\n'));

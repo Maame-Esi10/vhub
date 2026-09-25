@@ -121,9 +121,21 @@ async function scoreOutreach(outreachId: string, calls: GeminiCall[]): Promise<R
   };
 }
 
-async function runAll(calls: GeminiCall[]): Promise<RequestRecord[]> {
+/*
+  PACING. Each request can send up to five Gemini calls at once, and the free
+  tier refuses calls past a per-minute limit (two were refused with 429 on the
+  first real run, leaving 110 pairs unjudged). Real requests arrive minutes
+  apart, not back to back, so the Gemini runs wait 15 seconds between
+  requests. The wait is outside the timed part of each request.
+*/
+const PACE_MS = 15000;
+
+async function runAll(calls: GeminiCall[], pace = false): Promise<RequestRecord[]> {
   const records: RequestRecord[] = [];
-  for (const o of OUTREACHES) records.push(await scoreOutreach(o.id, calls));
+  for (const [i, o] of OUTREACHES.entries()) {
+    if (pace && i > 0) await new Promise((r) => setTimeout(r, PACE_MS));
+    records.push(await scoreOutreach(o.id, calls));
+  }
   return records;
 }
 
@@ -153,8 +165,9 @@ test('layer comparison', async () => {
     if (key) {
       process.env.GEMINI_API_KEY = key;
       currentDb = createFakeDb(databaseRows()); // cache empty
-      runs.B = await runAll(calls);
-      runs.C = await runAll(calls); // same database: cache kept
+      runs.B = await runAll(calls, true);
+      await new Promise((r) => setTimeout(r, PACE_MS));
+      runs.C = await runAll(calls, true); // same database: cache kept
     }
   } finally {
     restore();
@@ -165,12 +178,62 @@ test('layer comparison', async () => {
   fs.writeFileSync(OUT_MD, report(runs, key !== null, currentDb));
 });
 
+/*
+  BEFORE AND AFTER THE ANSWER-FORMAT FIX. "Before" is the saved run made with
+  the old format (a bare list of booleans matched by position):
+  output/layers-before-fix.json. "After" is this run. Both are scored against
+  the same meaning tags, which were recorded before either run.
+*/
+type CacheRow = { skill_a: string; skill_b: string; is_match: boolean };
+
+function beforeAfter(runs: Runs, db: FakeDb): string {
+  const beforeFile = path.join(__dirname, 'output', 'layers-before-fix.json');
+  if (!fs.existsSync(beforeFile)) return '';
+  const before = JSON.parse(fs.readFileSync(beforeFile, 'utf8')) as {
+    ranAt: string;
+    model: string;
+    runs: Runs;
+    cache: CacheRow[];
+  };
+  const judge = (cache: CacheRow[]) => {
+    const wrongYes = cache.filter((r) => r.is_match && !goldEquivalent(r.skill_a, r.skill_b)).length;
+    const wrongNo = cache.filter((r) => !r.is_match && goldEquivalent(r.skill_a, r.skill_b)).length;
+    return { n: cache.length, wrongYes, wrongNo, agree: cache.length - wrongYes - wrongNo };
+  };
+  const pct = (x: number, n: number) => (n ? ((x / n) * 100).toFixed(1) : '0.0');
+  const pk = (list: RequestRecord[] | undefined) =>
+    OUTREACHES.map((o) => {
+      const r = list?.find((x) => x.outreachId === o.id);
+      return r ? (precisionAtK(r.ranking, o.id).hits / o.slots_total).toFixed(2) : 'n/a';
+    });
+  const b = judge(before.cache);
+  const a = judge((db.tables.skill_match_cache ?? []) as unknown as CacheRow[]);
+  const L: string[] = [];
+  L.push('## 1.6 Before and after the answer-format fix');
+  L.push('');
+  L.push(`The first real-key run (${before.ranAt.slice(0, 10)}, model \`${before.model}\`) used the original answer format: one list of true/false values matched to the pairs by position. It found ${b.wrongYes} wrong "equivalent" answers, 13 of them CPR against unrelated skills, consistent with answers drifting onto neighbouring pairs. The format was then changed so every answer names its pair (its number and both terms, copied back), and an answer is used only if all three match. No test pair was added to the prompt. The earlier run had no pacing and lost two calls to the free tier's per-minute limit; this run waits 15 seconds between requests.`);
+  L.push('');
+  L.push('| | Before the fix | After the fix |');
+  L.push('|---|---|---|');
+  L.push(`| Pairs answered (cache rows) | ${b.n} | ${a.n} |`);
+  L.push(`| Agree with the meaning tags | ${b.agree} (${pct(b.agree, b.n)}%) | ${a.agree} (${pct(a.agree, a.n)}%) |`);
+  L.push(`| Wrongly "equivalent" | ${b.wrongYes} | ${a.wrongYes} |`);
+  L.push(`| Wrongly "not equivalent" | ${b.wrongNo} | ${a.wrongNo} |`);
+  const pb = pk(before.runs.B);
+  const pa = pk(runs.B);
+  OUTREACHES.forEach((o, i) => {
+    L.push(`| Precision at ${o.slots_total}, ${o.id} (run B) | ${pb[i]} | ${pa[i]} |`);
+  });
+  L.push('');
+  return L.join('\n');
+}
+
 function report(runs: Runs, hadKey: boolean, db: FakeDb): string {
   const L: string[] = [];
   const ranAt = new Date().toISOString();
   L.push('## 1.2 Method');
   L.push('');
-  L.push(`Run on ${ranAt.slice(0, 10)} by \`scripts/evaluation/layers.eval.ts\`. The real \`/api/match\` route handler (mode \`score_applicants\`) was called once per outreach, with all 72 volunteers as applicants to every outreach. Only the database (in memory), the login check and the rate limiter were replaced. Run A had no Gemini key, so only Layer 1 could run. Run B used real Gemini calls (model \`${modelInUse()}\`, the production default) starting from an empty cache. Run C repeated B on the same database, so the cache from B was kept.`);
+  L.push(`Run on ${ranAt.slice(0, 10)} by \`scripts/evaluation/layers.eval.ts\`. The real \`/api/match\` route handler (mode \`score_applicants\`) was called once per outreach, with all 72 volunteers as applicants to every outreach. In runs B and C the requests were spaced 15 seconds apart to stay inside the Gemini free tier's per-minute limit (the wait is not part of the timed request). Only the database (in memory), the login check and the rate limiter were replaced. Run A had no Gemini key, so only Layer 1 could run. Run B used real Gemini calls (model \`${modelInUse()}\`, the production default) starting from an empty cache. Run C repeated B on the same database, so the cache from B was kept.`);
   L.push('');
   if (!hadKey) {
     L.push('**Runs B and C were not performed: no Gemini key was available.** Only Layer 1 results are shown.');
@@ -245,8 +308,12 @@ function report(runs: Runs, hadKey: boolean, db: FakeDb): string {
   const judged = new Map<string, { a: string; b: string; gemini: boolean }>();
   for (const r of [...(runs.B ?? []), ...(runs.C ?? [])]) {
     for (const c of r.geminiCalls) {
-      if (!c.matches || c.matches.length !== c.pairs.length) continue;
-      c.pairs.forEach((p, i) => judged.set(order(p.a, p.b), { a: p.a, b: p.b, gemini: c.matches![i] === true }));
+      if (!c.matches) continue;
+      c.pairs.forEach((p, i) => {
+        const answer = c.matches![i];
+        if (answer === null || answer === undefined) return; // dropped by the check
+        judged.set(order(p.a, p.b), { a: p.a, b: p.b, gemini: answer });
+      });
     }
   }
   const rows = [...judged.values()].map((j) => ({ ...j, gold: goldEquivalent(j.a, j.b) }));
@@ -273,9 +340,16 @@ function report(runs: Runs, hadKey: boolean, db: FakeDb): string {
   const falsePos = mistakes.filter((j) => j.gemini).length;
   L.push(`**Agreement with the tags:** ${rows.length - mistakes.length} of ${rows.length} pairs; ${mistakes.length} mistakes (${falsePos} judged equivalent wrongly, ${mistakes.length - falsePos} judged not equivalent wrongly).`);
   L.push('');
+  const allCalls = [...(runs.B ?? []), ...(runs.C ?? [])].flatMap((r) => r.geminiCalls);
+  const readable = allCalls.filter((c) => c.matches);
+  const dropped = readable.reduce((n, c) => n + c.matches!.filter((m) => m === null).length, 0);
+  const askedInReadable = readable.reduce((n, c) => n + c.pairs.length, 0);
+  L.push(`**Answers dropped by the engine's check** (missing, or the copied pair did not match what was asked): ${dropped} of ${askedInReadable} pairs in readable responses.`);
+  L.push('');
   const allNeeded = new Set(OUTREACHES.flatMap((o) => [...pairsNeeded(o.id)]));
   const neverAsked = [...allNeeded].filter((k) => !judged.has(k));
-  L.push(`**Pairs that needed a judgement but were never sent to Gemini in either run:** ${neverAsked.length} of ${allNeeded.size}. Final cache size: ${(db.tables.skill_match_cache ?? []).length} rows.`);
+  L.push(`**Pairs that needed a judgement but were never answered in either run:** ${neverAsked.length} of ${allNeeded.size}. Final cache size: ${(db.tables.skill_match_cache ?? []).length} rows.`);
   L.push('');
+  L.push(beforeAfter(runs, db));
   return L.join('\n');
 }
