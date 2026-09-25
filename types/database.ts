@@ -49,6 +49,10 @@ export type VolunteerCategory =
   | "nurse"
   | "midwife"
   | "pharmacist"
+  // Added 2026-09-25: optometrists, lab scientists, physiotherapists,
+  // radiographers, dietitians. Before this they could only pick 'other',
+  // which the skill rules treat as support-only.
+  | "allied_health"
   | "student"
   | "first_aider"
   | "other";

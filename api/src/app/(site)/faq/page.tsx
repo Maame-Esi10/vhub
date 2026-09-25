@@ -20,7 +20,7 @@ const GROUPS: FaqGroup[] = [
       { q: "Is VHub free?", a: "Yes. VHub is free for volunteers and for organisations." },
       { q: "Which phones does it work on?", a: "VHub is available for Android. There is no iPhone version at the moment." },
       { q: "Why is it not on the Play Store?", a: "VHub installs directly from this website for now. The Download page walks you through it, and it takes about a minute." },
-      { q: "Who can volunteer?", a: "Doctors, nurses, midwives, pharmacists, health and medical students, first aiders, and anyone else willing to help. Support roles are open to everyone." },
+      { q: "Who can volunteer?", a: "Doctors, nurses, midwives, pharmacists, allied health professionals (such as optometrists, lab scientists and physiotherapists), health and medical students, first aiders, and anyone else willing to help. Support roles are open to everyone." },
       { q: "Which parts of Ghana does VHub cover?", a: "All sixteen regions. Your feed starts with your own region and its neighbours, and widens when there is not much nearby." },
     ],
   },

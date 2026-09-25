@@ -20,7 +20,15 @@ import type { VolunteerCategory } from '@/types/database';
 
 export interface CredentialGuideline {
   /** Generic icon. Never an image of a document. */
-  icon: 'stethoscope' | 'medical-bag' | 'baby-face-outline' | 'pill' | 'school-outline' | 'bandage' | 'file-account-outline';
+  icon:
+    | 'stethoscope'
+    | 'medical-bag'
+    | 'baby-face-outline'
+    | 'pill'
+    | 'microscope'
+    | 'school-outline'
+    | 'bandage'
+    | 'file-account-outline';
   /** What to send. */
   what: string;
   /** What makes it acceptable, in one sentence. */
@@ -51,6 +59,12 @@ export const CREDENTIAL_GUIDELINES: Record<VolunteerCategory, CredentialGuidelin
     what: 'Your Pharmacy Council registration certificate or current licence to practise.',
     accepted:
       'Your full name and registration number must be readable, and it must not have expired, or the equivalent from wherever you are registered.',
+  },
+  allied_health: {
+    icon: 'microscope',
+    what: 'Your registration with the Allied Health Professions Council, or with the Optometric Council or the council for your profession.',
+    accepted:
+      'It must show your full name, your profession, your registration number and a date that has not passed, or the equivalent from wherever you are registered.',
   },
   student: {
     icon: 'school-outline',

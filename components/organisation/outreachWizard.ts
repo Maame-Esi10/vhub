@@ -595,6 +595,7 @@ const VOLUNTEER_CATEGORY_VALUES: readonly VolunteerCategory[] = [
   'nurse',
   'midwife',
   'pharmacist',
+  'allied_health',
   'student',
   'first_aider',
   'other',

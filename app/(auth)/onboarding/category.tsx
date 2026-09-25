@@ -53,6 +53,13 @@ const CATEGORY_CARDS: CategoryCard[] = [
     icon: 'pill',
   },
   {
+    value: 'allied_health',
+    label: 'Allied Health Professional',
+    description:
+      'Registered optometrist, lab scientist, physiotherapist, radiographer, dietitian or similar.',
+    icon: 'microscope',
+  },
+  {
     value: 'student',
     label: 'Health or Medical Student',
     description: 'Studying medicine, nursing, pharmacy, or an allied health field.',

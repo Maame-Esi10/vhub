@@ -32,14 +32,32 @@ import { MEDICAL_SPECIALTIES } from './specialties';
 type Roles = readonly VolunteerCategory[];
 
 /** Every role. Health education, logistics, crowd work: anybody can do it. */
-const ANYONE: Roles = ['doctor', 'nurse', 'midwife', 'pharmacist', 'student', 'first_aider', 'other'];
+const ANYONE: Roles = [
+  'doctor',
+  'nurse',
+  'midwife',
+  'pharmacist',
+  'allied_health',
+  'student',
+  'first_aider',
+  'other',
+];
 /** Every role with some health training. Excludes only `other`. */
-const TRAINED: Roles = ['doctor', 'nurse', 'midwife', 'pharmacist', 'student', 'first_aider'];
+const TRAINED: Roles = ['doctor', 'nurse', 'midwife', 'pharmacist', 'allied_health', 'student', 'first_aider'];
 /**
  * Clinical and pharmacy roles plus students (who work under supervision at an
  * outreach). Point-of-care testing, counselling, medicines.
  */
 const HEALTH_PROFESSIONAL: Roles = ['doctor', 'nurse', 'midwife', 'pharmacist', 'student'];
+/**
+ * Point-of-care and laboratory testing: the health professionals above plus
+ * allied health (a lab scientist's core work). Kept apart from
+ * HEALTH_PROFESSIONAL because that one also covers medicines, which allied
+ * health does not handle.
+ */
+const TESTING: Roles = ['doctor', 'nurse', 'midwife', 'pharmacist', 'allied_health', 'student'];
+/** Eye examination: examiners plus allied health (optometrists). */
+const EYE_EXAMINER: Roles = ['doctor', 'nurse', 'allied_health', 'student'];
 /** Hands-on clinical work on a patient's body. */
 const CLINICAL: Roles = ['doctor', 'nurse', 'midwife', 'student'];
 /** Clinical work a first aider is also trained for (emergencies, wounds, triage). */
@@ -58,38 +76,40 @@ export const SKILL_ELIGIBILITY: Readonly<Record<string, Roles>> = {
   'Blood glucose testing': TRAINED,
   'Physical examination': CLINICAL,
   Triage: CLINICAL_AND_FIRST_AID,
-  'Patient history taking': HEALTH_PROFESSIONAL,
+  'Patient history taking': TESTING,
   'Anthropometric measurement': ANYONE,
-  'Dental and oral health screening': EXAMINER,
+  // Dental therapists and hygienists are allied health.
+  'Dental and oral health screening': ['doctor', 'nurse', 'allied_health', 'student'],
   'Oral health education': ANYONE,
-  'Cholesterol and lipid testing': HEALTH_PROFESSIONAL,
+  'Cholesterol and lipid testing': TESTING,
 
   // Screening & Early Detection
   'Clinical breast examination': CLINICAL,
   'Breast self-examination teaching': ANYONE,
   'Cervical screening (visual inspection with acetic acid)': MATERNITY,
   'HPV sample collection': MATERNITY,
-  'Prostate specific antigen (PSA) testing': HEALTH_PROFESSIONAL,
-  'Hepatitis B screening': HEALTH_PROFESSIONAL,
-  'HIV counselling and testing': HEALTH_PROFESSIONAL,
-  'Malaria rapid diagnostic testing': HEALTH_PROFESSIONAL,
-  'Sickle cell screening': HEALTH_PROFESSIONAL,
-  'Typhoid testing': HEALTH_PROFESSIONAL,
+  'Prostate specific antigen (PSA) testing': TESTING,
+  'Hepatitis B screening': TESTING,
+  'HIV counselling and testing': TESTING,
+  'Malaria rapid diagnostic testing': TESTING,
+  'Sickle cell screening': TESTING,
+  'Typhoid testing': TESTING,
   'Skin condition screening': EXAMINER,
   'Referral and follow-up coordination': ANYONE,
 
   // Eye & Vision
   'Visual acuity screening': TRAINED,
-  'Refraction and lens prescribing': EXAMINER,
-  'Dispensing spectacles': HEALTH_PROFESSIONAL,
-  'Cataract screening': EXAMINER,
-  'Pterygium screening': EXAMINER,
-  'Intraocular pressure measurement': EXAMINER,
+  'Refraction and lens prescribing': EYE_EXAMINER,
+  'Dispensing spectacles': TESTING,
+  'Cataract screening': EYE_EXAMINER,
+  'Pterygium screening': EYE_EXAMINER,
+  'Intraocular pressure measurement': EYE_EXAMINER,
   'Eye health education': ANYONE,
   'Post-operative eye care': ['doctor', 'nurse'],
 
   // Nursing Procedures
-  Venipuncture: CLINICAL,
+  // Lab scientists draw blood as routine, so allied health is included.
+  Venipuncture: ['doctor', 'nurse', 'midwife', 'allied_health', 'student'],
   'Wound dressing': CLINICAL_AND_FIRST_AID,
   'Injection administration': HEALTH_PROFESSIONAL,
   'Medication administration': HEALTH_PROFESSIONAL,
@@ -100,8 +120,8 @@ export const SKILL_ELIGIBILITY: Readonly<Record<string, Roles>> = {
   'Donor registration': ANYONE,
   'Donor eligibility screening': HEALTH_PROFESSIONAL,
   'Donor counselling': HEALTH_PROFESSIONAL,
-  'Haemoglobin testing': HEALTH_PROFESSIONAL,
-  'Phlebotomy for donation': CLINICAL,
+  'Haemoglobin testing': TESTING,
+  'Phlebotomy for donation': ['doctor', 'nurse', 'midwife', 'allied_health', 'student'],
   'Post-donation care': TRAINED,
 
   // Pharmacy
@@ -133,7 +153,8 @@ export const SKILL_ELIGIBILITY: Readonly<Record<string, Roles>> = {
   'Vitamin A supplementation': HEALTH_PROFESSIONAL,
   'Deworming administration': HEALTH_PROFESSIONAL,
   'Malnutrition screening (MUAC)': TRAINED,
-  'Nutrition counselling': CLINICAL,
+  // Dietitians and nutritionists are allied health.
+  'Nutrition counselling': ['doctor', 'nurse', 'midwife', 'allied_health', 'student'],
 
   // Mental Health & Wellbeing: community-level work, open to everyone.
   'Mental health awareness education': ANYONE,
@@ -178,12 +199,14 @@ export const SPECIALTY_LIMIT = 3;
  * Specialties are medical training paths (Cardiology, Surgery). Only roles that
  * train in one may claim one; a student, pharmacist, first aider or `other`
  * skips the step entirely. A midwife's scope covers only the maternal and
- * child specialties.
+ * child specialties; allied health only the three its professions work in.
  */
 const SPECIALTY_ELIGIBILITY: Partial<Record<VolunteerCategory, readonly string[]>> = {
   doctor: MEDICAL_SPECIALTIES,
   nurse: MEDICAL_SPECIALTIES,
   midwife: ['Obstetrics & Gynaecology', 'Pediatrics', 'Family Medicine'],
+  // An optometrist, radiographer or physiotherapist works within one of these.
+  allied_health: ['Ophthalmology', 'Radiology', 'Orthopaedics'],
 };
 
 /** True when a role may claim this skill. Unknown or retired skills are never claimable. */

@@ -102,9 +102,13 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 do $$ begin
-  create type volunteer_category as enum ('doctor', 'nurse', 'midwife', 'pharmacist', 'student', 'first_aider', 'other');
+  create type volunteer_category as enum ('doctor', 'nurse', 'midwife', 'pharmacist', 'allied_health', 'student', 'first_aider', 'other');
 exception when duplicate_object then null;
 end $$;
+-- 20260925a: an existing database already has the type, so the value is added
+-- here. Not used anywhere in this file, which is what makes adding it inside
+-- the same transaction legal.
+alter type volunteer_category add value if not exists 'allied_health' after 'pharmacist';
 
 -- Every table with every column, and its primary key. Foreign keys, checks,
 -- uniques and indexes come later, once every table they point at exists.
@@ -773,6 +777,44 @@ begin
   return null;
 end $function$;
 
+CREATE OR REPLACE FUNCTION public.reset_verification_on_category_change()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+begin
+  if old.category is not null and new.category is distinct from old.category then
+    new.verification_status := 'unverified';
+    new.credential_document_id := null;
+    new.verification_submitted_at := null;
+    new.verification_decided_at := null;
+    new.verification_reason := null;
+  end if;
+  return new;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.enforce_volunteer_list_limits()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+declare
+  new_skills int := coalesce(cardinality(new.skill_tags), 0);
+  new_specialties int := coalesce(cardinality(new.specialties), 0);
+  old_skills int := case when tg_op = 'UPDATE' then coalesce(cardinality(old.skill_tags), 0) else 0 end;
+  old_specialties int := case when tg_op = 'UPDATE' then coalesce(cardinality(old.specialties), 0) else 0 end;
+begin
+  if new_skills > 15 and new_skills > old_skills then
+    raise exception 'A volunteer can list at most 15 skills.' using errcode = 'check_violation';
+  end if;
+  if new_specialties > 3 and new_specialties > old_specialties then
+    raise exception 'A volunteer can list at most 3 specialties.' using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.enforce_outreach_image_cap()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -1425,7 +1467,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type volunteer_category as enum ('doctor', 'nurse', 'midwife', 'pharmacist', 'student', 'first_aider', 'other');
+  create type volunteer_category as enum ('doctor', 'nurse', 'midwife', 'pharmacist', 'allied_health', 'student', 'first_aider', 'other');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -3790,9 +3832,16 @@ do $$ begin
   end if;
 end $$;
 
+-- 20260925b widened this to allied_health. An older database has the
+-- narrower constraint under the same name, so it is replaced when it lacks
+-- the value rather than skipped because the name exists.
 do $$ begin
+  if exists (select 1 from pg_constraint where conname = 'outreach_roles_category_check' and conrelid = 'outreach_roles'::regclass
+             and position('allied_health' in pg_get_constraintdef(oid)) = 0) then
+    alter table outreach_roles drop constraint outreach_roles_category_check;
+  end if;
   if not exists (select 1 from pg_constraint where conname = 'outreach_roles_category_check' and conrelid = 'outreach_roles'::regclass) then
-    alter table outreach_roles add constraint outreach_roles_category_check CHECK ((category = ANY (ARRAY['doctor'::text, 'nurse'::text, 'midwife'::text, 'pharmacist'::text, 'student'::text, 'first_aider'::text, 'other'::text])));
+    alter table outreach_roles add constraint outreach_roles_category_check CHECK ((category = ANY (ARRAY['doctor'::text, 'nurse'::text, 'midwife'::text, 'pharmacist'::text, 'allied_health'::text, 'student'::text, 'first_aider'::text, 'other'::text])));
   end if;
 end $$;
 
@@ -4363,6 +4412,15 @@ drop trigger if exists trg_outreach_images_cap on outreach_images;
 
 CREATE TRIGGER trg_outreach_images_cap BEFORE INSERT ON public.outreach_images FOR EACH ROW EXECUTE FUNCTION enforce_outreach_image_cap();
 
+-- 20260925b: a role change withdraws verification; 15 skills / 3 specialties.
+drop trigger if exists trg_volunteer_profiles_category_reverify on volunteer_profiles;
+
+CREATE TRIGGER trg_volunteer_profiles_category_reverify BEFORE UPDATE OF category ON public.volunteer_profiles FOR EACH ROW EXECUTE FUNCTION reset_verification_on_category_change();
+
+drop trigger if exists trg_volunteer_profiles_list_limits on volunteer_profiles;
+
+CREATE TRIGGER trg_volunteer_profiles_list_limits BEFORE INSERT OR UPDATE OF skill_tags, specialties ON public.volunteer_profiles FOR EACH ROW EXECUTE FUNCTION enforce_volunteer_list_limits();
+
 drop trigger if exists trg_outreach_roles_sync_role_type on outreach_roles;
 
 CREATE TRIGGER trg_outreach_roles_sync_role_type AFTER INSERT OR DELETE OR UPDATE OF role_type ON public.outreach_roles FOR EACH ROW EXECUTE FUNCTION sync_outreach_role_type();
@@ -4472,6 +4530,10 @@ revoke execute on function create_default_outreach_day() from public, anon, auth
 grant execute on function create_default_outreach_day() to authenticated;
 
 grant execute on function create_default_outreach_day() to anon;
+
+revoke execute on function reset_verification_on_category_change() from public, anon, authenticated;
+
+revoke execute on function enforce_volunteer_list_limits() from public, anon, authenticated;
 
 revoke execute on function enforce_outreach_image_cap() from public, anon, authenticated;
 

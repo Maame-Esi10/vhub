@@ -40,7 +40,16 @@ export const runtime = "nodejs";
  */
 
 const Body = z.object({
-  category: z.enum(["doctor", "nurse", "midwife", "pharmacist", "student", "first_aider", "other"]),
+  category: z.enum([
+    "doctor",
+    "nurse",
+    "midwife",
+    "pharmacist",
+    "allied_health",
+    "student",
+    "first_aider",
+    "other",
+  ]),
 });
 
 export async function POST(req: Request): Promise<Response> {

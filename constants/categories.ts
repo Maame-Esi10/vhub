@@ -16,6 +16,7 @@ export const VOLUNTEER_CATEGORIES: { value: VolunteerCategory; label: string }[]
   { value: 'nurse', label: 'Nurse' },
   { value: 'midwife', label: 'Midwife' },
   { value: 'pharmacist', label: 'Pharmacist' },
+  { value: 'allied_health', label: 'Allied Health Professional' },
   { value: 'student', label: 'Health or Medical Student' },
   { value: 'first_aider', label: 'First Aider' },
   { value: 'other', label: 'Other' },
@@ -40,7 +41,12 @@ export const RELATED_CATEGORIES: Record<VolunteerCategory, readonly VolunteerCat
   nurse: ['doctor', 'midwife', 'student'],
   midwife: ['doctor', 'nurse', 'student'],
   pharmacist: ['student'],
-  student: ['pharmacist', 'nurse', 'doctor', 'midwife'],
+  // Allied health (2026-09-25, owner-approved): related to student only.
+  // 'student' already covers allied-health students, so a student is a
+  // partial fit for an allied role and the reverse; an optometrist is not a
+  // partial nurse, so no clinical peer relation.
+  allied_health: ['student'],
+  student: ['pharmacist', 'nurse', 'doctor', 'midwife', 'allied_health'],
   first_aider: [],
   other: [],
 };

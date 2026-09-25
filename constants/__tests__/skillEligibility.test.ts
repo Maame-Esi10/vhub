@@ -66,6 +66,24 @@ describe('the owner-reported cases', () => {
   });
 });
 
+describe('allied health (2026-09-25)', () => {
+  it('can claim testing and eye work, the core of lab scientists and optometrists', () => {
+    expect(canClaimSkill('allied_health', 'Malaria rapid diagnostic testing')).toBe(true);
+    expect(canClaimSkill('allied_health', 'Refraction and lens prescribing')).toBe(true);
+    expect(canClaimSkill('allied_health', 'Venipuncture')).toBe(true);
+  });
+
+  it('cannot claim medicines or maternity care', () => {
+    expect(canClaimSkill('allied_health', 'Medication administration')).toBe(false);
+    expect(canClaimSkill('allied_health', 'Vaccination administration')).toBe(false);
+    expect(canClaimSkill('allied_health', 'Antenatal care')).toBe(false);
+  });
+
+  it('has a specialty step limited to its own fields', () => {
+    expect(eligibleSpecialties('allied_health')).toEqual(['Ophthalmology', 'Radiology', 'Orthopaedics']);
+  });
+});
+
 describe('helpers', () => {
   it('no role means nothing is claimable', () => {
     expect(canClaimSkill(null, 'Health education')).toBe(false);
