@@ -102,10 +102,9 @@ export async function checkSkillEquivalences(
           generationConfig: {
             temperature: 0,
             responseMimeType: "application/json",
-            // See the note at the top of this file: closed-vocabulary
-            // selection gains nothing from reasoning tokens and pays for them
-            // in latency and quota.
-            thinkingConfig: { thinkingBudget: 0 },
+            // See the note at the top of this file. Sent only when configured:
+            // the current default model refuses the field (env.ts).
+            ...(env.geminiThinkingConfig ? { thinkingConfig: env.geminiThinkingConfig } : {}),
           },
         }),
         signal: controller.signal,

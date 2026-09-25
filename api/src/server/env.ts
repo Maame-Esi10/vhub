@@ -33,8 +33,34 @@ export const env = {
   get geminiApiKey(): string | null {
     return process.env.GEMINI_API_KEY?.trim() || null;
   },
+  /**
+   * gemini-3.5-flash-lite since 2026-09-25. The previous default,
+   * gemini-2.5-flash, now answers every call with 404 "no longer available to
+   * new users", so Layer 2 and the skill suggestions had been falling back on
+   * every request, silently, as they are designed to. Chosen over the others
+   * the API offered on measurement (scripts/evaluation, 60-pair batches):
+   * available on every try, about 1.3 s per batch, 60/60 correct on pairs with
+   * known answers. gemini-3.8-flash (Google's suggested replacement) answered
+   * "high demand" (503) on most tries, and gemini-3.1-flash-lite once took
+   * 10.5 s, past the 8 s timeout. Override with GEMINI_MODEL in Vercel.
+   */
   get geminiModel(): string {
-    return process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+    return process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite";
+  },
+  /**
+   * The `generationConfig.thinkingConfig` to send, or undefined to send none.
+   *
+   * gemini-2.5-flash thinks by default and needed `thinkingBudget: 0` (see
+   * gemini.ts). gemini-3.5-flash-lite REFUSES that field with 400 "Request
+   * contains an invalid argument", so it is now opt-in: set
+   * GEMINI_THINKING_BUDGET=0 in Vercel only when GEMINI_MODEL names a
+   * thinking model that accepts it.
+   */
+  get geminiThinkingConfig(): { thinkingBudget: number } | undefined {
+    const raw = process.env.GEMINI_THINKING_BUDGET?.trim();
+    if (!raw) return undefined;
+    const budget = Number(raw);
+    return Number.isInteger(budget) && budget >= 0 ? { thinkingBudget: budget } : undefined;
   },
   /**
    * The dedicated Gmail account every VHub email is sent through, and the

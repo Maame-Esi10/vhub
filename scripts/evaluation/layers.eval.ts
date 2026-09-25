@@ -32,6 +32,11 @@ jest.mock('../../api/src/server/rateLimit', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { POST } = require('../../api/src/app/api/match/route') as { POST: (req: Request) => Promise<Response> };
 
+// The model name is read from the same setting the engine reads, so the
+// report can never name a model the run did not use.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const modelInUse = (): string => (require('../../api/src/server/env') as { env: { geminiModel: string } }).env.geminiModel;
+
 const OUT_MD = path.join(__dirname, 'output', '01-layers.md');
 const OUT_JSON = path.join(__dirname, 'output', 'layers.json');
 
@@ -156,7 +161,7 @@ test('layer comparison', async () => {
     delete process.env.GEMINI_API_KEY;
   }
 
-  fs.writeFileSync(OUT_JSON, JSON.stringify({ ranAt: new Date().toISOString(), model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash', runs, cache: currentDb.tables.skill_match_cache }, null, 2));
+  fs.writeFileSync(OUT_JSON, JSON.stringify({ ranAt: new Date().toISOString(), model: modelInUse(), runs, cache: currentDb.tables.skill_match_cache }, null, 2));
   fs.writeFileSync(OUT_MD, report(runs, key !== null, currentDb));
 });
 
@@ -165,7 +170,7 @@ function report(runs: Runs, hadKey: boolean, db: FakeDb): string {
   const ranAt = new Date().toISOString();
   L.push('## 1.2 Method');
   L.push('');
-  L.push(`Run on ${ranAt.slice(0, 10)} by \`scripts/evaluation/layers.eval.ts\`. The real \`/api/match\` route handler (mode \`score_applicants\`) was called once per outreach, with all 72 volunteers as applicants to every outreach. Only the database (in memory), the login check and the rate limiter were replaced. Run A had no Gemini key, so only Layer 1 could run. Run B used real Gemini calls (model \`${process.env.GEMINI_MODEL ?? 'gemini-2.5-flash'}\`, the production default) starting from an empty cache. Run C repeated B on the same database, so the cache from B was kept.`);
+  L.push(`Run on ${ranAt.slice(0, 10)} by \`scripts/evaluation/layers.eval.ts\`. The real \`/api/match\` route handler (mode \`score_applicants\`) was called once per outreach, with all 72 volunteers as applicants to every outreach. Only the database (in memory), the login check and the rate limiter were replaced. Run A had no Gemini key, so only Layer 1 could run. Run B used real Gemini calls (model \`${modelInUse()}\`, the production default) starting from an empty cache. Run C repeated B on the same database, so the cache from B was kept.`);
   L.push('');
   if (!hadKey) {
     L.push('**Runs B and C were not performed: no Gemini key was available.** Only Layer 1 results are shown.');
