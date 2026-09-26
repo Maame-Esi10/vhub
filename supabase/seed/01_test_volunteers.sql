@@ -114,7 +114,7 @@ where not exists (select 1 from profiles x where x.id = p.id);
 -- 3. Volunteer profiles.
 --
 -- DESIGNED TO PRODUCE A SPREAD, not to be realistic individually. Between them
--- these ten cover every category the enum holds, all three experience levels,
+-- these ten cover every role except Allied Health (added after they were written), all three experience levels,
 -- and V-Scores landing in all five bands, so the ranking is visibly ordered
 -- rather than a row of near-identical percentages.
 --
@@ -141,25 +141,25 @@ select
 from (values
   ('11111111-0000-4000-8000-000000000001'::uuid, 'nurse',
    array['Vital signs monitoring','Blood pressure measurement','Venipuncture','Wound dressing','Triage'],
-   array['Community Health'], 'experienced',
+   array['Family Medicine'], 'experienced',
    array['sat_morning','sat_afternoon','sun_morning'],
    'Registered nurse, six years on community outreach teams.', 94, 12, true, 'verified'),
 
   ('11111111-0000-4000-8000-000000000002'::uuid, 'doctor',
    array['Physical examination','Patient history taking','Triage','Referral and follow-up coordination'],
-   array['General Medicine'], 'experienced',
+   array['Internal Medicine'], 'experienced',
    array['sat_morning','sat_afternoon'],
    'General practitioner volunteering at weekend screening camps.', 88, 9, true, 'verified'),
 
   ('11111111-0000-4000-8000-000000000003'::uuid, 'midwife',
    array['Antenatal care','Postnatal care','Breastfeeding support','Child growth monitoring','Family planning counselling'],
-   array['Maternal Health'], 'experienced',
+   array['Obstetrics & Gynaecology'], 'experienced',
    array['sat_morning','sun_morning','sun_afternoon'],
    'Midwife focused on antenatal outreach in peri-urban Accra.', 81, 7, true, 'verified'),
 
   ('11111111-0000-4000-8000-000000000004'::uuid, 'pharmacist',
    array['Medication dispensing','Prescription review','Patient counselling on medication','Dosage calculation','Inventory management'],
-   array['Pharmacy'], 'intermediate',
+   array[]::text[], 'intermediate',
    array['sat_afternoon','sat_evening'],
    'Community pharmacist, runs the dispensing table at health fairs.', 76, 5, true, 'verified'),
 
@@ -183,7 +183,7 @@ from (values
 
   ('11111111-0000-4000-8000-000000000008'::uuid, 'nurse',
    array['Visual acuity screening','Eye health education','Vital signs monitoring','Patient registration'],
-   array['Eye Care'], 'intermediate',
+   array['Ophthalmology'], 'intermediate',
    array['sun_morning','sun_afternoon'],
    'Ophthalmic nurse, works eye camps in the Central Region.', 58, 4, true, 'verified'),
 
@@ -195,7 +195,7 @@ from (values
 
   ('11111111-0000-4000-8000-000000000010'::uuid, 'nurse',
    array['Vital signs monitoring','Injection administration','Vaccination administration'],
-   array['Community Health'], 'intermediate',
+   array['Family Medicine'], 'intermediate',
    array['sat_afternoon'],
    'Nurse. Has missed two confirmed outreaches.', 32, 6, true, 'verified')
 ) as s(id, category, skill_tags, specialties, experience_level,
