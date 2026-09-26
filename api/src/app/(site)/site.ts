@@ -5,6 +5,7 @@
  * constants/policy.ts lives under: no iPhone app, no invented user numbers,
  * no testimonials from people who do not exist.
  */
+import appJson from "@/app.json";
 
 /**
  * Where every Download button points.
@@ -34,6 +35,11 @@ export const NAV_LINKS = [
   { href: "/faq", label: "FAQ" },
 ] as const;
 
-/** The release on the Download page. Keep in step with app.json's version. */
-export const APP_VERSION = "1.0.0";
+/**
+ * The release on the Download page, READ from app.json rather than typed here.
+ * A hand-kept copy still said 1.0.0 after 1.0.1 shipped, because nothing
+ * reminded anyone to change it; app.json is bumped for every build anyway, so
+ * the page now follows it.
+ */
+export const APP_VERSION: string = appJson.expo.version;
 export const APK_SIZE = "121 MB";
