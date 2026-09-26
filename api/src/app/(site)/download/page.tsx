@@ -62,9 +62,10 @@ export default function DownloadPage() {
         </div>
         <div className="container">
           <p className="small">
-            Your browser or phone may warn that this type of file can harm your device. That warning
-            appears for every app installed outside the Play Store, so tap Download anyway or Keep.
-            Only download VHub from this website.
+            Once the download has finished, your phone may warn you while installing: Google Play
+            Protect can say the app is unknown or could harm your device. It says that about every
+            app installed from outside the Play Store. Tap More details, then Install anyway. Only
+            download VHub from this website.
           </p>
         </div>
       </section>
