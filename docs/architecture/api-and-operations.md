@@ -1,7 +1,5 @@
 # Serverless API, email, monitoring, Gemini
 
-> Moved verbatim out of CLAUDE.md on 2026-09-24 to keep that file under the size Claude Code loads comfortably. These are still binding project decisions; CLAUDE.md keeps a one-line summary of each and points here.
-
 ## Rate limiting on the serverless API (built 2026-09-01)
 
 Every route in `api/` is a public URL and does work — a Supabase Auth call plus a `profiles` read — before it can refuse anyone. The gap was never access; it was **cost on a free tier, which is availability**. `lib/rateLimit.ts` is the pure window arithmetic; `api/src/server/rateLimit.ts` holds the counters, reads the caller's address and throws.

@@ -1,6 +1,5 @@
 # Outreaches: subscription, availability, multi-role, multi-day, gallery
 
-> Moved verbatim out of CLAUDE.md on 2026-09-24 to keep that file under the size Claude Code loads comfortably. These are still binding project decisions; CLAUDE.md keeps a one-line summary of each and points here.
 
 ## Oversubscription and under-subscription (spec is final)
 

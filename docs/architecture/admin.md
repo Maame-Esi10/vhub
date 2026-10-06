@@ -1,6 +1,5 @@
 # Admin phase (packages A to J) and account closure
 
-> Moved verbatim out of CLAUDE.md on 2026-09-24 to keep that file under the size Claude Code loads comfortably. These are still binding project decisions; CLAUDE.md keeps a one-line summary of each and points here.
 
 ## Private documents (admin phase package B, built 2026-08-25)
 
