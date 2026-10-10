@@ -1,15 +1,31 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# dependencies
+# Learn more: https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# =========================
+# Node.js / Dependencies
+# =========================
 node_modules/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.pnpm-debug.log*
+.npm/
+.yarn/cache/
 
-# Expo
+# =========================
+# Expo / React Native
+# =========================
 .expo/
 dist/
 web-build/
 expo-env.d.ts
+.metro-health-check*
 
-# Native
+# Generated native folders
+/ios
+/android
+
+# Native secrets
 .kotlin/
 *.orig.*
 *.jks
@@ -17,55 +33,109 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
 *.pem
 
-# local env files
+# =========================
+# Java / Gradle
+# =========================
+*.class
+*.war
+*.ear
+*.iml
+.gradle/
+build/
+out/
+target/
+bin/
+.settings/
+.classpath
+.project
+hs_err_pid*
+replay_pid*
+.gradle-cache/
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python packaging
+*.egg
+*.egg-info/
+.eggs/
+wheels/
+pip-wheel-metadata/
+
+# Python testing / coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.pyre/
+.pytype/
+.hypothesis/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# =========================
+# Environment / Secrets
+# =========================
 .env
 .env*.local
 
-# AI assistant config and notes. NOT PUBLISHED (owner, 2026-09-15): this is a
-# public repository and the tooling used to build the project is not part of
-# the deliverable. Untracked with `git rm --cached`, which leaves the files on
-# disk and working -- CLAUDE.md is read from the filesystem, not from git.
-CLAUDE.md
+# =========================
+# IDE / Local Tools
+# =========================
 .claude/
 docs/VSCODE_PROMPT_GUIDE.md
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# macOS
+.DS_Store
 
-# Figma design reference exports (temporary build reference; originals live in Figma)
+# =========================
+# Design References
+# =========================
+# Figma design reference exports
+# Originals live in Figma
 design-refs/
 
-# FCM service-account private keys. Android push is relayed through Firebase
-# Cloud Messaging (Google allows no other transport), and Expo needs a service
-# account key to talk to it -- but that key is a SECRET and belongs only in
-# EAS credentials, never in the repo. Same rule as the Gemini/Resend/Supabase
-# service-role keys.
+# =========================
+# Firebase / FCM Secrets
+# =========================
+# FCM service-account private keys must
+# remain in EAS credentials, never in Git.
 #
-# NOTE: google-services.json is deliberately NOT ignored. It carries no secret
-# (it is embedded in every APK), and EAS builds from a git archive -- ignoring
-# it would silently drop it from the build and Android push would fail again.
+# google-services.json is deliberately NOT
+# ignored because EAS builds require it
+# for Android push notifications.
+
 *-firebase-adminsdk-*.json
 firebase-service-account*.json
 
-# HeFRA source PDF: the extracted list is committed instead (scripts/extract-hefra.py)
+# =========================
+# Project Documentation
+# =========================
+# HeFRA source PDF
+# Extracted list is committed instead
 docs/FACILITIES-WITH-VALID-LICENCES*.pdf
 
-# Personal thesis-writing guides: local only, never committed
+# Personal thesis-writing guides
 docs/thesis-evidence*.md
